@@ -83,6 +83,34 @@ int sec_release()
 	// stub function
 	return SEC_SUCCESS;
 }
+
+int sec_create_pdcp_context (sec_pdcp_context_info_t *sec_ctx_info, 
+                             sec_context_handle_t *sec_ctx_handle)
+{
+    // stub function
+
+    // 1. ret = get_free_context();
+
+    // No free contexts available in free list. 
+    // Maybe there are some retired contexts that can be recycled.
+    // Run context garbage collector routine.
+    //if (ret != 0)
+    //{
+    //    ret = collect_retired_contexts();
+    //}
+
+    //if (ret != 0 )
+    //{
+    //    return error, there are no free contexts
+    //}
+
+    // 2. Associate context with job ring
+    // 3. Update context with PDCP info from UA, create shared descriptor
+    // 4. return context handle to UA
+    // 5. Run context garbage collector routine
+
+	return SEC_SUCCESS;
+}
 /*================================================================================================*/
 
 #ifdef __cplusplus

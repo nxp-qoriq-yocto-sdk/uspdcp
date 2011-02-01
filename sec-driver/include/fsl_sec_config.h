@@ -75,6 +75,16 @@ extern "C"{
 /* SEC is configured to work in interrupt mode */
 #define FSL_SEC_INTERRUPT_MODE   1
 
+
+/************************************************/
+/* SEC USER SPACE DRIVER related configuration. */
+/************************************************/
+
+/* Maximum number of SEC PDCP contexts that can be managed 
+ * simultaneously by SEC user space driver. */
+#define FSL_SEC_MAX_PDCP_CONTEXTS   200
+
+
 /***************************************/
 /* SEC JOB RING related configuration. */
 /***************************************/
