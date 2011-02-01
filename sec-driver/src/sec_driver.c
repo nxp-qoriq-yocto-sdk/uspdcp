@@ -111,6 +111,17 @@ int sec_create_pdcp_context (sec_pdcp_context_info_t *sec_ctx_info,
 
 	return SEC_SUCCESS;
 }
+
+int sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle)
+{
+    // stub function
+
+    // 1. Mark context as retiring
+    // 2. If context.packet_count == 0 then move context from in-use list to retiring list. 
+    // Else move to retiring list
+
+    return SEC_SUCCESS;
+}
 /*================================================================================================*/
 
 #ifdef __cplusplus

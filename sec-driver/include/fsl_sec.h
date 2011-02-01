@@ -58,7 +58,7 @@ extern "C"{
 /*==================================================================================================
                                              ENUMS
 ==================================================================================================*/
-/* Return codes for SEC user space driver APIs */
+/** Return codes for SEC user space driver APIs */
 typedef enum sec_return_code_e
 {
 	SEC_SUCCESS = 0,             /*< Operation executed successfully.*/
@@ -67,16 +67,17 @@ typedef enum sec_return_code_e
 
 }sec_return_code_t;
 
-/* 
+/** 
  * Status codes indicating SEC processing result for each packet, 
  * when SEC user space driver invokes User Application provided callback.
- * ET TODO: Detail error codes per source? DECO/Job ring/CCB ?
+ * TODO: Detail error codes per source? DECO/Job ring/CCB ?
  */
 typedef enum sec_status_e
 {
     SEC_STATUS_SUCCESS = 0,     /*< SEC processed packet without error.*/
     SEC_STATUS_ERROR,           /*< SEC packet processing returned with error. */
-
+    SEC_STATUS_DISCARD,         /*< Packet discarded without being processed by SEC.
+                                    This can happen when a Job Ring is reset and the Input Ring is not empty. */
 }sec_status_t;
 
 /*==================================================================================================
@@ -90,33 +91,39 @@ typedef uint32_t dma_addr_t;
 #endif
 
 
-/* Data type used for specifying addressing scheme for 
+/**
+ * Data type used for specifying addressing scheme for 
  * packets submitted by User Application. Assume virtual addressing */
 //typedef uint8_t*  packet_addr_t;
 
-/*  Data type used for specifying addressing scheme for
+/**
+ * Data type used for specifying addressing scheme for
  *  packets submitted by User Application. Assume physical addressing */
 typedef dma_addr_t  packet_addr_t;
 
-/* Handle to a Job Ring */
+/** Handle to a Job Ring */
 typedef void* sec_job_ring_t;
 
-/* Handle to a SEC Context */
+/** Handle to a SEC Context */
 typedef void* sec_context_handle_t;
 
-/* Callback provided by the User Application when a SEC PDCP context is created.
+/**
+ * Callback provided by the User Application when a SEC PDCP context is created.
  * Callback is invoked by SEC user space driver for each packet processed by SEC
  * belonging to a certain PDCP context.
  */
 typedef void (*sec_out_cbk)(
-        packet_addr_t   buffer,      /*< Buffer with SEC result. TODO: address is virtual or physical? */
-        uint32_t        offset,     /*< Offset within buffer where SEC result starts. */
-        uint32_t        buffer_len, /*< Length of buffer. */
-        void            *opaque,    /*< Opaque data received from User Application when packet was submitted and passed back to UA. */
-        int32_t         status);    /*< Status word indicating success or failure. */
+        packet_addr_t   buffer,         /*< Buffer with SEC result. TODO: address is virtual or physical? */
+        uint32_t        offset,         /*< Offset within buffer where SEC result starts. */
+        uint32_t        buffer_len,     /*< Length of buffer. */
+        void            *opaque,        /*< Opaque data received from User Application when packet was submitted and passed back to UA. */
+        int32_t         status,         /*< Status word indicating processing result for this packet.
+                                            Can be one of: #SEC_STATUS_SUCCESS, #SEC_STATUS_ERROR, #SEC_STATUS_DISCARD */
+        int32_t         error_info);    /*< Detailed error code, as reported by SEC device. */
 
 
-/* PDCP context structure provided by User Application when a PDCP context is created.
+/**
+ * PDCP context structure provided by User Application when a PDCP context is created.
  * User Application fills this structure with data that is used by SEC user space driver
  * to create a SEC descriptor. This descriptor is used by SEC to process all packets
  * belonging to this PDCP context.
@@ -164,8 +171,8 @@ typedef struct sec_pdcp_context_info_s
  * @param [in]  job_rings_no       The number of job rings to acquire and initialize.
  * @param [out] job_ring_handles   Array of job ring handles of size job_rings_no.
  *
- * @retval ::SEC_SUCCESS for successful execution
- * @retval ::SEC_OUT_OF_MEMORY is returned if memory allocation fails.
+ * @retval #SEC_SUCCESS for successful execution
+ * @retval #SEC_OUT_OF_MEMORY is returned if memory allocation fails.
  * @retval >0 in case of error
  */
 int sec_init(int job_rings_no, sec_job_ring_t **job_ring_handles);
@@ -176,13 +183,13 @@ int sec_init(int job_rings_no, sec_job_ring_t **job_ring_handles);
  * free any memory allocated.
  * Call once during application teardown.
  *
- * @retval ::SEC_SUCCESS for successful execution
+ * @retval #SEC_SUCCESS for successful execution
  * @retval >0 in case of error
  */
 int sec_release();
 
 
-/* @brief Initializes a SEC PDCP context with the data provided.
+/** @brief Initializes a SEC PDCP context with the data provided.
  * 
  * Creates a shared SEC descriptor that will be used by SEC to 
  * process packets submitted for this PDCP context. Context also 
@@ -197,13 +204,25 @@ int sec_release();
  * @param [in]  sec_ctx_info       PDCP context info filled by the caller.
  * @param [out] sec_ctx_handle     PDCP context handle returned by SEC user space driver.
  * 
- * @retval ::SEC_SUCCESS for successful execution
- * @retval ::SEC_OUT_OF_MEMORY when there is not enough internal memory to allocate the context
+ * @retval #SEC_SUCCESS for successful execution
+ * @retval #SEC_OUT_OF_MEMORY when there is not enough internal memory to allocate the context
+ * @retval >0 in case of error
+ */
+int sec_create_pdcp_context (sec_pdcp_context_info_t *sec_ctx_info, 
+                             sec_context_handle_t *sec_ctx_handle);
+
+/** @brief Deletes a SEC PDCP context previously created.
+ * Deletes a PDCP context identified with the handle provided by the function caller.
+ * The handle was obtained by the caller using sec_create_pdcp_context() function.
+ * Call for once for each PDCP context.
+ * 
+ * @param [in] sec_ctx_handle     PDCP context handle.
+ * 
+ * @retval #SEC_SUCCESS for successful execution
  * @retval >0 in case of error
  */
 
-int sec_create_pdcp_context (sec_pdcp_context_info_t *sec_ctx_info, 
-                             sec_context_handle_t *sec_ctx_handle);
+int sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle);
 
 /*================================================================================================*/
 
