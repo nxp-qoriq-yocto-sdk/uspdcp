@@ -72,7 +72,9 @@ extern "C" {
                                      GLOBAL FUNCTIONS
 ==================================================================================================*/
 
-int sec_init(int job_rings_no, sec_job_ring_t **job_ring_handles)
+int sec_init(int job_rings_no,
+		     job_ring_callback_t job_ring_callback,
+		     sec_job_ring_t **job_ring_handles)
 {
 	// stub function
 	return SEC_SUCCESS;
