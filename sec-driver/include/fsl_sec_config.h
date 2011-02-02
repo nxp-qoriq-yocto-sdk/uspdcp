@@ -80,9 +80,20 @@ extern "C"{
 /* SEC USER SPACE DRIVER related configuration. */
 /************************************************/
 
-/* Maximum number of SEC PDCP contexts that can be managed 
- * simultaneously by SEC user space driver. */
+/** Maximum number of SEC PDCP contexts that can be managed
+ *  simultaneously by SEC user space driver. */
 #define FSL_SEC_MAX_PDCP_CONTEXTS   200
+
+
+/************************************************/
+/* SEC DEVICE related configuration.            */
+/************************************************/
+
+/** SEC device is configured for 36 bit physical addressing.
+ *  Both the SEC user space driver and the SEC kernel driver
+ *  need to have this configuration enable at the same time.
+ */
+//#define CONFIG_PHYS_64BIT
 
 
 /***************************************/
