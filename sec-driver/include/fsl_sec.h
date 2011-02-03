@@ -81,8 +81,6 @@ typedef enum sec_status_e
 {
     SEC_STATUS_SUCCESS = 0,     /*< SEC processed packet without error.*/
     SEC_STATUS_ERROR,           /*< SEC packet processing returned with error. */
-    SEC_STATUS_DISCARD,         /*< Packet discarded without being processed by SEC.
-                                    This can happen when a Job Ring is reset and the Input Ring is not empty. */
     SEC_STATUS_OVERDUE,         /*< Indicates a packet processed by SEC for a PDCP context that was requested
                                     to be removed by the User Application.*/
     SEC_STATUS_LAST_OVERDUE,    /*< Indicates the last packet processed by SEC for a PDCP context that was requested
