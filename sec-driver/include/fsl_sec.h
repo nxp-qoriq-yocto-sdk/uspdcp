@@ -99,10 +99,14 @@ typedef void* sec_job_ring_t;
  * space driver and SEC kernel driver.
  *
  * @param [in]  job_rings_no       The number of job rings to acquire and initialize.
- * @param [out] job_ring_handles   Array of job ring handles of size job_rings_no.
+ * @param [out] job_ring_handles   Array of job ring handles of size job_rings_no. The job
+ *                                 ring handles are provided by the library for UA. The
+ *                                 handles are opaque from UA point of view.
+ *                                 Theses handles can be used by UA to associate a context
+ *                                 to a certain JR or poll for events per JR.
  *
  * @retval #SEC_SUCCESS for successful execution
- * @retval #SEC_OUT_OF_MEMORY is returned if internal memory allocation fails.
+ * @retval #SEC_OUT_OF_MEMORY is returned if internal memory allocation fails
  * @retval #SEC_JR_RESET_FAILED is returned in case the job ring reset fails
  * @retval >0 in case of error
  */
@@ -112,8 +116,8 @@ int sec_init(int job_rings_no,
 /**
  * @brief Release the resources used by the SEC user space driver.
  *
- * Reset SEC's job rings indicated by the User Application at sec_init and
- * free any memory allocated internally.
+ * Reset and release SEC's job rings indicated by the User Application at
+ * sec_init() and free any memory allocated internally.
  * Call once during application teardown.
  *
  * @note In case there are any packets in-flight in the Job Input/Output Rings,
@@ -124,6 +128,7 @@ int sec_init(int job_rings_no,
  * @retval >0 in case of error
  */
 int sec_release();
+
 
 /*================================================================================================*/
 
