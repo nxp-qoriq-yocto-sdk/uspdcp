@@ -73,16 +73,16 @@ extern "C" {
 ==================================================================================================*/
 
 int sec_init(int job_rings_no,
-		     sec_job_ring_t **job_ring_handles)
+             sec_job_ring_t **job_ring_handles)
 {
-	// stub function
-	return SEC_SUCCESS;
+    // stub function
+    return SEC_SUCCESS;
 }
 
 int sec_release()
 {
-	// stub function
-	return SEC_SUCCESS;
+    // stub function
+    return SEC_SUCCESS;
 }
 
 int sec_create_pdcp_context (sec_pdcp_context_info_t *sec_ctx_info, 
@@ -110,7 +110,7 @@ int sec_create_pdcp_context (sec_pdcp_context_info_t *sec_ctx_info,
     // 4. return context handle to UA
     // 5. Run context garbage collector routine
 
-	return SEC_SUCCESS;
+    return SEC_SUCCESS;
 }
 
 int sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle)
@@ -118,11 +118,25 @@ int sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle)
     // stub function
 
     // 1. Mark context as retiring
-    // 2. If context.packet_count == 0 then move context from in-use list to retiring list. 
+    // 2. If context.packet_count == 0 then move context from in-use list to free list.
     // Else move to retiring list
 
     return SEC_SUCCESS;
 }
+
+int sec_process_packet(sec_context_handle_t sec_ctx_handle,
+                       packet_addr_t in_buffer_addr,
+                       int32_t in_buffer_offset,
+                       uint32_t in_buffer_length,
+                       packet_addr_t out_buffer_addr,
+                       uint32_t out_buffer_offset,
+                       uint32_t out_buffer_length,
+                       ua_context_handle_t ua_ctx_handle)
+{
+    // stub function
+    return SEC_SUCCESS;
+}
+
 /*================================================================================================*/
 
 #ifdef __cplusplus
