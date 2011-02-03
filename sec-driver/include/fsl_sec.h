@@ -108,7 +108,7 @@ typedef uint32_t dma_addr_t;
 
 
 /**
- * Data type used for specifying addressing scheme for 
+ * Data type used for specifying addressing scheme for
  * packets submitted by User Application. Assume virtual addressing */
 //typedef uint8_t*  packet_addr_t;
 
@@ -120,7 +120,7 @@ typedef dma_addr_t  packet_addr_t;
 /** Handle to a Job Ring */
 typedef void* sec_job_ring_t;
 
-/** Handle to a SEC Context */
+/** Handle to a SEC PDCP Context */
 typedef void* sec_context_handle_t;
 
 /** @brief Function called by SEC user space driver to notify every processed packet.
