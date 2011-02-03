@@ -1,11 +1,11 @@
 1. How to bring sec-driver sources from GIT (available only on FSR git server):
    
-   -> Create folder p2020-sdk
+   -> Create folder p2020-sdk.
    -> Clone the following git repository in folder p2020-sdk
 
       [/]$ cd p2020-sdk
       [p2020-sdk]$ git ssh://fsrcode.ea.freescale.net/space/git_repos/p2020/us-drivers.git us-drivers
-      [p2020-sdk]$ cd us-drivers
+      [p2020-sdk]$ cd us-drivers 
  
       Note: The us-drivers.git repository is located only on
       fsrcode.ea.freescale.net server!
