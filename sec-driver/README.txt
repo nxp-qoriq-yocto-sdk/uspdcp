@@ -1,6 +1,6 @@
 1. How to bring sec-driver sources from GIT (available only on FSR git server):
    
-   -> Create folder p2020-sdk
+   -> Create folder p2020-sdk.
    -> Clone the following git repository in folder p2020-sdk
 
       [/]$ cd p2020-sdk
@@ -74,24 +74,25 @@
 
       Note: The branches listed below are associated to release P2020_P1020_Beta_20100901 .
 
-      Note: The git repositories are also available on fsrcode (TBD).
+      Note: The git repositories are cloned from local FSR server (fsrcode.ea.freescale.net).
+            The repositories are also available on ATX (git.am.freescale.net).
 
       [/]$ cd p2020-sdk
  
       A. Kernel sources:
-      [p2020-sdk]$ git clone git://git.am.freescale.net/p20x0/linux-2.6.git linux-2.6
+      [p2020-sdk]$ git clone ssh://fsrcode.ea.freescale.net/space/git_repos/p20x0/linux-2.6.git linux-2.6
       [p2020-sdk]$ cd linux-2.6
-      [p2020-sdk/linux-2.6]$ git checkout P2020_P1020_Beta_20100901
+      [p2020-sdk/linux-2.6]$ git checkout origin/P2020_P1020_Beta_20100901
 
       B. Ltib sources:
-      [p2020-sdk]$ git clone git://git.am.freescale.net/ltib.git ltib
+      [p2020-sdk]$ git clone sh://fsrcode.ea.freescale.net/space/git_repos/ltib.git ltib
       [p2020-sdk]$ cd ltib
-      [p2020-sdk/ltib]$ git checkout branch-p1020rdb-p2020rdb-10-3-1
+      [p2020-sdk/ltib]$ git checkout origin/branch-p1020rdb-p2020rdb-10-3-1
 
       C. U-boot sources:
-      [p2020-sdk]$ git clone git://git.am.freescale.net/p20x0/u-boot.git u-boot
+      [p2020-sdk]$ git clone ssh://fsrcode.ea.freescale.net/space/git_repos/p20x0/u-boot.git u-boot
       [p2020-sdk]$ cd u-boot
-      [p2020-sdk/u-boot]$ git checkout P2020_P1020_Beta_20100901
+      [p2020-sdk/u-boot]$ git checkout origin/P2020_P1020_Beta_20100901
 
       
 4. How to (re)compile the kernel from the GIT sources

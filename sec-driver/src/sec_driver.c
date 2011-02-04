@@ -72,16 +72,17 @@ extern "C" {
                                      GLOBAL FUNCTIONS
 ==================================================================================================*/
 
-int sec_init(int job_rings_no, sec_job_ring_t **job_ring_handles)
+int sec_init(int job_rings_no,
+             sec_job_ring_t **job_ring_handles)
 {
-	// stub function
-	return SEC_SUCCESS;
+    // stub function
+    return SEC_SUCCESS;
 }
 
 int sec_release()
 {
-	// stub function
-	return SEC_SUCCESS;
+    // stub function
+    return SEC_SUCCESS;
 }
 
 int sec_create_pdcp_context (sec_job_ring_t job_ring_handle,
@@ -110,7 +111,7 @@ int sec_create_pdcp_context (sec_job_ring_t job_ring_handle,
     // 4. return context handle to UA
     // 5. Run context garbage collector routine
 
-	return SEC_SUCCESS;
+    return SEC_SUCCESS;
 }
 
 int sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle)
@@ -118,7 +119,7 @@ int sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle)
     // stub function
 
     // 1. Mark context as retiring
-    // 2. If context.packet_count == 0 then move context from in-use list to retiring list. 
+    // 2. If context.packet_count == 0 then move context from in-use list to free list. 
     //    Else move to retiring list
     // 3. Run context garbage collector routine
 
@@ -139,11 +140,13 @@ int sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
     //      - other 
     return SEC_SUCCESS;
 }
+
 int sec_poll_job_ring(sec_job_ring_t job_ring_handle, int32_t limit, uint32_t *packets_no)
 {
     // 1. call sec_hw_poll_job_ring() to check directly SEC's Job Ring for ready packets.
     return SEC_SUCCESS;
 }
+
 #elif FSL_SEC_WORKING_MODE == FSL_SEC_INTERRUPT_MODE
 int sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
 {
@@ -163,6 +166,7 @@ int sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
 
     return SEC_SUCCESS;
 }
+
 int sec_poll_job_ring(sec_job_ring_t job_ring_handle, int32_t limit, uint32_t *packets_no)
 {
     // 1. Start software poll on device file registered for this job ring.
@@ -171,6 +175,16 @@ int sec_poll_job_ring(sec_job_ring_t job_ring_handle, int32_t limit, uint32_t *p
     return SEC_SUCCESS;
 }
 #endif
+
+int sec_process_packet(sec_context_handle_t sec_ctx_handle,
+                       sec_packet_t *in_packet,
+                       sec_packet_t *out_packet,
+                       ua_context_handle_t ua_ctx_handle)
+{
+    // stub function
+    return SEC_SUCCESS;
+}
+
 /*================================================================================================*/
 
 #ifdef __cplusplus

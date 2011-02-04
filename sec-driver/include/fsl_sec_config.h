@@ -64,17 +64,21 @@ extern "C"{
 /*       Helper defines                */
 /***************************************/
 
-/* SEC version supported by this user space driver: 3.1 */
+/** SEC version supported by this user space driver: 3.1 */
 #define FSL_SEC_SUPPORTED_VERSION 31
 
 #define  ON  1
 #define  OFF 0
 
-/* SEC is configured to work in polling mode */
+/** SEC is configured to work in polling mode */
 #define FSL_SEC_POLLING_MODE     0
-/* SEC is configured to work in interrupt mode */
+/** SEC is configured to work in interrupt mode */
 #define FSL_SEC_INTERRUPT_MODE   1
 
+/** Logging level for SEC user space driver: log only errors */
+#define FSL_SEC_DRIVER_LOG_ERROR 0
+/** Logging level for SEC user space driver: log both errors and info messages */
+#define FSL_SEC_DRIVER_LOG_INFO  1
 
 /************************************************/
 /* SEC USER SPACE DRIVER related configuration. */
@@ -95,17 +99,35 @@ extern "C"{
  */
 //#define CONFIG_PHYS_64BIT
 
+/***************************************************/
+/* Library Internal Logging related configuration. */
+/***************************************************/
+
+/** Enable/Disable logging support at compile time.
+ * Valid values:
+ * ON - enable logging
+ * OFF - disable logging
+ *
+ * TODO: specify where are the messages logged, at stdout?
+ */
+#define FSL_SEC_DRIVER_LOGGING OFF
+/** Configure logging level at compile time.
+ * Valid values:
+ * FSL_SEC_DRIVER_LOG_ERROR - log only errors
+ * FSL_SEC_DRIVER_LOG_INFO - log errors and info messages
+ */
+#define FSL_SEC_DRIVER_LOGGING_LEVEL FSL_SEC_DRIVER_LOG_INFO
 
 /***************************************/
 /* SEC JOB RING related configuration. */
 /***************************************/
 
-/* The size of the input JOB RING.
+/** Configure the size of the input JOB RING.
  * For SEC 3.1 the size of the INPUT FIFO (concept similar to JOB INPUT RING
  * on SEC 4.4) is hardware fixed to 24.
  * For SEC 4.4 the maximum size of the RING is hardware limited to 1024 */
 #define FSL_SEC_JOB_INPUT_RING_SIZE  24
-/* The size of the input JOB RING.
+/** Configure the size of the output JOB RING.
  * For SEC 3.1 there is no OUTPUT FIFO.
  * For SEC 4.4 the maximum size of the RING is hardware limited to 1024 */
 #define FSL_SEC_JOB_OUTPUT_RING_SIZE 24
@@ -114,15 +136,29 @@ extern "C"{
 /* SEC working mode related configuration. */
 /*******************************************/
 
-/* SEC working mode */
+/** @brief Configure the SEC working mode.
+ *
+ * Valid values:
+ * FSL_SEC_POLLING_MODE    - SEC driver polls the HW for job done indications
+ * FSL_SEC_INTERRUPT_MODE  - SEC driver receives the job done indications from HW
+ *                           by means of interrupts.
+ *
+ * @note SEC 3.1 always notifies the errors by means of interrupts. So the polling
+ * mode will also handle interrupts.
+ *
+ */
 #define FSL_SEC_WORKING_MODE FSL_SEC_POLLING_MODE
 
 /************************************************/
 /* Scatter/Gather support related configuration */
 /************************************************/
 
-/* Enable or disable the support for scatter/gather
- * buffers in the SEC driver. */
+/** Enable or disable the support for scatter/gather
+ * buffers in the SEC driver.
+ * Valid values:
+ * ON - enable scatter gather support
+ * OFF - disable scatter gather suport
+ */
 #define FSL_SEC_ENABLE_SCATTER_GATHER OFF
 
 
@@ -136,7 +172,7 @@ extern "C"{
 
 #if FSL_SEC_SUPPORTED_VERSION == 44
 
-/* Interrupt Coalescing Descriptor Count Threshold.
+/** Interrupt Coalescing Descriptor Count Threshold.
  * While interrupt coalescing is enabled (ICEN=1), this value determines
  * how many Descriptors are completed before raising an interrupt.
  *
@@ -148,7 +184,7 @@ extern "C"{
  * */
 #define FSL_SEC_INTERRUPT_COALESCING_DESCRIPTOR_COUNT_THRESH  10
 
-/* Interrupt Coalescing Timer Threshold.
+/** Interrupt Coalescing Timer Threshold.
  * While interrupt coalescing is enabled (ICEN=1), this value determines the
  * maximum amount of time after processing a Descriptor before raising an interrupt.
  * Interrupt Coalescing Timer Threshold. While interrupt coalescing is enabled (ICEN=1),
