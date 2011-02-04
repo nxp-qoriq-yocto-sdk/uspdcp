@@ -48,8 +48,8 @@ extern "C" {
 ==================================================================================================*/
 int setup_sec_environment(void);
 int cleanup_sec_environment(void);
-int send_packets(uint8_t job_ring);
-int get_results(uint8_t job_ring);
+int send_packets(uint8_t job_ring, uint32_t *in_packets);
+int get_results(uint8_t job_ring, uint32_t *out_packets);
 int start_sec_threads(void);
 int stop_sec_threads(void);
 void* sec_thread_routine(void*);
@@ -163,7 +163,7 @@ int setup_sec_environment(void)
     return 0;
 }
 
-int send_packets(uint8_t job_ring)
+int send_packets(uint8_t job_ring, uint32_t *packets_in)
 {
     int ret = 0;
     int i = 0;
@@ -189,6 +189,7 @@ int send_packets(uint8_t job_ring)
                     return 1;
                 }
                 printf ("Sent packet number %d to SEC on Job Ring %d and for PDCP context %d\n",j, job_ring, i);
+                *packets_in++;
             }
         }
     }
@@ -196,7 +197,7 @@ int send_packets(uint8_t job_ring)
     return 0;
 }
 
-int get_results(uint8_t job_ring)
+int get_results(uint8_t job_ring, uint32_t *packets_out)
 {
     int ret = 0;
 
@@ -222,14 +223,15 @@ int get_results(uint8_t job_ring)
     printf ("sec_poll:: Retrieved %d results from SEC \n", out_number);
 */
 
-    ret = sec_poll_job_ring(job_ring_handles[0], limit, &out_number);
+    ret = sec_poll_job_ring(job_ring_handles[job_ring], limit, &out_number);
     if (ret != SEC_SUCCESS)
     {
-        printf("sec_poll::Error %d when polling for SEC results\n", ret);
+        printf("sec_poll::Error %d when polling for SEC results on Job Ring %d \n", ret, job_ring);
         return 1;
     }
 
-    printf ("sec_poll:: Retrieved %d results from SEC \n", out_number);
+    printf ("sec_poll:: Retrieved %d results from SEC on Job Ring %d\n", out_number, job_ring);
+    *packets_out = out_number;
 
     return 0;
 }
@@ -295,13 +297,22 @@ void* sec_thread_routine(void* config)
 {
     thread_config_t *th_config = NULL;
     int ret = 0;
+    unsigned int packets_sent = 0;
+    unsigned int packets_received = 0;
+
 
     th_config = (thread_config_t*)config;
     printf("Hello World! It's me, thread #%d!\n", th_config->tid);
 
-    ret = send_packets(th_config->job_ring_id);
+    ret = send_packets(th_config->job_ring_id, &packets_sent);
+
+    ret = get_results(th_config->job_ring_id, &packets_received);
 
 
+    if (packets_sent != packets_received )
+    {
+        printf ("Number of packets sent to SEC is NOT equal to packets received from SEC\n");
+    }
 
     pthread_exit(NULL);
 }
