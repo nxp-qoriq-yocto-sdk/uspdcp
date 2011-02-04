@@ -40,11 +40,20 @@ extern "C" {
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <pthread.h>
 #include "fsl_sec.h"
 
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
 ==================================================================================================*/
+int setup_sec_environment(void);
+int cleanup_sec_environment(void);
+int send_packets(uint8_t job_ring);
+int get_results(uint8_t job_ring);
+int start_sec_threads(void);
+int stop_sec_threads(void);
+void* sec_thread_routine(void*);
+
 
 /*==================================================================================================
                                      LOCAL CONSTANTS
@@ -55,12 +64,17 @@ extern "C" {
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
 ==================================================================================================*/
+typedef struct thread_config_s
+{
+    int tid;
+    int job_ring_id;
+}thread_config_t;
 
 /*==================================================================================================
                                         LOCAL MACROS
 ==================================================================================================*/
 
-#define CIRCULAR_COUNTER(x, max)   ((x) + 1) * ((x) != (max -1))
+#define CIRCULAR_COUNTER(x, max)   ((x) + 1) * ((x) != (max - 1))
 
 /*==================================================================================================
                                       LOCAL VARIABLES
@@ -69,13 +83,19 @@ extern "C" {
 /*==================================================================================================
                                      GLOBAL VARIABLES
 ==================================================================================================*/
+sec_job_ring_t *job_ring_handles[JOB_RING_NUMBER];
+sec_context_handle_t pdcp_ctx_handle[PDCP_CONTEXT_NUMBER];
+sec_pdcp_context_info_t pdcp_ctx_cfg_data[PDCP_CONTEXT_NUMBER];
+sec_packet_t in_packets[PACKET_NUMBER];
+sec_packet_t out_packets[PACKET_NUMBER];
+int opaque[PACKET_NUMBER];
+
+pthread_t threads[JOB_RING_NUMBER];
+int job_ring_to_ctx[JOB_RING_NUMBER][PDCP_CONTEXT_NUMBER];
+
 
 /*==================================================================================================
                                      LOCAL FUNCTIONS
-==================================================================================================*/
-
-/*==================================================================================================
-                                     GLOBAL FUNCTIONS
 ==================================================================================================*/
 
 int pdcp_ready_packet_handler (sec_packet_t *in_packet,
@@ -84,28 +104,23 @@ int pdcp_ready_packet_handler (sec_packet_t *in_packet,
                                uint32_t status,
                                uint32_t error_info)
 {
+    printf ("Received packet from SEC\n");
     return SEC_RETURN_SUCCESS;
 }
 
-
-int main(void)
+int setup_sec_environment(void)
 {
     int ret = 0;
     int i = 0;
-    int j = 0;
     int k = 0;
-    sec_job_ring_t *job_ring_handles[JOB_RING_NUMBER];
-    sec_context_handle_t pdcp_ctx_handle[PDCP_CONTEXT_NUMBER];
-    sec_pdcp_context_info_t pdcp_ctx_cfg_data[PDCP_CONTEXT_NUMBER];
-    sec_packet_t in_packet[PACKET_NUMBER];
-    sec_packet_t out_packet[PACKET_NUMBER];
-    int opaque = 3;
 
     memset (job_ring_handles, 0, sizeof(job_ring_handles));
     memset (pdcp_ctx_handle, 0, sizeof(pdcp_ctx_handle));
     memset (pdcp_ctx_cfg_data, 0, sizeof(pdcp_ctx_cfg_data));
-    memset (in_packet, 0, sizeof(in_packet));
-    memset (out_packet, 0, sizeof(out_packet));
+    memset (in_packets, 0, sizeof(in_packets));
+    memset (out_packets, 0, sizeof(out_packets));
+    memset (opaque, 0, sizeof(opaque));
+    memset (job_ring_to_ctx, -1, sizeof(job_ring_to_ctx));
 
     //////////////////////////////////////////////////////////////////////////////
     // 1. Initialize SEC user space driver requesting #JOB_RING_NUMBER Job Rings
@@ -117,9 +132,9 @@ int main(void)
         return 1;
     }
 
-    for (i = 0; i < JOB_RING_NUMBER - 1; i++)
+    for (i = 0; i < JOB_RING_NUMBER; i++)
     {
-        assert(job_ring_handles[i] != NULL);
+        //assert(job_ring_handles[i] != NULL);
     }
 
     /////////////////////////////////////////////////////////////////////
@@ -128,9 +143,10 @@ int main(void)
     /////////////////////////////////////////////////////////////////////
 
     k = 0;
-    for (i = 0; i < PDCP_CONTEXT_NUMBER - 1; i++)
+    for (i = 0; i < PDCP_CONTEXT_NUMBER; i++)
     {
         k = CIRCULAR_COUNTER(k, JOB_RING_NUMBER);
+        printf ("Create & affine PDCP context %d on Job Ring %d\n", i, k);
         ret = sec_create_pdcp_context (job_ring_handles[k],
                 &pdcp_ctx_cfg_data[i],
                 &pdcp_ctx_handle[i]);
@@ -139,28 +155,50 @@ int main(void)
             printf("sec_create_pdcp_context::Error %d for PDCP context no %d \n", ret, i);
             return 1;
         }
+
+        // Remember what PDCP context is affined to each Job Ring.
+        job_ring_to_ctx[k][i] = i;
     }
 
+    return 0;
+}
+
+int send_packets(uint8_t job_ring)
+{
+    int ret = 0;
+    int i = 0;
+    int j = 0;
 
     /////////////////////////////////////////////////////////////////////
-    // 3. Submit packets for first PDCP context.
+    // 3. Submit packets for PDCP context.
     /////////////////////////////////////////////////////////////////////
 
-    for (i = 0; i < PDCP_CONTEXT_NUMBER - 1; i++)
+    for (i = 0; i < PDCP_CONTEXT_NUMBER; i++)
     {
-        for (j = 0; j < PACKET_NUMBER - 1 ;j++)
+        if (job_ring_to_ctx[job_ring][i] != -1)
         {
-            ret = sec_process_packet(pdcp_ctx_handle[i],
-                    &in_packet[j],
-                    &out_packet[j],
-                    (ua_context_handle_t)&opaque); 
-            if (ret != SEC_SUCCESS)
+            for (j = 0; j < PACKET_NUMBER ;j++)
             {
-                printf("sec_process_packet::Error %d for PDCP context no %d \n", ret, i);
-                return 1;
+                ret = sec_process_packet(pdcp_ctx_handle[i],
+                        &in_packets[j],
+                        &out_packets[j],
+                        (ua_context_handle_t)&opaque[j]);
+                if (ret != SEC_SUCCESS)
+                {
+                    printf("sec_process_packet::Error %d for PDCP context no %d \n", ret, i);
+                    return 1;
+                }
+                printf ("Sent packet number %d to SEC on Job Ring %d and for PDCP context %d\n",j, job_ring, i);
             }
         }
     }
+
+    return 0;
+}
+
+int get_results(uint8_t job_ring)
+{
+    int ret = 0;
 
     /////////////////////////////////////////////////////////////////////
     // 4. Poll for SEC results.
@@ -193,12 +231,18 @@ int main(void)
 
     printf ("sec_poll:: Retrieved %d results from SEC \n", out_number);
 
+    return 0;
+}
 
+int cleanup_sec_environment(void)
+{
+    int ret = 0;
+    int i = 0;
 
     /////////////////////////////////////////////////////////////////////
     // x. Remove PDCP contexts
     /////////////////////////////////////////////////////////////////////
-    for (i = 0; i < PDCP_CONTEXT_NUMBER - 1; i++)
+    for (i = 0; i < PDCP_CONTEXT_NUMBER; i++)
     {
         ret = sec_delete_pdcp_context (pdcp_ctx_handle[i]);
         if (ret != SEC_SUCCESS)
@@ -216,11 +260,111 @@ int main(void)
     ret = sec_release();
     if (ret != SEC_SUCCESS)
     {
-        printf("sec_release::Error %d", ret);
+        printf("sec_release::Error %d\n", ret);
         return 1;
     }
 
     return 0;
+}
+
+int start_sec_threads(void)
+{
+    int ret = 0;
+    int i = 0;
+
+    thread_config_t th_config[JOB_RING_NUMBER];
+
+
+    for (i = 0; i < JOB_RING_NUMBER; i++)
+    {
+        th_config[i].tid = i;
+        th_config[i].job_ring_id = i;
+        ret = pthread_create(&threads[1], NULL, &sec_thread_routine, (void*)&th_config[i]);
+        assert(ret == 0);
+    }
+
+    return 0;
+}
+
+int stop_sec_threads(void)
+{
+    return 0;
+}
+
+void* sec_thread_routine(void* config)
+{
+    thread_config_t *th_config = NULL;
+    int ret = 0;
+
+    th_config = (thread_config_t*)config;
+    printf("Hello World! It's me, thread #%d!\n", th_config->tid);
+
+    ret = send_packets(th_config->job_ring_id);
+
+
+
+    pthread_exit(NULL);
+}
+
+
+/*==================================================================================================
+                                        GLOBAL FUNCTIONS
+=================================================================================================*/
+
+int main(void)
+{
+    int ret = 0;
+
+
+    /////////////////////////////////////////////////////////////////////
+    // 1. Initialize SEC environment
+    /////////////////////////////////////////////////////////////////////
+    ret = setup_sec_environment();
+    if (ret != 0)
+    {
+        printf("setup_sec_environment returned error\n");
+        return 1;
+    }
+
+
+
+    /////////////////////////////////////////////////////////////////////
+    // 2. Start worker threads
+    /////////////////////////////////////////////////////////////////////
+    ret = start_sec_threads();
+    if (ret != 0)
+    {
+        printf("start_sec_threads returned error\n");
+        return 1;
+    }
+
+
+    
+    /////////////////////////////////////////////////////////////////////
+    // 3. Stop worker threads
+    /////////////////////////////////////////////////////////////////////
+    ret = stop_sec_threads();
+    if (ret != 0)
+    {
+        printf("stop_sec_threads returned error\n");
+        return 1;
+    }
+
+
+    /////////////////////////////////////////////////////////////////////
+    // 3. Cleanup SEC environment
+    /////////////////////////////////////////////////////////////////////
+    ret = cleanup_sec_environment();
+    if (ret != 0)
+    {
+        printf("cleanup_sec_environment returned error\n");
+        return 1;
+    }
+
+    pthread_exit(NULL);
+
+
+    //return 0;
 }
 
 /*================================================================================================*/
