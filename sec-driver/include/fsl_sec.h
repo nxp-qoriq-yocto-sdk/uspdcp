@@ -77,6 +77,8 @@ typedef enum sec_return_code_e
                                      This can happen if the packet RX rate is higher than SEC's capacity. */
     SEC_DRIVER_RELEASE_IN_PROGRESS, /*< SEC driver shutdown is in progress and no more context
                                         creation/deletion, packets processing or polling is allowed.*/
+    SEC_DRIVER_NO_FREE_CONTEXTS, /*< There are no more free contexts. Considering increasing the
+                                    maximum number of contexts: #FSL_SEC_MAX_PDCP_CONTEXTS.*/
 
 }sec_return_code_t;
 
@@ -126,9 +128,11 @@ typedef uint32_t dma_addr_t;
 // TODO: address is virtual or physical?
 typedef dma_addr_t  packet_addr_t;
 
-/** Opaque handle to a Job Ring provided by SEC user space driver
- *  to UA when sec_init() is called. */
-typedef void* sec_job_ring_t;
+/**
+ * Opaque handle to a Job Ring provided by SEC user space driver
+ * to UA when sec_init() is called.
+ * */
+typedef void* sec_job_ring_handle_t;
 
 /** Handle to a SEC PDCP Context */
 typedef void* sec_context_handle_t;
@@ -174,7 +178,7 @@ typedef struct sec_packet_s
 typedef int (*sec_out_cbk)(sec_packet_t        *in_packet,
                            sec_packet_t        *out_packet,
                            ua_context_handle_t ua_ctx_handle,
-                           uint32_t            status,
+                           sec_status_t        status,
                            uint32_t            error_info);
 
 
@@ -241,7 +245,7 @@ typedef struct sec_pdcp_context_info_s
  * @retval >0 in case of error
  */
 int sec_init(int job_rings_no,
-             sec_job_ring_t **job_ring_handles);
+             sec_job_ring_handle_t **job_ring_handles);
 
 /**
  * @brief Release the resources used by the SEC user space driver.
@@ -287,7 +291,7 @@ int sec_release();
  * @retval #SEC_DRIVER_RELEASE_IN_PROGRESS is returned if sec driver release is in progress
  * @retval >0 in case of other errors TODO: define other errors, like SEC_DRIVER_SHUTDOWN.
  */
-int sec_create_pdcp_context (sec_job_ring_t job_ring_handle,
+int sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
                              sec_pdcp_context_info_t *sec_ctx_info, 
                              sec_context_handle_t *sec_ctx_handle);
 
@@ -363,7 +367,7 @@ int sec_poll(int32_t limit,  uint32_t weight, uint32_t *packets_no);
  * @retval #SEC_PROCESSING_ERROR           indicates a fatal execution error that requires a SEC user space driver shutdown.
  * @retval #SEC_DRIVER_RELEASE_IN_PROGRESS is returned if sec driver release is in progress
  */
-int sec_poll_job_ring(sec_job_ring_t job_ring_handle, int32_t limit, uint32_t *packets_no);
+int sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit, uint32_t *packets_no);
 
 /**
  * @brief Submit a packet for SEC processing on a specified PDCP context.

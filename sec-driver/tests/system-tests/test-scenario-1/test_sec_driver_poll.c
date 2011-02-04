@@ -60,7 +60,7 @@ void* sec_thread_routine(void*);
 ==================================================================================================*/
 #define PDCP_CONTEXT_NUMBER 10
 #define JOB_RING_NUMBER     2
-#define PACKET_NUMBER       5
+#define PACKET_NUMBER       4
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
 ==================================================================================================*/
@@ -83,7 +83,7 @@ typedef struct thread_config_s
 /*==================================================================================================
                                      GLOBAL VARIABLES
 ==================================================================================================*/
-sec_job_ring_t *job_ring_handles[JOB_RING_NUMBER];
+sec_job_ring_handle_t *job_ring_handles[JOB_RING_NUMBER];
 sec_context_handle_t pdcp_ctx_handle[PDCP_CONTEXT_NUMBER];
 sec_pdcp_context_info_t pdcp_ctx_cfg_data[PDCP_CONTEXT_NUMBER];
 sec_packet_t in_packets[PACKET_NUMBER];
@@ -106,7 +106,12 @@ int pdcp_ready_packet_handler (sec_packet_t *in_packet,
 {
     printf ("Received packet from SEC\n");
     return SEC_RETURN_SUCCESS;
+	printf("sec_callback: status = %d\n", status);
+    return SEC_RETURN_SUCCESS;
 }
+/*==================================================================================================
+                                     GLOBAL FUNCTIONS
+==================================================================================================*/
 
 int setup_sec_environment(void)
 {
@@ -125,7 +130,7 @@ int setup_sec_environment(void)
     //////////////////////////////////////////////////////////////////////////////
     // 1. Initialize SEC user space driver requesting #JOB_RING_NUMBER Job Rings
     //////////////////////////////////////////////////////////////////////////////
-    ret = sec_init(JOB_RING_NUMBER, (sec_job_ring_t**)&job_ring_handles);
+    ret = sec_init(JOB_RING_NUMBER, (sec_job_ring_handle_t**)&job_ring_handles);
     if (ret != SEC_SUCCESS)
     {
         printf("sec_init::Error %d\n", ret);
@@ -134,7 +139,7 @@ int setup_sec_environment(void)
 
     for (i = 0; i < JOB_RING_NUMBER; i++)
     {
-        //assert(job_ring_handles[i] != NULL);
+        assert(job_ring_handles[i] != NULL);
     }
 
     /////////////////////////////////////////////////////////////////////
@@ -147,6 +152,8 @@ int setup_sec_environment(void)
     {
         k = CIRCULAR_COUNTER(k, JOB_RING_NUMBER);
         printf ("Create & affine PDCP context %d on Job Ring %d\n", i, k);
+
+        pdcp_ctx_cfg_data[i].notify_packet = &pdcp_ready_packet_handler;
         ret = sec_create_pdcp_context (job_ring_handles[k],
                 &pdcp_ctx_cfg_data[i],
                 &pdcp_ctx_handle[i]);
@@ -168,6 +175,7 @@ int send_packets(uint8_t job_ring, uint32_t *packets_in)
     int ret = 0;
     int i = 0;
     int j = 0;
+    int count = 0;
 
     /////////////////////////////////////////////////////////////////////
     // 3. Submit packets for PDCP context.
@@ -179,6 +187,7 @@ int send_packets(uint8_t job_ring, uint32_t *packets_in)
         {
             for (j = 0; j < PACKET_NUMBER ;j++)
             {
+                // In this system test one can send max 24 packets to a Job Ring before polling for results.
                 ret = sec_process_packet(pdcp_ctx_handle[i],
                         &in_packets[j],
                         &out_packets[j],
@@ -189,10 +198,12 @@ int send_packets(uint8_t job_ring, uint32_t *packets_in)
                     return 1;
                 }
                 printf ("Sent packet number %d to SEC on Job Ring %d and for PDCP context %d\n",j, job_ring, i);
-                *packets_in++;
+                count++;
             }
         }
     }
+
+    *packets_in = count;
 
     return 0;
 }
@@ -226,11 +237,11 @@ int get_results(uint8_t job_ring, uint32_t *packets_out)
     ret = sec_poll_job_ring(job_ring_handles[job_ring], limit, &out_number);
     if (ret != SEC_SUCCESS)
     {
-        printf("sec_poll::Error %d when polling for SEC results on Job Ring %d \n", ret, job_ring);
+        printf("sec_poll_job_ring::Error %d when polling for SEC results on Job Ring %d \n", ret, job_ring);
         return 1;
     }
 
-    printf ("sec_poll:: Retrieved %d results from SEC on Job Ring %d\n", out_number, job_ring);
+    printf ("sec_poll_job_ring:: Retrieved %d results from SEC on Job Ring %d\n", out_number, job_ring);
     *packets_out = out_number;
 
     return 0;
@@ -299,6 +310,7 @@ void* sec_thread_routine(void* config)
     int ret = 0;
     unsigned int packets_sent = 0;
     unsigned int packets_received = 0;
+    unsigned int total_packets_received = 0;
 
 
     th_config = (thread_config_t*)config;
@@ -306,12 +318,22 @@ void* sec_thread_routine(void* config)
 
     ret = send_packets(th_config->job_ring_id, &packets_sent);
 
-    ret = get_results(th_config->job_ring_id, &packets_received);
-
-
-    if (packets_sent != packets_received )
+    do
     {
-        printf ("Number of packets sent to SEC is NOT equal to packets received from SEC\n");
+        ret = get_results(th_config->job_ring_id, &packets_received);
+        total_packets_received += packets_received;
+    }while(packets_received != 0);
+
+
+    if (packets_sent != total_packets_received )
+    {
+        printf ("THREAD %d. Number of packets sent to SEC(%d) is NOT equal to packets received from SEC(%d)\n",
+        th_config->tid, packets_sent, total_packets_received);
+    }
+    else
+    {
+        printf ("THREAD %d. Number of packets sent to SEC(%d) IS equal to packets received from SEC(%d)\n",
+        th_config->tid, packets_sent, total_packets_received);
     }
 
     pthread_exit(NULL);
