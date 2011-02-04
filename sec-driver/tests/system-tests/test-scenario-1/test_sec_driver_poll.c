@@ -67,7 +67,15 @@ extern "C" {
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
-
+int sec_callback(sec_packet_t        *in_packet,
+				 sec_packet_t        *out_packet,
+				 ua_context_handle_t ua_ctx_handle,
+				 sec_status_t        status,
+				 uint32_t            error_info)
+{
+	printf("sec_callback: status = %d\n", status);
+	return 0;
+}
 /*==================================================================================================
                                      GLOBAL FUNCTIONS
 ==================================================================================================*/
@@ -77,14 +85,14 @@ int main(void)
 {
     int ret = 0;
     int job_rings_no = 2;
-    sec_job_ring_t *job_ring_handles[2];
+    sec_job_ring_handle_t *job_ring_handles;
     sec_context_handle_t pdcp_ctx_handle = NULL;
     sec_pdcp_context_info_t pdcp_ctx_cfg_data;
 
     /////////////////////////////////////////////////////////////////////
     // 1. Initialize SEC user space driver requesting 2 Job Rings
     /////////////////////////////////////////////////////////////////////
-    ret = sec_init(job_rings_no, (sec_job_ring_t**)&job_ring_handles);
+    ret = sec_init(job_rings_no, &job_ring_handles);
     if (ret != SEC_SUCCESS)
     {
         printf("sec_init::Error %d", ret);
@@ -94,6 +102,7 @@ int main(void)
     /////////////////////////////////////////////////////////////////////
     // 2. Create a PDCP context affined to first Job Ring.
     /////////////////////////////////////////////////////////////////////
+    pdcp_ctx_cfg_data.notify_packet = sec_callback;
     ret = sec_create_pdcp_context (job_ring_handles[0],
                                    &pdcp_ctx_cfg_data,
                                    &pdcp_ctx_handle);
@@ -103,7 +112,53 @@ int main(void)
         return 1;
     }
 
+    sec_packet_t in_packet;
+    sec_packet_t out_packet;
+    ua_context_handle_t ua_ctx_handle = NULL;
 
+    ret = sec_process_packet (pdcp_ctx_handle,
+							  &in_packet,
+							  &out_packet,
+							  ua_ctx_handle);
+	if (ret != SEC_SUCCESS)
+	{
+		printf("sec_process_packet::Error %d", ret);
+		return 1;
+	}
+
+	uint32_t packets_no = 0;
+	ret = sec_poll(0, 0, &packets_no);
+	if (ret != SEC_SUCCESS)
+	{
+		printf("sec_poll::Error %d", ret);
+		return 1;
+	}
+	printf("sec_poll: packets_no = %d\n", packets_no);
+
+	ret = sec_process_packet (pdcp_ctx_handle,
+							  &in_packet,
+							  &out_packet,
+							  ua_ctx_handle);
+	if (ret != SEC_SUCCESS)
+	{
+		printf("sec_process_packet::Error %d", ret);
+		return 1;
+	}
+
+    ret = sec_delete_pdcp_context (pdcp_ctx_handle);
+	if (ret != SEC_PACKETS_IN_FLIGHT)
+	{
+		printf("sec_delete_pdcp_context::Error %d", ret);
+		return 1;
+	}
+
+	ret = sec_poll(0, 0, &packets_no);
+	if (ret != SEC_SUCCESS)
+	{
+		printf("sec_poll::Error %d", ret);
+		return 1;
+	}
+	printf("sec_poll: packets_no = %d\n", packets_no);
 
     /////////////////////////////////////////////////////////////////////
     // x. Initialize SEC user space driver requesting 2 Job Rings
