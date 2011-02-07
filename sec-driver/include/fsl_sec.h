@@ -49,12 +49,6 @@ extern "C"{
 /*==================================================================================================
                                        DEFINES AND MACROS
 ==================================================================================================*/
-/** Sequence number length */
-#define SEC_PDCP_SN_SIZE_5  5
-/** Sequence number length */
-#define SEC_PDCP_SN_SIZE_7  7
-/** Sequence number length */
-#define SEC_PDCP_SN_SIZE_12 12
 
 /*==================================================================================================
                                              ENUMS
@@ -65,27 +59,26 @@ typedef enum sec_return_code_e
     SEC_SUCCESS = 0,                 /*< Operation executed successfully.*/
     SEC_INVALID_INPUT_PARAM,         /*< API received an invalid input parameter. */
     SEC_CONTEXT_MARKED_FOR_DELETION, /*< The SEC context is scheduled for deletion and no more packets
-                                       are allowed to be processed for the respective context. */
-    SEC_OUT_OF_MEMORY,           /*< Memory allocation failed. */
-    SEC_PACKETS_IN_FLIGHT,       /*< API function indicates there are packets in flight
-                                     for SEC to process that belong to a certain PDCP context.
-                                     Can be returned by sec_delete_pdcp_context().*/
-    SEC_PROCESSING_ERROR,        /*< Indicates a SEC processing error occurred on a Job Ring which requires a Job Ring reset.
-                                     The only API that can be called after this error is sec_release(). */
-    SEC_JR_RESET_FAILED,         /*< Job Ring reset failed. */
-    SEC_INPUT_JR_IS_FULL,        /*< Input Job Ring is full. There is no more room in the input JR for new packets.
-                                     This can happen if the packet RX rate is higher than SEC's capacity. */
-    SEC_DRIVER_RELEASE_IN_PROGRESS, /*< SEC driver shutdown is in progress and no more context
-                                        creation/deletion, packets processing or polling is allowed.*/
-    SEC_DRIVER_NO_FREE_CONTEXTS, /*< There are no more free contexts. Considering increasing the
-                                    maximum number of contexts: #SEC_MAX_PDCP_CONTEXTS.*/
-
+                                         are allowed to be processed for the respective context. */
+    SEC_OUT_OF_MEMORY,               /*< Memory allocation failed. */
+    SEC_PACKETS_IN_FLIGHT,           /*< API function indicates there are packets in flight
+                                         for SEC to process that belong to a certain PDCP context.
+                                         Can be returned by sec_delete_pdcp_context().*/
+    SEC_PROCESSING_ERROR,            /*< Indicates a SEC processing error occurred on a Job Ring which requires a 
+                                         SEC user space driver shutdown. The only API that can be called after
+                                         this error is sec_release(). */
+    SEC_JR_RESET_FAILED,             /*< Job Ring reset failed. */
+    SEC_JR_IS_FULL,                  /*< Job Ring is full. There is no more room in the JR for new packets.
+                                         This can happen if the packet RX rate is higher than SEC's capacity. */
+    SEC_DRIVER_RELEASE_IN_PROGRESS,  /*< SEC driver shutdown is in progress and no more context
+                                         creation/deletion, packets processing or polling is allowed.*/
+    SEC_DRIVER_NO_FREE_CONTEXTS,     /*< There are no more free contexts. Considering increasing the
+                                         maximum number of contexts: #SEC_MAX_PDCP_CONTEXTS.*/
 }sec_return_code_t;
 
-/** 
- * Status codes indicating SEC processing result for each packet, 
- * when SEC user space driver invokes User Application provided callback.
- * TODO: Detail error codes per source? DECO/Job ring/CCB ?
+/** Status codes indicating SEC processing result for each packet, 
+ *  when SEC user space driver invokes User Application provided callback.
+ *  TODO: Detail SEC specific error codes per source? DECO/Job ring/CCB ?
  */
 typedef enum sec_status_e
 {
@@ -94,11 +87,13 @@ typedef enum sec_status_e
     SEC_STATUS_OVERDUE,         /*< Indicates a packet processed by SEC for a PDCP context that was requested
                                     to be removed by the User Application.*/
     SEC_STATUS_LAST_OVERDUE,    /*< Indicates the last packet processed by SEC for a PDCP context that was requested
-                                    to be removed by the User Application. It is safe for the User Application to reuse
-                                    PDCP context related data. */
+                                    to be removed by the User Application. After the last overdue packet is notified 
+                                    to UA, it is safe for UA to reuse PDCP context related data. */
 
 }sec_status_t;
 
+/** Return codes for User Application registered callback sec_out_cbk. 
+ */
 typedef enum sec_ua__return_e
 {
     SEC_RETURN_SUCCESS,         /*< User Application processed response notification with success. */
@@ -111,8 +106,10 @@ typedef enum sec_ua__return_e
 ==================================================================================================*/
 
 #if defined(__powerpc64__) || defined(CONFIG_PHYS_64BIT)
+/** Physical address on 36 bits or more. MUST be kept in synch with same define from kernel! */
 typedef uint64_t dma_addr_t;
 #else
+/** Physical address on 32 bits. MUST be kept in synch with same define from kernel!*/
 typedef uint32_t dma_addr_t;
 #endif
 
@@ -128,25 +125,28 @@ typedef uint32_t dma_addr_t;
 // TODO: address is virtual or physical?
 typedef dma_addr_t  packet_addr_t;
 
-/**
- * Opaque handle to a Job Ring provided by SEC user space driver
- * to UA when sec_init() is called.
- * */
+/** Opaque handle to a Job Ring provided by SEC user space driver
+ *  to UA when sec_init() is called.
+ */
 typedef void* sec_job_ring_handle_t;
 
 /** Handle to a SEC PDCP Context */
 typedef void* sec_context_handle_t;
 
 /** UA opaque handle to a packet context.
- *  The handle is opaque from sec_driver's point of view. */
+ *  The handle is opaque from SEC driver's point of view. */
 typedef void* ua_context_handle_t;
 
 /** Structure used to describe an input or output packet accessed by SEC. */
 typedef struct sec_packet_s
 {
-    packet_addr_t   address;    /*< The physical address (not virtual address) of the input buffer. */
-    uint32_t        offset;     /*< Offset within packet from where SEC will access (read or write) data. */
-    uint32_t        length;     /*< Packet length. */
+    packet_addr_t   address;        /*< The physical address (not virtual address) of the input buffer. */
+    uint32_t        offset;         /*< Offset within packet from where SEC will access (read or write) data. */
+    uint32_t        length;         /*< Packet length. */
+    uint8_t         scatter_gather; /*< A value of 1 indicates the packet is passed as a scatter/gather table.
+                                        A value of 0 means the packet is contiguous in memory and is accessible at the given address.
+                                        TODO: export format for link table.
+                                        TODO: how is offset interpreted when packet is s/g ? */
 }sec_packet_t;
 
 
@@ -163,13 +163,9 @@ typedef struct sec_packet_s
  *                                was submitted for processing.
  * @param [in] status             Status word indicating processing result for this packet.
  *                                See ::sec_status_t type for possible values.
- * @param [in] error_info         Detailed error code, as reported by SEC device. Is set to value 0 for
- *                                success processing.
+ * @param [in] error_info         Detailed error code, as reported by SEC device. Is set to value 0 for success processing.
  *                                In case of per packet error (status is #SEC_STATUS_ERROR),
  *                                this field contains the status word as generated by SEC device.
- *                                In case of discarded packets this field represents:
- *                                - for SEC 4.4: Job Ring Interrupt Status Register (Bits 0-32).
- *                                - for SEC 3.1: Channel Status Register (Bits 32-63).
  *
  * @retval Returns values from ::sec_ua_return_t enum.
  * @retval #SEC_RET_SUCCESS for successful execution
@@ -182,12 +178,10 @@ typedef int (*sec_out_cbk)(sec_packet_t        *in_packet,
                            uint32_t            error_info);
 
 
-/**
- * PDCP context structure provided by User Application when a PDCP context is created.
- * User Application fills this structure with data that is used by SEC user space driver
- * to create a SEC descriptor. This descriptor is used by SEC to process all packets
- * belonging to this PDCP context.
- */
+/** PDCP context structure provided by User Application when a PDCP context is created.
+ *  User Application fills this structure with data that is used by SEC user space driver
+ *  to create a SEC descriptor. This descriptor is used by SEC to process all packets
+ *  belonging to this PDCP context. */
 typedef struct sec_pdcp_context_info_s 
 {
     uint8_t     sn_size;                /*< Sequence number can be represented on 5, 7 or 12 bits. 
@@ -231,7 +225,8 @@ typedef struct sec_pdcp_context_info_s
  *
  * @note The hardware IDs of the initialized Job Rings are opaque to the UA.
  * The exact Job Rings used by this library are decided between SEC user
- * space driver and SEC kernel driver.
+ * space driver and SEC kernel driver. A static partitioning of Job Rings is assumed.
+ * See define #SEC_ASSIGNED_JOB_RINGS.
  *
  * @param [in]  job_rings_no       The number of job rings to acquire and initialize.
  * @param [out] job_ring_handles   Array of job ring handles of size job_rings_no. The job
@@ -242,7 +237,6 @@ typedef struct sec_pdcp_context_info_s
  *
  * @retval #SEC_SUCCESS for successful execution
  * @retval #SEC_OUT_OF_MEMORY is returned if internal memory allocation fails
- * @retval #SEC_JR_RESET_FAILED is returned in case the job ring reset fails
  * @retval >0 in case of error
  */
 int sec_init(int job_rings_no,
@@ -255,8 +249,9 @@ int sec_init(int job_rings_no,
  * sec_init() and free any memory allocated internally.
  * Call once during application tear down.
  *
- * @note In case there are any packets in-flight in the Job Input/Output Rings,
- * the packets are discarded without any notifications to User Application.
+ * @note In case there are any packets in-flight (packets received by SEC driver
+ * for processing and for which no response was yet provided to UA), the packets
+ * are discarded without any notifications to User Application.
  *
  * @retval #SEC_SUCCESS is returned for a successful execution
  * @retval #SEC_JR_RESET_FAILED is returned in case the job ring reset fails
@@ -266,13 +261,13 @@ int sec_release();
 
 /** @brief Initializes a SEC PDCP context with the data provided.
  * 
- * Creates a shared SEC descriptor that will be used by SEC to 
- * process packets submitted for this PDCP context. Context also 
- * registers a callback handler that is activated when packets are received from SEC.
+ * Creates a SEC descriptor that will be used by SEC to process packets
+ * submitted for this PDCP context. Context also registers a callback handler
+ * that is activated when packets are received from SEC.
  *
  * Returns back to the caller a SEC PDCP context handle.
- * This handle is passed back by the caller for all packet processing APIs.
- * Call for once for each PDCP context.
+ * This handle is passed back by the caller for sec_process_packet() calls.
+ * Call once for each PDCP context.
  *
  * PDCP context is affined to a Job Ring. This means that every packet submitted on this
  * context will be processed by the same Job Ring. Hence, packet ordering is ensured at a
@@ -288,18 +283,19 @@ int sec_release();
  * @param [out] sec_ctx_handle     PDCP context handle returned by SEC user space driver.
  * 
  * @retval #SEC_SUCCESS for successful execution
- * @retval #SEC_OUT_OF_MEMORY when there is not enough internal memory to allocate the context
- * @retval #SEC_DRIVER_RELEASE_IN_PROGRESS is returned if sec driver release is in progress
- * @retval >0 in case of other errors TODO: define other errors, like SEC_DRIVER_SHUTDOWN.
+ * @retval #SEC_DRIVER_NO_FREE_CONTEXTS when there are no more free contexts
+ * @retval #SEC_DRIVER_RELEASE_IN_PROGRESS is returned if SEC driver release is in progress
+ * @retval >0 in case of error
  */
 int sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
                              sec_pdcp_context_info_t *sec_ctx_info, 
                              sec_context_handle_t *sec_ctx_handle);
 
 /** @brief Deletes a SEC PDCP context previously created.
+ *
  * Deletes a PDCP context identified with the handle provided by the function caller.
  * The handle was obtained by the caller using sec_create_pdcp_context() function.
- * Call for once for each PDCP context.
+ * Call once for each PDCP context.
  * If called when there are still some packets awaiting to be processed by SEC for this context,
  * the API will return #SEC_PACKETS_IN_FLIGHT. All per-context packets processed by SEC after
  * this API is invoked will be raised to the User Application having status field set to #SEC_STATUS_OVERDUE.
@@ -312,8 +308,8 @@ int sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
  * @retval #SEC_SUCCESS for successful execution
  * @retval #SEC_PACKETS_IN_FLIGHT in case there are some already submitted packets
  * for this context awaiting to be processed by SEC.
- * @retval #SEC_DRIVER_RELEASE_IN_PROGRESS is returned if sec driver release is in progress
- * @retval #SEC_INVALID_CONTEXT_HANDLE is returned in case the sec context handle is invalid
+ * @retval #SEC_DRIVER_RELEASE_IN_PROGRESS is returned if SEC driver release is in progress
+ * @retval #SEC_INVALID_CONTEXT_HANDLE is returned in case the SEC context handle is invalid
  * @retval >0 in case of error
  */
 int sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle);
@@ -326,10 +322,10 @@ int sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle);
  *
  * The Job Rings are polled in a weighted round robin fashion using a fixed weight for each Job Ring.
  * The polling is stopped when <limit> packets are notified or when there are no more packets to notify.
- * User Application has an additional mechanism to stop the polling, that is by returning #SEC_RETURN_STOP from
- * sec_out_cbk.
+ * User Application has an additional mechanism to stop the polling, that is by returning #SEC_RETURN_STOP
+ * from sec_out_cbk.
  *
- * @note The sec_poll() API cannot be called from within a sec_out_cbk function.
+ * @note The sec_poll() API cannot be called from within a sec_out_cbk function!
  *
  * @param [in]  limit       This value represents the maximum number of processed packets
  *                          that can be notified to the User Aplication by this API call, on all Job Rings.
@@ -341,7 +337,7 @@ int sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle);
  *
  * @retval #SEC_SUCCESS                     for successful execution.
  * @retval #SEC_PROCESSING_ERROR            indicates a fatal execution error that requires a SEC user space driver shutdown.
- * @retval #SEC_DRIVER_RELEASE_IN_PROGRESS  is returned if sec driver release is in progress
+ * @retval #SEC_DRIVER_RELEASE_IN_PROGRESS  is returned if SEC driver release is in progress
  */
 int sec_poll(int32_t limit,  uint32_t weight, uint32_t *packets_no);
 
@@ -355,7 +351,7 @@ int sec_poll(int32_t limit,  uint32_t weight, uint32_t *packets_no);
  * User Application has an additional mechanism to stop the polling, that is by returning #SEC_RETURN_STOP from
  * sec_out_cbk.
  *
- * @note The sec_poll_job_ring() API cannot be called from within a sec_out_cbk function.
+ * @note The sec_poll_job_ring() API cannot be called from within a sec_out_cbk function!
  *
  * @param [in]  job_ring_handle     The Job Ring handle.
  * @param [in]  limit               This value represents the maximum number of processed packets
@@ -366,7 +362,7 @@ int sec_poll(int32_t limit,  uint32_t weight, uint32_t *packets_no);
  *
  * @retval #SEC_SUCCESS                    for successful execution.
  * @retval #SEC_PROCESSING_ERROR           indicates a fatal execution error that requires a SEC user space driver shutdown.
- * @retval #SEC_DRIVER_RELEASE_IN_PROGRESS is returned if sec driver release is in progress
+ * @retval #SEC_DRIVER_RELEASE_IN_PROGRESS is returned if SEC driver release is in progress
  */
 int sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit, uint32_t *packets_no);
 
@@ -375,15 +371,15 @@ int sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit, uint
  *
  * This function creates a "job" which is meant to instruct SEC HW
  * to perform the processing associated to the packet's SEC context
- * on the input buffer. The "job" is enqueued in the input queue of the
- * Job Ring associated to the packet's SEC context. The function will return
- * after the "job" enqueue is finished. The function will not wait for SEC to
+ * on the input buffer. The "job" is enqueued in the Job Ring associated
+ * to the packet's SEC context. The function will return after the "job"
+ * enqueue is finished. The function will not wait for SEC to
  * start or/and finish the "job" processing.
  *
  * After the processing is finished the SEC HW writes the processing result
  * to the provided output buffer.
  *
- * The User Application must poll sec-driver using sec_poll() or sec_poll_job_ring() to
+ * The User Application must poll SEC driver using sec_poll() or sec_poll_job_ring() to
  * receive notifications of the processing completion status. The notifications are received
  * by UA by means of callback (see ::sec_out_cbk).
  *
@@ -395,18 +391,18 @@ int sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit, uint
  * @param [in]  in_packet          Input packet read by SEC.
  * @param [in]  out_packet         Output packet where SEC writes result.
  * @param [in]  ua_ctx_handle      The handle to a User Application packet context.
- *                                 This handle is opaque from the sec-driver's point of view and
- *                                 will be provided by sec-driver in the response callback.
+ *                                 This handle is opaque from the SEC driver's point of view and
+ *                                 will be provided by SEC driver in the response callback.
  *
  *
  * @retval #SEC_SUCCESS is returned for successful execution
- * @retval #SEC_INVALID_INPUT_PARAM is returned in case the sec context handle is invalid (e.g. corrupt handle)
+ * @retval #SEC_INVALID_INPUT_PARAM is returned in case the SEC context handle is invalid (e.g. corrupt handle)
  *                                  or offset for input/output buffer is invalid (e.g offset > length)
  *                                  or length of the input/output buffer is invalid (e.q. zero)
  *                                  or input/output buffer address is invalid (e.g. NULL)
- * @retval #SEC_INPUT_JR_IS_FULL is returned if the input JR is full
- * @retval #SEC_DRIVER_RELEASE_IN_PROGRESS is returned if sec driver release is in progress
- * @retval #SEC_CONTEXT_MARKED_FOR_DELETION is returned if the sec context was marked for deletion.
+ * @retval #SEC_JR_IS_FULL is returned if the JR is full
+ * @retval #SEC_DRIVER_RELEASE_IN_PROGRESS is returned if SEC driver release is in progress
+ * @retval #SEC_CONTEXT_MARKED_FOR_DELETION is returned if the SEC context was marked for deletion.
  * @retval >0 in case of error
  */
 int sec_process_packet(sec_context_handle_t sec_ctx_handle,

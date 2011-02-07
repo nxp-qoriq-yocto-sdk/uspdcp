@@ -54,7 +54,7 @@ extern "C" {
  * This is not to be taken neither as part of the final implementation*
  * nor as the final implementation itself!                            *
  **********************************************************************/
-
+#warning "SEC user space driver current implementation is just for testing the API!"
 /*==================================================================================================
                                      LOCAL CONSTANTS
 ==================================================================================================*/
@@ -95,7 +95,7 @@ typedef struct sec_job_ring_s
 	sec_context_t sec_contexts[MAX_SEC_CONTEXTS_PER_JR];
 	int sec_contexts_no;
 
-	sec_job_t jobs[SEC_JOB_INPUT_RING_SIZE];
+	sec_job_t jobs[SEC_JOB_RING_SIZE];
 	int jobs_no;
 
 	// mutex used to synchronize access to jobs array
@@ -145,7 +145,7 @@ int sec_init(int job_rings_no,
 		}
 
 		job_rings[i].jobs_no = 0;
-		for (j = 0; j < SEC_JOB_INPUT_RING_SIZE; j++)
+		for (j = 0; j < SEC_JOB_RING_SIZE; j++)
 		{
 			job_rings[i].jobs[j].sec_context = NULL;
 			job_rings[i].jobs[j].ua_handle = NULL;
@@ -154,12 +154,12 @@ int sec_init(int job_rings_no,
 		pthread_mutex_init(&job_rings[i].mutex, NULL);
 
 		g_job_ring_handles[i] = (sec_job_ring_handle_t)&job_rings[i];
-		job_ring_handles[i] = (sec_job_ring_handle_t)&job_rings[i];
+		//job_ring_handles[i] = (sec_job_ring_handle_t)&job_rings[i];
 	}
 
 	g_job_rings_no = job_rings_no;
 
-//	*job_ring_handles =  &g_job_ring_handles[0];
+	*job_ring_handles =  &g_job_ring_handles[0];
 
     return SEC_SUCCESS;
 }
@@ -266,8 +266,6 @@ int sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle)
 		return SEC_SUCCESS;
 	}
     
-    printf ("sec_delete_pdcp_context:: packets in flight %d\n", sec_context->packets_no);
-
 	// if packets in flight, do not release the context yet, move it to retiring
 	// the context will be deleted when all packets in flight were notified to UA
 	sec_context->usage = SEC_CONTEXT_RETIRING;
@@ -341,7 +339,6 @@ int sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit, uint
     ready_jobs_no = job_ring->jobs_no;
 	if (ready_jobs_no != 0 )
 	{
-        printf ("sec_poll_job_ring::Start polling on Job Ring %p. Available jobs %d\n", job_ring_handle, job_ring->jobs_no);
 		for (j = 0; j < ready_jobs_no; j++)
 		{
 			job = &job_ring->jobs[j];
@@ -423,6 +420,7 @@ int sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
     // int poll(struct pollfd *fds, nfds_t nfds, int timeout);
     //
     //2. call sec_hw_poll() to check directly SEC's Job Rings for ready packets.
+#error "sec_poll() is NOT implemented for IRQ working mode"
 
     return SEC_SUCCESS;
 }
@@ -432,6 +430,7 @@ int sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit, uint
     // 1. Start software poll on device file registered for this job ring.
     //    Return if no IRQ generated for job ring.
     // 2. call sec_hw_poll_job_ring() to check directly SEC's Job Ring for ready packets.
+#error "sec_poll_job_ring() is NOT implemented for IRQ working mode"
     return SEC_SUCCESS;
 }
 #endif
@@ -441,6 +440,11 @@ int sec_process_packet(sec_context_handle_t sec_ctx_handle,
                        sec_packet_t *out_packet,
                        ua_context_handle_t ua_ctx_handle)
 {
+
+#if FSL_SEC_ENABLE_SCATTER_GATHER == ON
+#error "Scatter/Gather support is not implemented!"
+#endif
+
 	sec_context_t * sec_context = (sec_context_t *)sec_ctx_handle;
 	if (sec_context == NULL)
 	{
@@ -458,9 +462,9 @@ int sec_process_packet(sec_context_handle_t sec_ctx_handle,
 
 	pthread_mutex_lock( &job_ring->mutex );
 
-	if(job_ring->jobs_no >= SEC_JOB_INPUT_RING_SIZE)
+	if(job_ring->jobs_no >= SEC_JOB_RING_SIZE)
 	{
-		return SEC_INPUT_JR_IS_FULL;
+		return SEC_JR_IS_FULL;
 	}
 
 	// add new job in job ring

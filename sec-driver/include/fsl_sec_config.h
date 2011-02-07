@@ -64,9 +64,6 @@ extern "C"{
 /*       Helper defines                */
 /***************************************/
 
-/** SEC version supported by this user space driver: 3.1 */
-#define SEC_SUPPORTED_VERSION 31
-
 #define  ON  1
 #define  OFF 0
 
@@ -80,13 +77,35 @@ extern "C"{
 /** Logging level for SEC user space driver: log both errors and info messages */
 #define SEC_DRIVER_LOG_INFO  1
 
+/** Bit mask in #SEC_ASSIGNED_JOB_RINGS for Job Ring id 0 */
+#define SEC_JOB_RING_0  0x1
+/** Bit mask in #SEC_ASSIGNED_JOB_RINGS for Job Ring id 1 */
+#define SEC_JOB_RING_1  0x2
+/** Bit mask in #SEC_ASSIGNED_JOB_RINGS for Job Ring id 2 */
+#define SEC_JOB_RING_2  0x4
+/** Bit mask in #SEC_ASSIGNED_JOB_RINGS for Job Ring id 3 */
+#define SEC_JOB_RING_3  0x8
+
+
 /************************************************/
 /* SEC USER SPACE DRIVER related configuration. */
 /************************************************/
 
+/** Job Ring mask indicating which Job Rings are assigned for SEC user space driver.
+ *  All 4 Job Rings of SEC device are divided among SEC user space driver and SEC 
+ *  kernel driver. Keep in synch with TBD define from kernel! */
+#define SEC_ASSIGNED_JOB_RINGS  ((SEC_JOB_RING_0) | (SEC_JOB_RING_1))
+
 /** Maximum number of SEC PDCP contexts that can be managed
  *  simultaneously by SEC user space driver. */
 #define SEC_MAX_PDCP_CONTEXTS   200
+
+/** PDCP sequence number length */
+#define SEC_PDCP_SN_SIZE_5  5
+/** PDCP sequence number length */
+#define SEC_PDCP_SN_SIZE_7  7
+/** PDCP sequence number length */
+#define SEC_PDCP_SN_SIZE_12 12
 
 
 /************************************************/
@@ -123,15 +142,11 @@ extern "C"{
 /* SEC JOB RING related configuration. */
 /***************************************/
 
-/** Configure the size of the input JOB RING.
- * For SEC 3.1 the size of the INPUT FIFO (concept similar to JOB INPUT RING
+/** Configure the size of the JOB RING.
+ * For SEC 3.1 the size of the FIFO (concept similar to JOB INPUT RING
  * on SEC 4.4) is hardware fixed to 24.
  * For SEC 4.4 the maximum size of the RING is hardware limited to 1024 */
-#define SEC_JOB_INPUT_RING_SIZE  24
-/** Configure the size of the output JOB RING.
- * For SEC 3.1 there is no OUTPUT FIFO.
- * For SEC 4.4 the maximum size of the RING is hardware limited to 1024 */
-#define SEC_JOB_OUTPUT_RING_SIZE 24
+#define SEC_JOB_RING_SIZE  24
 
 /*******************************************/
 /* SEC working mode related configuration. */
@@ -142,7 +157,8 @@ extern "C"{
  * Valid values:
  * SEC_POLLING_MODE    - SEC driver polls the HW for job done indications
  * SEC_INTERRUPT_MODE  - SEC driver receives the job done indications from HW
- *                           by means of interrupts.
+ *                       by means of interrupts. The interrupts are delivered
+ *                       from kernel space to user space using UIO char driver.
  *
  * @note SEC 3.1 always notifies the errors by means of interrupts. So the polling
  * mode will also handle interrupts.
@@ -163,15 +179,15 @@ extern "C"{
 #define SEC_ENABLE_SCATTER_GATHER OFF
 
 
-/*************************************************/
-/* Interrupt coalescing related configuration.   */
-/* NOTE: Interrupt coalescing is not supported   */
-/* on SEC versions 3.1 !!                        */
-/* SEC version 4.4 has support for interrupt     */
-/* coalescing.                                   */
-/*************************************************/
+/***************************************************/
+/* Interrupt coalescing related configuration.     */
+/* NOTE: SEC hardware enabled interrupt            */
+/* coalescing is not supported on SEC version 3.1! */
+/* SEC version 4.4 has support for interrupt       */
+/* coalescing.                                     */
+/***************************************************/
 
-#if SEC_SUPPORTED_VERSION == 44
+#ifdef SEC_HW_VERSION_4_4
 
 /** Interrupt Coalescing Descriptor Count Threshold.
  * While interrupt coalescing is enabled (ICEN=1), this value determines
@@ -188,9 +204,6 @@ extern "C"{
 /** Interrupt Coalescing Timer Threshold.
  * While interrupt coalescing is enabled (ICEN=1), this value determines the
  * maximum amount of time after processing a Descriptor before raising an interrupt.
- * Interrupt Coalescing Timer Threshold. While interrupt coalescing is enabled (ICEN=1),
- * this value determines the maximum amount of time after processing a Descriptor
- * before raising an interrupt.
  *
  * The threshold value is represented in units equal to 64 CAAM interface
  * clocks. Valid values for this field are from 1 to 65535.

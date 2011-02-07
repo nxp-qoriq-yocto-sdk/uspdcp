@@ -83,7 +83,7 @@ typedef struct thread_config_s
 /*==================================================================================================
                                      GLOBAL VARIABLES
 ==================================================================================================*/
-sec_job_ring_handle_t *job_ring_handles[JOB_RING_NUMBER];
+sec_job_ring_handle_t *job_ring_handles;
 sec_context_handle_t pdcp_ctx_handle[PDCP_CONTEXT_NUMBER];
 sec_pdcp_context_info_t pdcp_ctx_cfg_data[PDCP_CONTEXT_NUMBER];
 sec_packet_t in_packets[PACKET_NUMBER];
@@ -119,7 +119,6 @@ int setup_sec_environment(void)
     int i = 0;
     int k = 0;
 
-    memset (job_ring_handles, 0, sizeof(job_ring_handles));
     memset (pdcp_ctx_handle, 0, sizeof(pdcp_ctx_handle));
     memset (pdcp_ctx_cfg_data, 0, sizeof(pdcp_ctx_cfg_data));
     memset (in_packets, 0, sizeof(in_packets));
@@ -130,12 +129,13 @@ int setup_sec_environment(void)
     //////////////////////////////////////////////////////////////////////////////
     // 1. Initialize SEC user space driver requesting #JOB_RING_NUMBER Job Rings
     //////////////////////////////////////////////////////////////////////////////
-    ret = sec_init(JOB_RING_NUMBER, (sec_job_ring_handle_t**)&job_ring_handles);
+    ret = sec_init(JOB_RING_NUMBER, &job_ring_handles);
     if (ret != SEC_SUCCESS)
     {
         printf("sec_init::Error %d\n", ret);
         return 1;
     }
+    printf("SEC user space driver initialized\n");
 
     for (i = 0; i < JOB_RING_NUMBER; i++)
     {
@@ -257,7 +257,8 @@ int cleanup_sec_environment(void)
     /////////////////////////////////////////////////////////////////////
     for (i = 0; i < PDCP_CONTEXT_NUMBER; i++)
     {
-        ret = sec_delete_pdcp_context (pdcp_ctx_handle[i]);
+        printf("Delete PDCP context %d\n", i);
+        ret = sec_delete_pdcp_context(pdcp_ctx_handle[i]);
         if (ret != SEC_SUCCESS)
         {
             printf("sec_delete_pdcp_context::Error %d for PDCP context no %d \n", ret, i);
@@ -270,6 +271,7 @@ int cleanup_sec_environment(void)
     // x. Shutdown SEC user space driver.
     /////////////////////////////////////////////////////////////////////
 
+    printf("Release SEC user space driver\n");
     ret = sec_release();
     if (ret != SEC_SUCCESS)
     {
@@ -292,7 +294,7 @@ int start_sec_threads(void)
     {
         th_config[i].tid = i;
         th_config[i].job_ring_id = i;
-        ret = pthread_create(&threads[1], NULL, &sec_thread_routine, (void*)&th_config[i]);
+        ret = pthread_create(&threads[i], NULL, &sec_thread_routine, (void*)&th_config[i]);
         assert(ret == 0);
     }
 
@@ -301,6 +303,15 @@ int start_sec_threads(void)
 
 int stop_sec_threads(void)
 {
+    int i = 0;
+    int ret = 0;
+
+    for (i = 0; i < JOB_RING_NUMBER; i++)
+    {
+        ret = pthread_join(threads[i], NULL);
+        assert(ret == 0);
+    }
+    printf("All threads are stopped\n");
     return 0;
 }
 
