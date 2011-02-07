@@ -266,8 +266,6 @@ int sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle)
 		return SEC_SUCCESS;
 	}
     
-    printf ("sec_delete_pdcp_context:: packets in flight %d\n", sec_context->packets_no);
-
 	// if packets in flight, do not release the context yet, move it to retiring
 	// the context will be deleted when all packets in flight were notified to UA
 	sec_context->usage = SEC_CONTEXT_RETIRING;
@@ -341,7 +339,6 @@ int sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit, uint
     ready_jobs_no = job_ring->jobs_no;
 	if (ready_jobs_no != 0 )
 	{
-        printf ("sec_poll_job_ring::Start polling on Job Ring %p. Available jobs %d\n", job_ring_handle, job_ring->jobs_no);
 		for (j = 0; j < ready_jobs_no; j++)
 		{
 			job = &job_ring->jobs[j];
