@@ -83,7 +83,7 @@ typedef struct thread_config_s
 /*==================================================================================================
                                      GLOBAL VARIABLES
 ==================================================================================================*/
-sec_job_ring_handle_t *job_ring_handles[JOB_RING_NUMBER];
+sec_job_ring_handle_t *job_ring_handles;
 sec_context_handle_t pdcp_ctx_handle[PDCP_CONTEXT_NUMBER];
 sec_pdcp_context_info_t pdcp_ctx_cfg_data[PDCP_CONTEXT_NUMBER];
 sec_packet_t in_packets[PACKET_NUMBER];
@@ -119,7 +119,6 @@ int setup_sec_environment(void)
     int i = 0;
     int k = 0;
 
-    memset (job_ring_handles, 0, sizeof(job_ring_handles));
     memset (pdcp_ctx_handle, 0, sizeof(pdcp_ctx_handle));
     memset (pdcp_ctx_cfg_data, 0, sizeof(pdcp_ctx_cfg_data));
     memset (in_packets, 0, sizeof(in_packets));
@@ -130,7 +129,7 @@ int setup_sec_environment(void)
     //////////////////////////////////////////////////////////////////////////////
     // 1. Initialize SEC user space driver requesting #JOB_RING_NUMBER Job Rings
     //////////////////////////////////////////////////////////////////////////////
-    ret = sec_init(JOB_RING_NUMBER, (sec_job_ring_handle_t**)&job_ring_handles);
+    ret = sec_init(JOB_RING_NUMBER, &job_ring_handles);
     if (ret != SEC_SUCCESS)
     {
         printf("sec_init::Error %d\n", ret);

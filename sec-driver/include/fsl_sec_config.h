@@ -64,9 +64,6 @@ extern "C"{
 /*       Helper defines                */
 /***************************************/
 
-/** SEC version supported by this user space driver: 3.1 */
-#define FSL_SEC_SUPPORTED_VERSION 31
-
 #define  ON  1
 #define  OFF 0
 
@@ -80,13 +77,35 @@ extern "C"{
 /** Logging level for SEC user space driver: log both errors and info messages */
 #define FSL_SEC_DRIVER_LOG_INFO  1
 
+/** Bit mask in #ASSIGNED_JOB_RINGS for Job Ring id 0 */
+#define JOB_RING_0  0x1
+/** Bit mask in #ASSIGNED_JOB_RINGS for Job Ring id 1 */
+#define JOB_RING_1  0x2
+/** Bit mask in #ASSIGNED_JOB_RINGS for Job Ring id 2 */
+#define JOB_RING_2  0x4
+/** Bit mask in #ASSIGNED_JOB_RINGS for Job Ring id 3 */
+#define JOB_RING_3  0x8
+
+
 /************************************************/
 /* SEC USER SPACE DRIVER related configuration. */
 /************************************************/
 
+/** Job Ring mask indicating which Job Rings are assigned for SEC user space driver.
+ *  All 4 Job Rings of SEC device are divided among SEC user space driver and SEC 
+ *  kernel driver. Keep in synch with TBD define from kernel! */
+#define ASSIGNED_JOB_RINGS  ((JOB_RING_0) | (JOB_RING_1))
+
 /** Maximum number of SEC PDCP contexts that can be managed
  *  simultaneously by SEC user space driver. */
 #define FSL_SEC_MAX_PDCP_CONTEXTS   200
+
+/** PDCP sequence number length */
+#define SEC_PDCP_SN_SIZE_5  5
+/** PDCP sequence number length */
+#define SEC_PDCP_SN_SIZE_7  7
+/** PDCP sequence number length */
+#define SEC_PDCP_SN_SIZE_12 12
 
 
 /************************************************/
@@ -141,7 +160,8 @@ extern "C"{
  * Valid values:
  * FSL_SEC_POLLING_MODE    - SEC driver polls the HW for job done indications
  * FSL_SEC_INTERRUPT_MODE  - SEC driver receives the job done indications from HW
- *                           by means of interrupts.
+ *                           by means of interrupts. The interrupts are delivered
+ *                           from kernel space to user space using UIO char driver.
  *
  * @note SEC 3.1 always notifies the errors by means of interrupts. So the polling
  * mode will also handle interrupts.
@@ -162,15 +182,15 @@ extern "C"{
 #define FSL_SEC_ENABLE_SCATTER_GATHER OFF
 
 
-/*************************************************/
-/* Interrupt coalescing related configuration.   */
-/* NOTE: Interrupt coalescing is not supported   */
-/* on SEC versions 3.1 !!                        */
-/* SEC version 4.4 has support for interrupt     */
-/* coalescing.                                   */
-/*************************************************/
+/***************************************************/
+/* Interrupt coalescing related configuration.     */
+/* NOTE: SEC hardware enabled interrupt            */
+/* coalescing is not supported on SEC version 3.1! */
+/* SEC version 4.4 has support for interrupt       */
+/* coalescing.                                     */
+/***************************************************/
 
-#if FSL_SEC_SUPPORTED_VERSION == 44
+#ifdef SEC_HW_VERSION_4_4
 
 /** Interrupt Coalescing Descriptor Count Threshold.
  * While interrupt coalescing is enabled (ICEN=1), this value determines
@@ -180,16 +200,13 @@ extern "C"{
  * Note that a value of 1 functionally defeats the advantages of interrupt
  * coalescing since the threshold value is reached each time that a
  * Job Descriptor is completed. A value of 0 is treated in the same
- * manner as a value of 1.
- * */
+ * manner as a value of 1. */
+  /
 #define FSL_SEC_INTERRUPT_COALESCING_DESCRIPTOR_COUNT_THRESH  10
 
 /** Interrupt Coalescing Timer Threshold.
  * While interrupt coalescing is enabled (ICEN=1), this value determines the
  * maximum amount of time after processing a Descriptor before raising an interrupt.
- * Interrupt Coalescing Timer Threshold. While interrupt coalescing is enabled (ICEN=1),
- * this value determines the maximum amount of time after processing a Descriptor
- * before raising an interrupt.
  *
  * The threshold value is represented in units equal to 64 CAAM interface
  * clocks. Valid values for this field are from 1 to 65535.

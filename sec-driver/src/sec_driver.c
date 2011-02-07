@@ -54,7 +54,7 @@ extern "C" {
  * This is not to be taken neither as part of the final implementation*
  * nor as the final implementation itself!                            *
  **********************************************************************/
-
+#warning "SEC user space driver current implementation is just for testing the API!"
 /*==================================================================================================
                                      LOCAL CONSTANTS
 ==================================================================================================*/
@@ -154,12 +154,12 @@ int sec_init(int job_rings_no,
 		pthread_mutex_init(&job_rings[i].mutex, NULL);
 
 		g_job_ring_handles[i] = (sec_job_ring_handle_t)&job_rings[i];
-		job_ring_handles[i] = (sec_job_ring_handle_t)&job_rings[i];
+		//job_ring_handles[i] = (sec_job_ring_handle_t)&job_rings[i];
 	}
 
 	g_job_rings_no = job_rings_no;
 
-//	*job_ring_handles =  &g_job_ring_handles[0];
+	*job_ring_handles =  &g_job_ring_handles[0];
 
     return SEC_SUCCESS;
 }
@@ -420,6 +420,7 @@ int sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
     // int poll(struct pollfd *fds, nfds_t nfds, int timeout);
     //
     //2. call sec_hw_poll() to check directly SEC's Job Rings for ready packets.
+#error "sec_poll() is NOT implemented for IRQ working mode"
 
     return SEC_SUCCESS;
 }
@@ -429,6 +430,7 @@ int sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit, uint
     // 1. Start software poll on device file registered for this job ring.
     //    Return if no IRQ generated for job ring.
     // 2. call sec_hw_poll_job_ring() to check directly SEC's Job Ring for ready packets.
+#error "sec_poll_job_ring() is NOT implemented for IRQ working mode"
     return SEC_SUCCESS;
 }
 #endif
@@ -438,6 +440,11 @@ int sec_process_packet(sec_context_handle_t sec_ctx_handle,
                        sec_packet_t *out_packet,
                        ua_context_handle_t ua_ctx_handle)
 {
+
+#if FSL_SEC_ENABLE_SCATTER_GATHER == ON
+#error "Scatter/Gather support is not implemented!"
+#endif
+
 	sec_context_t * sec_context = (sec_context_t *)sec_ctx_handle;
 	if (sec_context == NULL)
 	{
