@@ -95,7 +95,7 @@ typedef struct sec_job_ring_s
 	sec_context_t sec_contexts[MAX_SEC_CONTEXTS_PER_JR];
 	int sec_contexts_no;
 
-	sec_job_t jobs[FSL_SEC_JOB_INPUT_RING_SIZE];
+	sec_job_t jobs[SEC_JOB_INPUT_RING_SIZE];
 	int jobs_no;
 
 	// mutex used to synchronize access to jobs array
@@ -145,7 +145,7 @@ int sec_init(int job_rings_no,
 		}
 
 		job_rings[i].jobs_no = 0;
-		for (j = 0; j < FSL_SEC_JOB_INPUT_RING_SIZE; j++)
+		for (j = 0; j < SEC_JOB_INPUT_RING_SIZE; j++)
 		{
 			job_rings[i].jobs[j].sec_context = NULL;
 			job_rings[i].jobs[j].ua_handle = NULL;
@@ -279,7 +279,7 @@ int sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle)
     // 3. Run context garbage collector routine
 }
 
-#if FSL_SEC_WORKING_MODE == FSL_SEC_POLLING_MODE
+#if SEC_WORKING_MODE == SEC_POLLING_MODE
 int sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
 {
 	sec_job_ring_t * job_ring;
@@ -407,7 +407,7 @@ int sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit, uint
     return SEC_SUCCESS;
 }
 
-#elif FSL_SEC_WORKING_MODE == FSL_SEC_INTERRUPT_MODE
+#elif SEC_WORKING_MODE == SEC_INTERRUPT_MODE
 int sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
 {
     // 1. Start software poll on device files registered for all job rings owned by this user application.
@@ -458,7 +458,7 @@ int sec_process_packet(sec_context_handle_t sec_ctx_handle,
 
 	pthread_mutex_lock( &job_ring->mutex );
 
-	if(job_ring->jobs_no >= FSL_SEC_JOB_INPUT_RING_SIZE)
+	if(job_ring->jobs_no >= SEC_JOB_INPUT_RING_SIZE)
 	{
 		return SEC_INPUT_JR_IS_FULL;
 	}

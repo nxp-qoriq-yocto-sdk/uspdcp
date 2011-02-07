@@ -78,7 +78,7 @@ typedef enum sec_return_code_e
     SEC_DRIVER_RELEASE_IN_PROGRESS, /*< SEC driver shutdown is in progress and no more context
                                         creation/deletion, packets processing or polling is allowed.*/
     SEC_DRIVER_NO_FREE_CONTEXTS, /*< There are no more free contexts. Considering increasing the
-                                    maximum number of contexts: #FSL_SEC_MAX_PDCP_CONTEXTS.*/
+                                    maximum number of contexts: #SEC_MAX_PDCP_CONTEXTS.*/
 
 }sec_return_code_t;
 
@@ -227,7 +227,7 @@ typedef struct sec_pdcp_context_info_s
  * mapping and initialization of requested SEC's Job Rings.
  * Call once during application startup.
  *
- * @note Global SEC initialization is always done in SEC kernel driver.
+ * @note Global SEC initialization is done in SEC kernel driver.
  *
  * @note The hardware IDs of the initialized Job Rings are opaque to the UA.
  * The exact Job Rings used by this library are decided between SEC user
@@ -235,9 +235,10 @@ typedef struct sec_pdcp_context_info_s
  *
  * @param [in]  job_rings_no       The number of job rings to acquire and initialize.
  * @param [out] job_ring_handles   Array of job ring handles of size job_rings_no. The job
- *                                 ring handles are provided by the library for UA. The
- *                                 handles are opaque from UA point of view.
- *                                 Theses handles can be used by UA poll for events per JR.
+ *                                 ring handles are provided by the library for UA usage.
+ *                                 The handles are opaque from UA point of view.
+ *                                 Theses handles can be used by UA to poll for events per JR.
+ *                                 The storage for the array is allocated by the library.
  *
  * @retval #SEC_SUCCESS for successful execution
  * @retval #SEC_OUT_OF_MEMORY is returned if internal memory allocation fails
@@ -252,7 +253,7 @@ int sec_init(int job_rings_no,
  *
  * Reset and release SEC's job rings indicated by the User Application at
  * sec_init() and free any memory allocated internally.
- * Call once during application teardown.
+ * Call once during application tear down.
  *
  * @note In case there are any packets in-flight in the Job Input/Output Rings,
  * the packets are discarded without any notifications to User Application.
@@ -370,14 +371,14 @@ int sec_poll(int32_t limit,  uint32_t weight, uint32_t *packets_no);
 int sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit, uint32_t *packets_no);
 
 /**
- * @brief Submit a packet for SEC processing on a specified PDCP context.
+ * @brief Submit a packet for SEC processing on a specified context.
  *
  * This function creates a "job" which is meant to instruct SEC HW
  * to perform the processing associated to the packet's SEC context
  * on the input buffer. The "job" is enqueued in the input queue of the
  * Job Ring associated to the packet's SEC context. The function will return
  * after the "job" enqueue is finished. The function will not wait for SEC to
- * start or/and finish the job processing.
+ * start or/and finish the "job" processing.
  *
  * After the processing is finished the SEC HW writes the processing result
  * to the provided output buffer.
@@ -390,7 +391,7 @@ int sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit, uint
  * @param [in]  sec_ctx_handle     The handle of the context associated to this packet.
  *                                 This handle is opaque from the User Application point of view.
  *                                 SEC driver uses this handle to identify the processing type
- *                                 required for this packet: uplink/downlink, cryptographic alogorithm.
+ *                                 required for this packet.
  * @param [in]  in_packet          Input packet read by SEC.
  * @param [in]  out_packet         Output packet where SEC writes result.
  * @param [in]  ua_ctx_handle      The handle to a User Application packet context.
@@ -400,11 +401,9 @@ int sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit, uint
  *
  * @retval #SEC_SUCCESS is returned for successful execution
  * @retval #SEC_INVALID_INPUT_PARAM is returned in case the sec context handle is invalid (e.g. corrupt handle)
- *                                  or offset for input buffer is invalid (e.g offset > length)
- *                                  or length of the input buffer is invalid (e.q. zero)
- *                                  or output buffer address is invalid (e.g. NULL)
- *                                  or offset for output buffer is invalid (e.g offset > length)
- *                                  or length of the input buffer is invalid (e.q. zero) *
+ *                                  or offset for input/output buffer is invalid (e.g offset > length)
+ *                                  or length of the input/output buffer is invalid (e.q. zero)
+ *                                  or input/output buffer address is invalid (e.g. NULL)
  * @retval #SEC_INPUT_JR_IS_FULL is returned if the input JR is full
  * @retval #SEC_DRIVER_RELEASE_IN_PROGRESS is returned if sec driver release is in progress
  * @retval #SEC_CONTEXT_MARKED_FOR_DELETION is returned if the sec context was marked for deletion.
