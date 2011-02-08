@@ -44,18 +44,9 @@ ifneq (distclean,$(MAKECMDGOALS))
    $(ARCH)_SPEC_LIB_PATH:=
    $(ARCH)_SPEC_CFLAGS	:= -mcpu=e500mc -pthread -O2 -Wall -Wshadow
    $(ARCH)_SPEC_LDFLAGS	:= -pthread
-  else
-   ifeq (i686, $(ARCH))
-   CROSS_COMPILE	?=
-   $(ARCH)_SPEC_DEFINE	:=
-   $(ARCH)_SPEC_INC_PATH:=
-   $(ARCH)_SPEC_LIB_PATH:=
-   $(ARCH)_SPEC_CFLAGS	:= -pthread -O2 -Wall -Wshadow
-   $(ARCH)_SPEC_LDFLAGS	:= -pthread
-   else
-    $(error "ARCH not defined.")
-   endif
-  endif
+ else
+   $(error "ARCH not defined.")
+ endif
 endif
 
 # ----[ Tools ]----
