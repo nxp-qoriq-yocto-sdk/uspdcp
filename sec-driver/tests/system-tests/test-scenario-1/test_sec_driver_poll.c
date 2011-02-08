@@ -89,6 +89,7 @@ sec_pdcp_context_info_t pdcp_ctx_cfg_data[PDCP_CONTEXT_NUMBER];
 sec_packet_t in_packets[PACKET_NUMBER];
 sec_packet_t out_packets[PACKET_NUMBER];
 int opaque[PACKET_NUMBER];
+thread_config_t th_config[JOB_RING_NUMBER];
 
 pthread_t threads[JOB_RING_NUMBER];
 int job_ring_to_ctx[JOB_RING_NUMBER][PDCP_CONTEXT_NUMBER];
@@ -287,9 +288,6 @@ int start_sec_threads(void)
     int ret = 0;
     int i = 0;
 
-    thread_config_t th_config[JOB_RING_NUMBER];
-
-
     for (i = 0; i < JOB_RING_NUMBER; i++)
     {
         th_config[i].tid = i;
@@ -317,21 +315,23 @@ int stop_sec_threads(void)
 
 void* sec_thread_routine(void* config)
 {
-    thread_config_t *th_config = NULL;
+    thread_config_t *th_config_local = NULL;
     int ret = 0;
     unsigned int packets_sent = 0;
     unsigned int packets_received = 0;
     unsigned int total_packets_received = 0;
 
 
-    th_config = (thread_config_t*)config;
-    printf("Hello World! It's me, thread #%d!\n", th_config->tid);
+    th_config_local = (thread_config_t*)config;
+    assert(th_config_local != NULL);
 
-    ret = send_packets(th_config->job_ring_id, &packets_sent);
+    printf("Hello World! It's me, thread #%d!\n", th_config_local->tid);
+
+    ret = send_packets(th_config_local->job_ring_id, &packets_sent);
 
     do
     {
-        ret = get_results(th_config->job_ring_id, &packets_received);
+        ret = get_results(th_config_local->job_ring_id, &packets_received);
         total_packets_received += packets_received;
     }while(packets_received != 0);
 
@@ -339,12 +339,12 @@ void* sec_thread_routine(void* config)
     if (packets_sent != total_packets_received )
     {
         printf ("THREAD %d. Number of packets sent to SEC(%d) is NOT equal to packets received from SEC(%d)\n",
-        th_config->tid, packets_sent, total_packets_received);
+        th_config_local->tid, packets_sent, total_packets_received);
     }
     else
     {
         printf ("THREAD %d. Number of packets sent to SEC(%d) IS equal to packets received from SEC(%d)\n",
-        th_config->tid, packets_sent, total_packets_received);
+        th_config_local->tid, packets_sent, total_packets_received);
     }
 
     pthread_exit(NULL);
