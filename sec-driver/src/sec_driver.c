@@ -45,21 +45,14 @@ extern "C" {
 
 
 #include <stdio.h>
+
 /*==================================================================================================
-                                 LOCAL FUNCTION PROTOTYPES
+                                     MACROS AND DEFINES
 ==================================================================================================*/
-/**********************************************************************
- * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!*
- * Current implementation is just for testing the API!                *
- * This is not to be taken neither as part of the final implementation*
- * nor as the final implementation itself!                            *
- **********************************************************************/
-#warning "SEC user space driver current implementation is just for testing the API!"
-/*==================================================================================================
-                                     LOCAL CONSTANTS
-==================================================================================================*/
+
 #define MAX_SEC_CONTEXTS_PER_JR   20
 #define MAX_SEC_JOB_RINGS         4
+
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
 ==================================================================================================*/
@@ -101,9 +94,10 @@ typedef struct sec_job_ring_s
 	// mutex used to synchronize access to jobs array
 	// will not be needed in the real implementation
 	pthread_mutex_t mutex;
+    int irq_fd;
 }sec_job_ring_t;
 /*==================================================================================================
-                                        LOCAL MACROS
+                                      LOCAL CONSTANTS
 ==================================================================================================*/
 
 /*==================================================================================================
@@ -112,22 +106,63 @@ typedef struct sec_job_ring_s
 static sec_job_ring_t job_rings[MAX_SEC_JOB_RINGS];
 static int g_job_rings_no = 0;
 
-static sec_job_ring_handle_t g_job_ring_handles[MAX_SEC_JOB_RINGS];
+static sec_job_ring_descriptor_t g_job_ring_handles[MAX_SEC_JOB_RINGS];
+static int sec_work_mode = 0;
+
+/*==================================================================================================
+                                     GLOBAL CONSTANTS
+==================================================================================================*/
 
 /*==================================================================================================
                                      GLOBAL VARIABLES
 ==================================================================================================*/
 
 /*==================================================================================================
+                                     LOCAL FUNCTION PROTOTYPES
+==================================================================================================*/
+/**********************************************************************
+ * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!*
+ * Current implementation is just for testing the API!                *
+ * This is not to be taken neither as part of the final implementation*
+ * nor as the final implementation itself!                            *
+ **********************************************************************/
+#warning "SEC user space driver current implementation is just for testing the API!"
+
+/** @brief Enable IRQ generation for all SEC's job rings.
+ *
+ * @retval 0 for success
+ * @retval other value for error
+ */
+int enable_irq();
+
+/** @brief Enable IRQ generation for all SEC's job rings.
+ *
+ * @param [in]  job_ring    The job ring to enable IRQs for.
+ * @retval 0 for success
+ * @retval other value for error
+ */
+int enable_irq_per_job_ring(sec_job_ring_t *job_ring);
+/*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
+int enable_irq()
+{
+    return 0;
+}
+
+int enable_irq_per_job_ring(sec_job_ring_t *job_ring)
+{
+    return 0;
+}
+
 
 /*==================================================================================================
                                      GLOBAL FUNCTIONS
 ==================================================================================================*/
 
-int sec_init(int job_rings_no,
-             sec_job_ring_handle_t **job_ring_handles)
+int sec_init(sec_config_t *sec_config_data,
+             uint8_t job_rings_no,
+             sec_job_ring_descriptor_t **job_ring_descriptors)
 {
 	// stub function
 	int i, j;
@@ -152,14 +187,22 @@ int sec_init(int job_rings_no,
 		}
 
 		pthread_mutex_init(&job_rings[i].mutex, NULL);
+        job_rings[i].irq_fd = i + 1;
 
-		g_job_ring_handles[i] = (sec_job_ring_handle_t)&job_rings[i];
-		//job_ring_handles[i] = (sec_job_ring_handle_t)&job_rings[i];
+		g_job_ring_handles[i].job_ring_handle = (sec_job_ring_handle_t)&job_rings[i];
+        g_job_ring_handles[i].job_ring_irq_fd = job_rings[i].irq_fd;
 	}
 
 	g_job_rings_no = job_rings_no;
 
-	*job_ring_handles =  &g_job_ring_handles[0];
+    // Remember initial work mode
+    sec_work_mode = sec_config_data->work_mode;
+    if (sec_work_mode == SEC_INTERRUPT_MODE )
+    {
+        // TODO: enable SEC IRQ generation if 
+    }
+
+	*job_ring_descriptors =  &g_job_ring_handles[0];
 
     return SEC_SUCCESS;
 }
@@ -201,7 +244,10 @@ int sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
 
 	int found = 0;
 	// find an unused context
-	for(i = 0; i < MAX_SEC_CONTEXTS_PER_JR; i ++)
+
+    // TODO: Consider implementing a list of sec_contexts per job_ring having free contexts at head or tail.
+    // This way we only check the first item in list, no need to iterate the whole list.
+	for(i = 0; i < MAX_SEC_CONTEXTS_PER_JR; i++)
 	{
 		if (job_ring->sec_contexts[i].usage == SEC_CONTEXT_UNUSED)
 		{
@@ -277,7 +323,6 @@ int sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle)
     // 3. Run context garbage collector routine
 }
 
-#if SEC_WORKING_MODE == SEC_POLLING_MODE
 int sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
 {
 	sec_job_ring_t * job_ring;
@@ -303,6 +348,15 @@ int sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
 		notified_packets_no += notified_packets_no_per_jr;
 	}
 	*packets_no = notified_packets_no;
+
+    if (limit < 0)// and no more ready packets  in SEC
+    {
+        enable_irq();
+    }
+    else if (notified_packets_no < limit)// and no more ready packets  in SEC
+    {
+        enable_irq();
+    }
     // 1. call sec_hw_poll() to check directly SEC's Job Rings for ready packets.
     //
     // sec_hw_poll() will do:
@@ -396,6 +450,15 @@ int sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit, uint
 		}
 		assert(job_ring->jobs_no == 0);
 	}
+    if (limit < 0)// and no more ready packets  in SEC
+    {
+        enable_irq_per_job_ring(job_ring);
+    }
+    else if (notified_packets_no < limit)// and no more ready packets  in SEC
+    {
+        enable_irq_per_job_ring(job_ring);
+    }
+
 	pthread_mutex_unlock( &job_ring->mutex );
 
 	*packets_no = notified_packets_no;
@@ -403,37 +466,6 @@ int sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit, uint
     // 1. call sec_hw_poll_job_ring() to check directly SEC's Job Ring for ready packets.
     return SEC_SUCCESS;
 }
-
-#elif SEC_WORKING_MODE == SEC_INTERRUPT_MODE
-int sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
-{
-    // 1. Start software poll on device files registered for all job rings owned by this user application.
-    //    Return if no IRQ generated for job rings.
-    // 
-    // Set timeout = 0 so that it returns immediatelly if no irq's are generated for any job ring.
-    // Timeout is expressed as miliseconds. Considering LTE TTI = 1 ms and the fact that the calling thread
-    // may do other processing tasks, a timeout other than 0 does not seem like an option.
-    //
-    // NOTE: epoll is more efficient than poll for a large number of file descriptors ~ 1000 ... 100000.
-    //       Considering SEC user space driver will poll for max 4 file descriptors, poll() is used instead of epoll().
-    //
-    // int poll(struct pollfd *fds, nfds_t nfds, int timeout);
-    //
-    //2. call sec_hw_poll() to check directly SEC's Job Rings for ready packets.
-#error "sec_poll() is NOT implemented for IRQ working mode"
-
-    return SEC_SUCCESS;
-}
-
-int sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit, uint32_t *packets_no)
-{
-    // 1. Start software poll on device file registered for this job ring.
-    //    Return if no IRQ generated for job ring.
-    // 2. call sec_hw_poll_job_ring() to check directly SEC's Job Ring for ready packets.
-#error "sec_poll_job_ring() is NOT implemented for IRQ working mode"
-    return SEC_SUCCESS;
-}
-#endif
 
 int sec_process_packet(sec_context_handle_t sec_ctx_handle,
                        sec_packet_t *in_packet,

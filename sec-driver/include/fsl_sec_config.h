@@ -86,6 +86,12 @@ extern "C"{
 /** Bit mask in #SEC_ASSIGNED_JOB_RINGS for Job Ring id 3 */
 #define SEC_JOB_RING_3  0x8
 
+/** Calculate the number of Job Rings enabled from the SEC_ASSIGNED_JOB_RINGS mask*/
+#define SEC_NUMBER_JOB_RINGS    ((SEC_ASSIGNED_JOB_RINGS & SEC_JOB_RING_0) + \
+                                ((SEC_ASSIGNED_JOB_RINGS & SEC_JOB_RING_1) >> 1)) + \
+                                ((SEC_ASSIGNED_JOB_RINGS & SEC_JOB_RING_2) >> 2) + \
+                                ((SEC_ASSIGNED_JOB_RINGS & SEC_JOB_RING_3) >> 3)
+
 
 /************************************************/
 /* SEC USER SPACE DRIVER related configuration. */
@@ -96,9 +102,63 @@ extern "C"{
  *  kernel driver. Keep in synch with TBD define from kernel! */
 #define SEC_ASSIGNED_JOB_RINGS  ((SEC_JOB_RING_0) | (SEC_JOB_RING_1))
 
+
+/** Maximum number of PDCP contexts  per direction (uplink/downlink). */
+#define SEC_MAX_PDCP_CONTEXTS_PER_DIRECTION   192
+
 /** Maximum number of SEC PDCP contexts that can be managed
- *  simultaneously by SEC user space driver. */
-#define SEC_MAX_PDCP_CONTEXTS   200
+ *  simultaneously by SEC user space driver. Add 2x safety margin. */
+#define SEC_MAX_PDCP_CONTEXTS   ((SEC_MAX_PDCP_CONTEXTS_PER_DIRECTION) * 2) * 2
+
+
+#ifdef SEC_HW_VERSION_4_4
+
+/** Size of cryptographic context that is used directly in communicating with SEC device.
+ *  SEC device works only with physical addresses. This is the maximum size for a SEC
+ *  descriptor on SEC 4.4 device, 64 words.
+ */
+#define SEC_CRYPTO_DESCRIPTOR_SIZE  256
+
+/** Size of job descriptor submitted to SEC device for each packet to be processed.
+ *  Contains 3 DMA address pointers: to shared descriptor, to input buffer and to output buffer.
+ *  The job descriptor contains other SEC specific commands as well. */
+#define SEC_JOB_DESCRIPTOR_SIZE     sizeof(dma_addr_t) * 3 + 20
+
+/** DMA memory required for an input ring of a job ring. */
+#define SEC_DMA_MEM_INPUT_RING_SIZE     (SEC_JOB_DESCRIPTOR_SIZE) * (SEC_JOB_RING_SIZE)
+/** DMA memory required for an output ring of a job ring.  
+ *  Required extra 4 byte for status word per each entry. */
+#define SEC_DMA_MEM_OUTPUT_RING_SIZE    (SEC_JOB_DESCRIPTOR_SIZE + 4) * (SEC_JOB_RING_SIZE)
+/** DMA memory required for a job ring, including both input and output rings. */
+#define SEC_DMA_MEM_JOB_RING_SIZE       (SEC_DMA_MEM_INPUT_RING_SIZE) + (SEC_DMA_MEM_OUTPUT_RING_SIZE)
+
+#else //#ifdef SEC_HW_VERSION_4_4
+/** On SEC 3.1 device there is no concept of shared descriptor.
+ *  There are only job descriptors used for every packet submitted to SEC device.
+ */
+#define SEC_CRYPTO_DESCRIPTOR_SIZE  0
+/** Size of cryptographic context that is used directly in communicating with SEC device.
+ *  SEC device works only with physical addresses. This is the maximum size for a SEC
+ *  descriptor on SEC 3.1 device, 7 double words. */
+#define SEC_JOB_DESCRIPTOR_SIZE     56
+/** DMA memory required for a channel (similar with job ring in SEC 4.4). */
+#define SEC_DMA_MEM_INPUT_RING_SIZE     (SEC_JOB_DESCRIPTOR_SIZE) * (SEC_JOB_RING_SIZE)
+/** DMA memory required for a channel (similar with job ring in SEC 4.4). 
+ * On SEC 3.1 there is not output ring, instead SEC directly updates jobs from channel (input ring) */
+#define SEC_DMA_MEM_JOB_RING_SIZE       (SEC_DMA_MEM_INPUT_RING_SIZE)
+
+#endif
+
+
+
+/** When calling sec_init() UA will provide an area of virtual memory
+ *  of size #SEC_DMA_MEMORY_SIZE to be  used internally by the driver
+ *  to allocate data (like SEC descriptors) that needs to be passed to 
+ *  SEC device in physical addressing and later on retrieved from SEC device. 
+ *  At sec_init() the UA provides specialized ptov/vtop functions to
+ *  translate addresses allocated from this memory area.  */
+#define SEC_DMA_MEMORY_SIZE     (SEC_CRYPTO_DESCRIPTOR_SIZE) * (SEC_MAX_PDCP_CONTEXTS)  + \
+                                (SEC_DMA_MEM_JOB_RING_SIZE) * (SEC_NUMBER_JOB_RINGS)
 
 /** PDCP sequence number length */
 #define SEC_PDCP_SN_SIZE_5  5
@@ -142,11 +202,19 @@ extern "C"{
 /* SEC JOB RING related configuration. */
 /***************************************/
 
+#ifdef SEC_HW_VERSION_4_4
 /** Configure the size of the JOB RING.
- * For SEC 3.1 the size of the FIFO (concept similar to JOB INPUT RING
- * on SEC 4.4) is hardware fixed to 24.
- * For SEC 4.4 the maximum size of the RING is hardware limited to 1024 */
+ * For SEC 4.4 the maximum size of the RING is hardware limited to 1024.
+ * However the number of packets in flight in a time interval of 1ms can be calculated
+ * from the traffic rate (Mbps) and packet size. 
+ * Here it was considered a packet size of 40 bytes. */
+#define SEC_JOB_RING_SIZE  500
+#else
+/** Configure the size of the JOB RING.
+ *  For SEC 3.1 the size of the FIFO (concept similar to JOB INPUT RING
+ *  on SEC 4.4) is hardware fixed to 24. */
 #define SEC_JOB_RING_SIZE  24
+#endif
 
 /*******************************************/
 /* SEC working mode related configuration. */

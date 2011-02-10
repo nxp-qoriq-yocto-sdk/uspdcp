@@ -53,14 +53,22 @@ int get_results(uint8_t job_ring, uint32_t *out_packets);
 int start_sec_threads(void);
 int stop_sec_threads(void);
 void* sec_thread_routine(void*);
+int dummy_address;
 
 
 /*==================================================================================================
                                      LOCAL CONSTANTS
 ==================================================================================================*/
-#define PDCP_CONTEXT_NUMBER 10
-#define JOB_RING_NUMBER     2
-#define PACKET_NUMBER       4
+#define PDCP_CONTEXT_NUMBER     10
+#define JOB_RING_NUMBER         2
+#define PACKET_NUMBER           4
+
+#ifdef SEC_HW_VERSION_4_4
+
+#define IRQ_COALESCING_COUNT    10
+#define IRQ_COALESCING_TIMER    100
+
+#endif
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
 ==================================================================================================*/
@@ -83,7 +91,8 @@ typedef struct thread_config_s
 /*==================================================================================================
                                      GLOBAL VARIABLES
 ==================================================================================================*/
-sec_job_ring_handle_t *job_ring_handles;
+sec_config_t sec_config_data;
+sec_job_ring_descriptor_t *job_ring_descriptors;
 sec_context_handle_t pdcp_ctx_handle[PDCP_CONTEXT_NUMBER];
 sec_pdcp_context_info_t pdcp_ctx_cfg_data[PDCP_CONTEXT_NUMBER];
 sec_packet_t in_packets[PACKET_NUMBER];
@@ -110,6 +119,16 @@ int pdcp_ready_packet_handler (sec_packet_t *in_packet,
 	printf("sec_callback: status = %d\n", status);
     return SEC_RETURN_SUCCESS;
 }
+phys_addr_t custom_vtop(void *address)
+{
+    return 0;
+}
+
+
+void* custom_ptov(phys_addr_t address)
+{
+    return &dummy_address;
+}
 /*==================================================================================================
                                      GLOBAL FUNCTIONS
 ==================================================================================================*/
@@ -130,7 +149,21 @@ int setup_sec_environment(void)
     //////////////////////////////////////////////////////////////////////////////
     // 1. Initialize SEC user space driver requesting #JOB_RING_NUMBER Job Rings
     //////////////////////////////////////////////////////////////////////////////
-    ret = sec_init(JOB_RING_NUMBER, &job_ring_handles);
+    
+    sec_config_data.memory_area = malloc (SEC_DMA_MEMORY_SIZE);
+    assert(sec_config_data.memory_area != NULL);
+
+    // Fill SEC driver configuration data
+    sec_config_data.ptov = &custom_ptov;
+    sec_config_data.vtop = &custom_vtop;
+    sec_config_data.work_mode = SEC_POLLING_MODE;
+#ifdef SEC_HW_VERSION_4_4
+    sec_config_data.irq_coalescing_count = IRQ_COALESCING_COUNT;
+    sec_config_data.irq_coalescing_timer = IRQ_COALESCING_TIMER;
+#endif
+
+
+    ret = sec_init(&sec_config_data, JOB_RING_NUMBER, &job_ring_descriptors);
     if (ret != SEC_SUCCESS)
     {
         printf("sec_init::Error %d\n", ret);
@@ -140,7 +173,8 @@ int setup_sec_environment(void)
 
     for (i = 0; i < JOB_RING_NUMBER; i++)
     {
-        assert(job_ring_handles[i] != NULL);
+        assert(job_ring_descriptors[i].job_ring_handle != NULL);
+        assert(job_ring_descriptors[i].job_ring_irq_fd != 0);
     }
 
     /////////////////////////////////////////////////////////////////////
@@ -155,7 +189,7 @@ int setup_sec_environment(void)
         printf ("Create & affine PDCP context %d on Job Ring %d\n", i, k);
 
         pdcp_ctx_cfg_data[i].notify_packet = &pdcp_ready_packet_handler;
-        ret = sec_create_pdcp_context (job_ring_handles[k],
+        ret = sec_create_pdcp_context (job_ring_descriptors[k].job_ring_handle,
                 &pdcp_ctx_cfg_data[i],
                 &pdcp_ctx_handle[i]);
         if (ret != SEC_SUCCESS)
@@ -235,7 +269,7 @@ int get_results(uint8_t job_ring, uint32_t *packets_out)
     printf ("sec_poll:: Retrieved %d results from SEC \n", out_number);
 */
 
-    ret = sec_poll_job_ring(job_ring_handles[job_ring], limit, &out_number);
+    ret = sec_poll_job_ring(job_ring_descriptors[job_ring].job_ring_handle, limit, &out_number);
     if (ret != SEC_SUCCESS)
     {
         printf("sec_poll_job_ring::Error %d when polling for SEC results on Job Ring %d \n", ret, job_ring);
