@@ -72,7 +72,12 @@ extern "C" {
 #define MAX_PACKET_NUMBER_PER_CTX   10
 #define MIN_PACKET_NUMBER_PER_CTX   4
 
+#ifdef SEC_HW_VERSION_4_4
 
+#define IRQ_COALESCING_COUNT    10
+#define IRQ_COALESCING_TIMER    100
+
+#endif
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
 ==================================================================================================*/
@@ -257,7 +262,15 @@ static int delete_contexts(pdcp_context_t * pdcp_contexts,
                            int *no_of_used_pdcp_contexts,
                            int* contexts_deleted);
 
+/** @brief Convert virtual address to physical address.
+ * This function will be called from inside SEC driver when it needs
+ * to make an address conversion. */
+static phys_addr_t custom_vtop(void *address);
 
+/** @brief Convert physical address to virtual address.
+ * This function will be called from inside SEC driver when it needs
+ * to make an address conversion.*/
+static void* custom_ptov(phys_addr_t address);
 /*==================================================================================================
                                         LOCAL MACROS
 ==================================================================================================*/
@@ -269,9 +282,11 @@ static int delete_contexts(pdcp_context_t * pdcp_contexts,
 /*==================================================================================================
                                      GLOBAL VARIABLES
 ==================================================================================================*/
+// configuration data for SEC driver
+static sec_config_t sec_config_data;
 
 // job ring handles provided by SEC driver
-static sec_job_ring_handle_t *job_ring_handles = NULL;
+static sec_job_ring_descriptor_t *job_ring_descriptors = NULL;
 
 // UA pool of PDCP contexts for UL and DL.
 // For simplicity, use an array of contexts and a mutex to synchronize access to it.
@@ -287,10 +302,20 @@ static int no_of_used_pdcp_dl_contexts = 0;
 static thread_config_t th_config[THREADS_NUMBER];
 static pthread_t threads[THREADS_NUMBER];
 
-
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
+static phys_addr_t custom_vtop(void *address)
+{
+	// to be implemented
+    return 0;
+}
+
+static void* custom_ptov(phys_addr_t address)
+{
+	// to be implemented
+    return NULL;
+}
 
 static int get_free_pdcp_context(pdcp_context_t * pdcp_contexts,
                                  int * no_of_used_pdcp_contexts,
@@ -371,7 +396,6 @@ static int release_pdcp_buffers(pdcp_context_t * pdcp_context,
                                 sec_packet_t *out_packet,
                                 sec_status_t status)
 {
-
     assert(pdcp_context != NULL);
     assert(in_packet != NULL);
     assert(out_packet != NULL);
@@ -500,7 +524,7 @@ static int get_results(uint8_t job_ring, int limit, uint32_t *packets_out)
     assert(limit != 0);
     assert(packets_out != NULL);
 
-    ret = sec_poll_job_ring(job_ring_handles[job_ring], limit, packets_out);
+    ret = sec_poll_job_ring(job_ring_descriptors[job_ring].job_ring_handle, limit, packets_out);
     if (ret != SEC_SUCCESS)
     {
         printf("sec_poll_job_ring::Error %d when polling for SEC results on Job Ring %d \n", ret, job_ring);
@@ -713,7 +737,7 @@ static void* pdcp_thread_routine(void* config)
         pdcp_context->thread_id = th_config_local->tid;
 
         // create a SEC context in SEC driver
-        ret = sec_create_pdcp_context (job_ring_handles[th_config_local->producer_job_ring_id],
+        ret = sec_create_pdcp_context (job_ring_descriptors[th_config_local->producer_job_ring_id].job_ring_handle,
                                        &pdcp_context->pdcp_ctx_cfg_data,
                                        &pdcp_context->sec_ctx);
         if (ret != SEC_SUCCESS)
@@ -823,7 +847,19 @@ static int setup_sec_environment(void)
     //////////////////////////////////////////////////////////////////////////////
     // 1. Initialize SEC user space driver requesting #JOB_RING_NUMBER Job Rings
     //////////////////////////////////////////////////////////////////////////////
-    ret = sec_init(JOB_RING_NUMBER, &job_ring_handles);
+    sec_config_data.memory_area = malloc (SEC_DMA_MEMORY_SIZE);
+    assert(sec_config_data.memory_area != NULL);
+
+    // Fill SEC driver configuration data
+    sec_config_data.ptov = &custom_ptov;
+    sec_config_data.vtop = &custom_vtop;
+    sec_config_data.work_mode = SEC_POLLING_MODE;
+#ifdef SEC_HW_VERSION_4_4
+    sec_config_data.irq_coalescing_count = IRQ_COALESCING_COUNT;
+    sec_config_data.irq_coalescing_timer = IRQ_COALESCING_TIMER;
+#endif
+
+    ret = sec_init(&sec_config_data, JOB_RING_NUMBER, &job_ring_descriptors);
     if (ret != SEC_SUCCESS)
     {
         printf("sec_init::Error %d\n", ret);
@@ -833,7 +869,8 @@ static int setup_sec_environment(void)
 
     for (i = 0; i < JOB_RING_NUMBER; i++)
     {
-        assert(job_ring_handles[i] != NULL);
+        assert(job_ring_descriptors[i].job_ring_handle != NULL);
+        assert(job_ring_descriptors[i].job_ring_irq_fd != 0);
     }
 
     return 0;
@@ -843,6 +880,7 @@ static int cleanup_sec_environment(void)
 {
     int ret = 0;
 
+    // release SEC driver
     ret = sec_release();
     if (ret != 0)
     {
@@ -850,6 +888,10 @@ static int cleanup_sec_environment(void)
         return 1;
     }
     printf("thread main: released SEC user space driver\n");
+
+    // free the memory area allocated for SEC driver
+    free(sec_config_data.memory_area);
+
     return 0;
 }
 /*==================================================================================================

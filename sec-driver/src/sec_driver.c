@@ -56,11 +56,12 @@ extern "C" {
 /*==================================================================================================
                                      LOCAL CONSTANTS
 ==================================================================================================*/
-/* TODO: compute max sec contexts per JR based on the SEC_ASSIGNED_JOB_RINGS bitmask */
-#define MAX_SEC_CONTEXTS_PER_JR   (SEC_MAX_PDCP_CONTEXTS / MAX_SEC_JOB_RINGS)
+/* Max sec contexts per JR computed based on the SEC_ASSIGNED_JOB_RINGS bitmask */
+#define MAX_SEC_CONTEXTS_PER_JR   (SEC_MAX_PDCP_CONTEXTS / SEC_NUMBER_JOB_RINGS)
 
 /* Maximum number of job rings supported by SEC hardware */
 #define MAX_SEC_JOB_RINGS         4
+
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
 ==================================================================================================*/
@@ -115,9 +116,12 @@ typedef struct sec_job_ring_s
        with lock-free queues (for the case with one
        producer and one consumer) */
     pthread_mutex_t mutex;
+    /* The file descriptor used for polling from user space
+     * for interrupts notifications */
+    int irq_fd;
 }sec_job_ring_t;
 /*==================================================================================================
-                                        LOCAL MACROS
+                                      LOCAL CONSTANTS
 ==================================================================================================*/
 
 #define SEC_CIRCULAR_COUNTER(x, max)   ((x) + 1) * ((x) != (max - 1))
@@ -130,11 +134,18 @@ static sec_job_ring_t job_rings[MAX_SEC_JOB_RINGS];
 static int g_job_rings_no = 0;
 
 /* Array of job ring handles provided to UA from sec_init() function. */
-static sec_job_ring_handle_t g_job_ring_handles[MAX_SEC_JOB_RINGS];
+static sec_job_ring_descriptor_t g_job_ring_handles[MAX_SEC_JOB_RINGS];
+
+static int sec_work_mode = 0;
 
 /* Last JR assigned to a context by the SEC driver using a round robin algorithm.
  * Not used if UA associates the contexts created to a certain JR.*/
 static int last_jr_assigned = 0;
+
+/*==================================================================================================
+                                     GLOBAL CONSTANTS
+==================================================================================================*/
+
 /*==================================================================================================
                                      GLOBAL VARIABLES
 ==================================================================================================*/
@@ -168,6 +179,21 @@ static void reset_job_ring(sec_job_ring_t * job_ring);
  * @param [in] job_ring          The job ringInput packet read by SEC.
  */
 static void run_contexts_garbage_colector(sec_job_ring_t * job_ring);
+
+/** @brief Enable IRQ generation for all SEC's job rings.
+ *
+ * @retval 0 for success
+ * @retval other value for error
+ */
+static int enable_irq();
+
+/** @brief Enable IRQ generation for all SEC's job rings.
+ *
+ * @param [in]  job_ring    The job ring to enable IRQs for.
+ * @retval 0 for success
+ * @retval other value for error
+ */
+static int enable_irq_per_job_ring(sec_job_ring_t *job_ring);
 
 /*==================================================================================================
                                      LOCAL FUNCTIONS
@@ -214,12 +240,88 @@ static void run_contexts_garbage_colector(sec_job_ring_t * job_ring)
         }
     }
 }
+
+static int enable_irq()
+{
+    // to be implemented
+    return 0;
+}
+
+static int enable_irq_per_job_ring(sec_job_ring_t *job_ring)
+{
+    // to be implemented
+    return 0;
+}
+
+static uint32_t hw_poll_job_ring(sec_job_ring_t * job_ring,
+                                 int32_t limit,
+                                 uint32_t *packets_no)
+{
+     /* Stub Implementation - START */
+    sec_context_t * sec_context;
+    sec_job_t *job;
+    int j = 0;
+    int jobs_no_to_notify = 0; // the number of done jobs to notify to UA
+    sec_status_t status = SEC_STATUS_SUCCESS;
+    int notified_packets_no = 0;
+
+    pthread_mutex_lock( &job_ring->mutex );
+
+    // Compute the number of notifications that need to be raised to UA
+    // If limit < 0 -> notify all done jobs
+    // If limit > total number of done jobs -> notify all done jobs
+    // If limit = 0 -> error
+    // If limit > 0 && limit < total number of done jobs -> notify a number of done jobs equal with limit
+    jobs_no_to_notify = (limit < 0 || limit > job_ring->jobs_no) ? job_ring->jobs_no : limit;
+    if (jobs_no_to_notify != 0 )
+    {
+        for (j = 0; j < jobs_no_to_notify; j++)
+        {
+            job = &job_ring->jobs[j];
+            sec_context = job->sec_context;
+            assert (sec_context->notify_packet_cbk != NULL);
+
+            pthread_mutex_lock(&sec_context->ctx_mutex);
+
+            status = SEC_STATUS_SUCCESS;
+            // if context is retiring, set a suggestive status for the
+            // packets notified to UA
+            if (sec_context->usage == SEC_CONTEXT_RETIRING)
+            {
+                assert(sec_context->packets_no >= 1);
+                status = (sec_context->packets_no > 1) ? SEC_STATUS_OVERDUE : SEC_STATUS_LAST_OVERDUE;
+            }
+            // call the calback
+            sec_context->notify_packet_cbk(&job->in_packet,
+                                           &job->out_packet,
+                                           job->ua_handle,
+                                           status,
+                                           0);
+
+            // decrement packet reference count in sec context
+            sec_context->packets_no--;
+
+            pthread_mutex_unlock(&sec_context->ctx_mutex);
+
+            notified_packets_no++;
+
+            job_ring->jobs_no--;
+        }
+    }
+    pthread_mutex_unlock( &job_ring->mutex );
+
+    *packets_no = notified_packets_no;
+
+    return SEC_SUCCESS;
+}
+
 /*==================================================================================================
                                      GLOBAL FUNCTIONS
 ==================================================================================================*/
 
-int sec_init(int job_rings_no,
-             sec_job_ring_handle_t **job_ring_handles)
+uint32_t sec_init(sec_config_t *sec_config_data,
+                  uint8_t job_rings_no,
+                  sec_job_ring_descriptor_t **job_ring_descriptors)
 {
     /* Stub Implementation - START */
     int i, j;
@@ -234,18 +336,28 @@ int sec_init(int job_rings_no,
         }
         pthread_mutex_init(&job_rings[i].mutex, NULL);
 
-        g_job_ring_handles[i] = (sec_job_ring_handle_t)&job_rings[i];
+        job_rings[i].irq_fd = i + 1;
+
+        g_job_ring_handles[i].job_ring_handle = (sec_job_ring_handle_t)&job_rings[i];
+        g_job_ring_handles[i].job_ring_irq_fd = job_rings[i].irq_fd;
     }
 
     g_job_rings_no = job_rings_no;
 
-    *job_ring_handles =  &g_job_ring_handles[0];
+    // Remember initial work mode
+    sec_work_mode = sec_config_data->work_mode;
+    if (sec_work_mode == SEC_INTERRUPT_MODE )
+    {
+        enable_irq();
+    }
+
+    *job_ring_descriptors =  &g_job_ring_handles[0];
 
     return SEC_SUCCESS;
     /* Stub Implementation - END */
 }
 
-int sec_release()
+uint32_t sec_release()
 {
     /* Stub Implementation - START */
     int i, j;
@@ -266,9 +378,9 @@ int sec_release()
     /* Stub Implementation - END */
 }
 
-int sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
-                             sec_pdcp_context_info_t *sec_ctx_info, 
-                             sec_context_handle_t *sec_ctx_handle)
+uint32_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
+                                  sec_pdcp_context_info_t *sec_ctx_info, 
+                                  sec_context_handle_t *sec_ctx_handle)
 {
     /* Stub Implementation - START */
     int i = 0;
@@ -314,6 +426,9 @@ int sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
 
     found = 0;
     // find an unused context
+
+    // TODO: Consider implementing a list of sec_contexts per job_ring having free contexts at head or tail.
+    // This way we only check the first item in list, no need to iterate the whole list.
     for(i = 0; i < MAX_SEC_CONTEXTS_PER_JR; i++)
     {
         if (job_ring->sec_contexts[i].usage == SEC_CONTEXT_UNUSED)
@@ -365,7 +480,7 @@ int sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
     // 5. Run context garbage collector routine
 }
 
-int sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle)
+uint32_t sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle)
 {
     /* Stub Implementation - START */
     sec_context_t * sec_context = (sec_context_t *)sec_ctx_handle;
@@ -428,8 +543,7 @@ int sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle)
     // 3. Run context garbage collector routine
 }
 
-#if SEC_WORKING_MODE == SEC_POLLING_MODE
-int sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
+uint32_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
 {
     /* Stub Implementation - START */
     sec_job_ring_t * job_ring = NULL;
@@ -485,7 +599,7 @@ int sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
             jr_limit = (packets_left_to_notify < weight) ? packets_left_to_notify  : weight ;
 
             /* Poll one JR */
-            ret = sec_poll_job_ring((sec_job_ring_handle_t)job_ring, jr_limit, &notified_packets_no_per_jr);
+            ret = hw_poll_job_ring((sec_job_ring_handle_t)job_ring, jr_limit, &notified_packets_no_per_jr);
             if (ret != SEC_SUCCESS)
             {
                 return ret;
@@ -499,6 +613,15 @@ int sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
         }
     }
     *packets_no = notified_packets_no;
+
+    if (limit < 0)// and no more ready packets in SEC
+    {
+        enable_irq();
+    }
+    else if (notified_packets_no < limit)// and no more ready packets in SEC
+    {
+        enable_irq();
+    }
 
     return SEC_SUCCESS;
 
@@ -515,16 +638,11 @@ int sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
     //      - other
 }
 
-int sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit, uint32_t *packets_no)
+uint32_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit, uint32_t *packets_no)
 {
     /* Stub Implementation - START */
-    sec_context_t * sec_context;
-    sec_job_t *job;
-    int j = 0;
-    int jobs_no_to_notify = 0; // the number of done jobs to notify to UA
-    sec_status_t status;
+    int ret = SEC_SUCCESS;
     sec_job_ring_t * job_ring =  (sec_job_ring_t *)job_ring_handle;
-    int notified_packets_no = 0;
 
     if(job_ring == NULL)
     {
@@ -536,116 +654,37 @@ int sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit, uint
         return SEC_INVALID_INPUT_PARAM;
     }
 
-    pthread_mutex_lock( &job_ring->mutex );
+    *packets_no = 0;
 
-    // Compute the number of notifications that need to be raised to UA
-    // If limit < 0 -> notify all done jobs
-    // If limit > total number of done jobs -> notify all done jobs
-    // If limit = 0 -> error
-    // If limit > 0 && limit < total number of done jobs -> notify a number of done jobs equal with limit
-    jobs_no_to_notify = (limit < 0 || limit > job_ring->jobs_no) ? job_ring->jobs_no : limit;
-    if (jobs_no_to_notify != 0 )
+    // run hw poll job ring
+    ret = hw_poll_job_ring(job_ring, limit, packets_no);
+    if (ret != SEC_SUCCESS)
     {
-        for (j = 0; j < jobs_no_to_notify; j++)
-        {
-            job = &job_ring->jobs[j];
-            sec_context = job->sec_context;
-            assert (sec_context->notify_packet_cbk != NULL);
-
-            pthread_mutex_lock(&sec_context->ctx_mutex);
-
-            // if context is retiring, set a suggestive status for the
-            // packets notified to UA
-            if (sec_context->usage == SEC_CONTEXT_RETIRING)
-            {
-                assert(sec_context->packets_no >= 1);
-                if (sec_context->packets_no > 1)
-                {
-                    status = SEC_STATUS_OVERDUE;
-                }
-                else
-                {
-                    status = SEC_STATUS_LAST_OVERDUE;
-                }
-            }
-            else
-            {
-                status = SEC_STATUS_SUCCESS;
-            }
-            // call the calback
-            sec_context->notify_packet_cbk(&job->in_packet,
-                                           &job->out_packet,
-                                           job->ua_handle,
-                                           status,
-                                           0);
-
-            // decrement packet reference count in sec context
-            sec_context->packets_no--;
-
-            pthread_mutex_unlock(&sec_context->ctx_mutex);
-
-            notified_packets_no++;
-
-            // reset job contents
-            job->in_packet.address = 0;
-            job->in_packet.offset = 0;
-            job->in_packet.length = 0;
-            job->out_packet.address = 0;
-            job->out_packet.offset = 0;
-            job->out_packet.length = 0;
-            job->sec_context = NULL;
-            job->ua_handle = NULL;
-
-            job_ring->jobs_no--;
-        }
+        return ret;
     }
-    pthread_mutex_unlock( &job_ring->mutex );
 
-    *packets_no = notified_packets_no;
+    if (limit < 0)// and no more ready packets  in SEC
+    {
+        enable_irq_per_job_ring(job_ring);
+    }
+    else if (*packets_no < limit)// and no more ready packets  in SEC
+    {
+        enable_irq_per_job_ring(job_ring);
+    }
 
     return SEC_SUCCESS;
     /* Stub Implementation - END */
 
-    // 1. call sec_hw_poll_job_ring() to check directly SEC's Job Ring for ready packets.
+    // 1. call hw_poll_job_ring() to check directly SEC's Job Ring for ready packets.
 }
 
-#elif SEC_WORKING_MODE == SEC_INTERRUPT_MODE
-int sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
-{
-    // 1. Start software poll on device files registered for all job rings owned by this user application.
-    //    Return if no IRQ generated for job rings.
-    // 
-    // Set timeout = 0 so that it returns immediatelly if no irq's are generated for any job ring.
-    // Timeout is expressed as miliseconds. Considering LTE TTI = 1 ms and the fact that the calling thread
-    // may do other processing tasks, a timeout other than 0 does not seem like an option.
-    //
-    // NOTE: epoll is more efficient than poll for a large number of file descriptors ~ 1000 ... 100000.
-    //       Considering SEC user space driver will poll for max 4 file descriptors, poll() is used instead of epoll().
-    //
-    // int poll(struct pollfd *fds, nfds_t nfds, int timeout);
-    //
-    //2. call sec_hw_poll() to check directly SEC's Job Rings for ready packets.
-#error "sec_poll() is NOT implemented for IRQ working mode"
-
-    return SEC_SUCCESS;
-}
-
-int sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit, uint32_t *packets_no)
-{
-    // 1. Start software poll on device file registered for this job ring.
-    //    Return if no IRQ generated for job ring.
-    // 2. call sec_hw_poll_job_ring() to check directly SEC's Job Ring for ready packets.
-#error "sec_poll_job_ring() is NOT implemented for IRQ working mode"
-    return SEC_SUCCESS;
-}
-#endif
-
-int sec_process_packet(sec_context_handle_t sec_ctx_handle,
-                       sec_packet_t *in_packet,
-                       sec_packet_t *out_packet,
-                       ua_context_handle_t ua_ctx_handle)
+uint32_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
+                            sec_packet_t *in_packet,
+                            sec_packet_t *out_packet,
+                            ua_context_handle_t ua_ctx_handle)
 {
 
+    /* Stub Implementation - START */
 #if FSL_SEC_ENABLE_SCATTER_GATHER == ON
 #error "Scatter/Gather support is not implemented!"
 #endif
@@ -700,8 +739,14 @@ int sec_process_packet(sec_context_handle_t sec_ctx_handle,
 
     pthread_mutex_unlock( &job_ring->mutex );
 
-    // stub function
     return SEC_SUCCESS;
+    /* Stub Implementation - END */
+}
+
+uint32_t sec_get_last_error(void)
+{
+    // stub function
+    return 0;
 }
 
 /*================================================================================================*/
