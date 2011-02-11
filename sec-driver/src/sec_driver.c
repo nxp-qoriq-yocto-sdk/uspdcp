@@ -160,9 +160,9 @@ int enable_irq_per_job_ring(sec_job_ring_t *job_ring)
                                      GLOBAL FUNCTIONS
 ==================================================================================================*/
 
-int sec_init(sec_config_t *sec_config_data,
-             uint8_t job_rings_no,
-             sec_job_ring_descriptor_t **job_ring_descriptors)
+uint32_t sec_init(sec_config_t *sec_config_data,
+                  uint8_t job_rings_no,
+                  sec_job_ring_descriptor_t **job_ring_descriptors)
 {
 	// stub function
 	int i, j;
@@ -199,7 +199,7 @@ int sec_init(sec_config_t *sec_config_data,
     sec_work_mode = sec_config_data->work_mode;
     if (sec_work_mode == SEC_INTERRUPT_MODE )
     {
-        // TODO: enable SEC IRQ generation if 
+        enable_irq();
     }
 
 	*job_ring_descriptors =  &g_job_ring_handles[0];
@@ -207,16 +207,16 @@ int sec_init(sec_config_t *sec_config_data,
     return SEC_SUCCESS;
 }
 
-int sec_release()
+uint32_t sec_release()
 {
 	g_job_rings_no = 0;
     // stub function
     return SEC_SUCCESS;
 }
 
-int sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
-                             sec_pdcp_context_info_t *sec_ctx_info, 
-                             sec_context_handle_t *sec_ctx_handle)
+uint32_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
+                                  sec_pdcp_context_info_t *sec_ctx_info, 
+                                  sec_context_handle_t *sec_ctx_handle)
 {
     // stub function
 	int i;
@@ -287,7 +287,7 @@ int sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
     return SEC_SUCCESS;
 }
 
-int sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle)
+uint32_t sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle)
 {
     // stub function
 
@@ -323,7 +323,7 @@ int sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle)
     // 3. Run context garbage collector routine
 }
 
-int sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
+uint32_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
 {
 	sec_job_ring_t * job_ring;
 	uint32_t notified_packets_no = 0;
@@ -357,25 +357,16 @@ int sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
     {
         enable_irq();
     }
-    // 1. call sec_hw_poll() to check directly SEC's Job Rings for ready packets.
-    //
-    // sec_hw_poll() will do:
-    // a. SEC 3.1 specific: 
-    //      - poll for errors on /dev/sec_uio_x. Raise error notification to UA if this is the case.
-    // b. for all owned job rings:
-    //      - check and notify ready packets.
-    //      - decrement packet reference count per context
-    //      - other 
     return SEC_SUCCESS;
 }
 
-int sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit, uint32_t *packets_no)
+uint32_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit, uint32_t *packets_no)
 {
 	sec_context_t * sec_context;
 	sec_job_t *job;
 	int notified_packets_no = 0;
 	int j, ready_jobs_no;
-	sec_status_t status;
+	sec_status_t status = SEC_STATUS_SUCCESS;
 	sec_job_ring_t * job_ring =  (sec_job_ring_t *)job_ring_handle;
 
 	if(job_ring == NULL)
@@ -404,20 +395,10 @@ int sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit, uint
 			if (sec_context->usage == SEC_CONTEXT_RETIRING)
 			{
 				assert(sec_context->packets_no >= 1);
-				if (sec_context->packets_no > 1)
-				{
-					status = SEC_STATUS_OVERDUE;
-				}
-				else
-				{
-					status = SEC_STATUS_LAST_OVERDUE;
-				}
+                status = (sec_context->packets_no > 1) ? SEC_STATUS_OVERDUE : SEC_STATUS_LAST_OVERDUE;
 			}
-			else
-			{
-				status = SEC_STATUS_SUCCESS;
-			}
-			// call the calback
+			
+            // call the calback
 			sec_context->notify_packet_cbk(&job->in_packet,
 										   &job->out_packet,
 										   job->ua_handle,
@@ -435,18 +416,8 @@ int sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit, uint
 				sec_context->jr_handle = NULL;
 				job_ring->sec_contexts_no--;
 			}
-
-			// reset job contents
-			job->in_packet.address = 0;
-			job->in_packet.offset = 0;
-			job->in_packet.length = 0;
-			job->out_packet.address = 0;
-			job->out_packet.offset = 0;
-			job->out_packet.length = 0;
-			job->sec_context = NULL;
-			job->ua_handle = NULL;
-
-			job_ring->jobs_no--;
+			
+            job_ring->jobs_no--;
 		}
 		assert(job_ring->jobs_no == 0);
 	}
@@ -463,14 +434,13 @@ int sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit, uint
 
 	*packets_no = notified_packets_no;
 
-    // 1. call sec_hw_poll_job_ring() to check directly SEC's Job Ring for ready packets.
     return SEC_SUCCESS;
 }
 
-int sec_process_packet(sec_context_handle_t sec_ctx_handle,
-                       sec_packet_t *in_packet,
-                       sec_packet_t *out_packet,
-                       ua_context_handle_t ua_ctx_handle)
+uint32_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
+                            sec_packet_t *in_packet,
+                            sec_packet_t *out_packet,
+                            ua_context_handle_t ua_ctx_handle)
 {
 
 #if FSL_SEC_ENABLE_SCATTER_GATHER == ON
@@ -518,8 +488,13 @@ int sec_process_packet(sec_context_handle_t sec_ctx_handle,
 
 	pthread_mutex_unlock( &job_ring->mutex );
 
-    // stub function
     return SEC_SUCCESS;
+}
+
+uint32_t sec_get_last_error(void)
+{
+    // stub function
+    return 0;
 }
 
 /*================================================================================================*/

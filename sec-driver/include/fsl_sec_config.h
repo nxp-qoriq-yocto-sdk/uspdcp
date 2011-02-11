@@ -174,7 +174,7 @@ extern "C"{
 
 /** SEC device is configured for 36 bit physical addressing.
  *  Both the SEC user space driver and the SEC kernel driver
- *  need to have this configuration enable at the same time.
+ *  need to have this configuration enable at the same time!
  */
 //#define CONFIG_PHYS_64BIT
 
@@ -227,10 +227,6 @@ extern "C"{
  * SEC_INTERRUPT_MODE  - SEC driver receives the job done indications from HW
  *                       by means of interrupts. The interrupts are delivered
  *                       from kernel space to user space using UIO char driver.
- *
- * @note SEC 3.1 always notifies the errors by means of interrupts. So the polling
- * mode will also handle interrupts.
- *
  */
 #define SEC_WORKING_MODE SEC_POLLING_MODE
 

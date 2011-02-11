@@ -65,8 +65,9 @@ typedef enum sec_return_code_e
                                          for SEC to process that belong to a certain PDCP context.
                                          Can be returned by sec_delete_pdcp_context().*/
     SEC_PROCESSING_ERROR,            /*< Indicates a SEC processing error occurred on a Job Ring which requires a 
-                                         SEC user space driver shutdown. The only API that can be called after
-                                         this error is sec_release(). */
+                                         SEC user space driver shutdown. Call sec_get_last_error() to obtain specific
+                                         error code, as reported by SEC device.
+                                         Then the only other API that can be called after this error is sec_release(). */
     SEC_JR_RESET_FAILED,             /*< Job Ring reset failed. */
     SEC_JR_IS_FULL,                  /*< Job Ring is full. There is no more room in the JR for new packets.
                                          This can happen if the packet RX rate is higher than SEC's capacity. */
@@ -119,20 +120,13 @@ typedef dma_addr_t  phys_addr_t;
 /**Data type used for specifying addressing scheme for
  * packets submitted by User Application. Assume virtual addressing */
 
-// TODO: address is virtual or physical?
-//typedef uint8_t*  packet_addr_t;
-
-/** Data type used for specifying addressing scheme for
- *  packets submitted by User Application. Assume physical addressing */
-
-// TODO: address is virtual or physical?
+/** Data type used for specifying address for packets submitted
+ *  by User Application. Assume physical addressing. */
 typedef dma_addr_t  packet_addr_t;
 
 /** Opaque handle to a Job Ring provided by SEC user space driver
- *  to UA when sec_init() is called.
- */
+ *  to UA when sec_init() is called. */
 typedef void* sec_job_ring_handle_t;
-
 
 /** Handle to a SEC PDCP Context */
 typedef void* sec_context_handle_t;
@@ -179,9 +173,8 @@ typedef phys_addr_t (*vtop_function)(void *address);
  *
  * @param [in]  address The physical address which has to be mapped.
  *
- * @retval      Virtual address which the passed physical address maps to.
- *              NULL is returned if the passed physical address doesn't map
- *              to any virtual address.
+ * @retval      Virtual address to which the passed physical address maps onto.
+ *              NULL is returned if the passed physical address doesn't map to any virtual address.
  */
 typedef void* (*ptov_function)(phys_addr_t address);
 
@@ -298,13 +291,15 @@ typedef struct sec_config_s
  *                                      ring descriptors are provided by the library for UA usage.
  *                                      The storage for the array is allocated by the library.
  *
- * @retval #SEC_SUCCESS for successful execution
- * @retval #SEC_OUT_OF_MEMORY is returned if internal memory allocation fails
+ * @retval #SEC_SUCCESS                     for successful execution
+ * @retval #SEC_OUT_OF_MEMORY is returned   if internal memory allocation fails
+ * @retval #SEC_PROCESSING_ERROR            indicates a fatal execution error that requires a SEC user space driver shutdown.
+ *                                          Call sec_get_last_error() to obtain specific error code, as reported by SEC device.
  * @retval >0 in case of error
  */
-int sec_init(sec_config_t *sec_config_data,
-             uint8_t job_rings_no,
-             sec_job_ring_descriptor_t **job_ring_descriptors);
+uint32_t sec_init(sec_config_t *sec_config_data,
+                  uint8_t job_rings_no,
+                  sec_job_ring_descriptor_t **job_ring_descriptors);
 
 /**
  * @brief Release the resources used by the SEC user space driver.
@@ -317,11 +312,11 @@ int sec_init(sec_config_t *sec_config_data,
  * for processing and for which no response was yet provided to UA), the packets
  * are discarded without any notifications to User Application.
  *
- * @retval #SEC_SUCCESS is returned for a successful execution
+ * @retval #SEC_SUCCESS         is returned for a successful execution
  * @retval #SEC_JR_RESET_FAILED is returned in case the job ring reset fails
  * @retval >0 in case of error
  */
-int sec_release();
+uint32_t sec_release();
 
 /** @brief Initializes a SEC PDCP context with the data provided.
  * 
@@ -351,9 +346,9 @@ int sec_release();
  * @retval #SEC_DRIVER_RELEASE_IN_PROGRESS is returned if SEC driver release is in progress
  * @retval >0 in case of error
  */
-int sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
-                             sec_pdcp_context_info_t *sec_ctx_info, 
-                             sec_context_handle_t *sec_ctx_handle);
+uint32_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
+                                  sec_pdcp_context_info_t *sec_ctx_info, 
+                                  sec_context_handle_t *sec_ctx_handle);
 
 /** @brief Deletes a SEC PDCP context previously created.
  *
@@ -369,14 +364,14 @@ int sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
  * 
  * @param [in] sec_ctx_handle     PDCP context handle.
  * 
- * @retval #SEC_SUCCESS for successful execution
- * @retval #SEC_PACKETS_IN_FLIGHT in case there are some already submitted packets
- * for this context awaiting to be processed by SEC.
- * @retval #SEC_DRIVER_RELEASE_IN_PROGRESS is returned if SEC driver release is in progress
- * @retval #SEC_INVALID_CONTEXT_HANDLE is returned in case the SEC context handle is invalid
+ * @retval #SEC_SUCCESS                     for successful execution
+ * @retval #SEC_PACKETS_IN_FLIGHT           in case there are some already submitted packets
+ *                                          for this context awaiting to be processed by SEC.
+ * @retval #SEC_DRIVER_RELEASE_IN_PROGRESS  is returned if SEC driver release is in progress
+ * @retval #SEC_INVALID_CONTEXT_HANDLE      is returned in case the SEC context handle is invalid
  * @retval >0 in case of error
  */
-int sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle);
+uint32_t sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle);
 
 /** @brief Polls for available packets processed by SEC on all Job Rings initialized by the User Application.
  *
@@ -408,11 +403,10 @@ int sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle);
  *
  * @retval #SEC_SUCCESS                     for successful execution.
  * @retval #SEC_PROCESSING_ERROR            indicates a fatal execution error that requires a SEC user space driver shutdown.
+ *                                          Call sec_get_last_error() to obtain specific error code, as reported by SEC device.
  * @retval #SEC_DRIVER_RELEASE_IN_PROGRESS  is returned if SEC driver release is in progress
  */
-int sec_poll(int32_t limit,
-             uint32_t weight,
-             uint32_t *packets_no);
+uint32_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no);
 
 /** @brief Polls for available packets processed by SEC on a specific Job Ring initialized by the User Application.
  *
@@ -442,11 +436,10 @@ int sec_poll(int32_t limit,
  *
  * @retval #SEC_SUCCESS                    for successful execution.
  * @retval #SEC_PROCESSING_ERROR           indicates a fatal execution error that requires a SEC user space driver shutdown.
+ *                                         Call sec_get_last_error() to obtain specific error code, as reported by SEC device.
  * @retval #SEC_DRIVER_RELEASE_IN_PROGRESS is returned if SEC driver release is in progress
  */
-int sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle,
-                      int32_t limit,
-                      uint32_t *packets_no);
+uint32_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit, uint32_t *packets_no);
 
 /**
  * @brief Submit a packet for SEC processing on a specified context.
@@ -482,15 +475,36 @@ int sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle,
  *                                  or offset for input/output buffer is invalid (e.g offset > length)
  *                                  or length of the input/output buffer is invalid (e.q. zero)
  *                                  or input/output buffer address is invalid (e.g. NULL)
- * @retval #SEC_JR_IS_FULL is returned if the JR is full
- * @retval #SEC_DRIVER_RELEASE_IN_PROGRESS is returned if SEC driver release is in progress
+ *
+ * @retval #SEC_JR_IS_FULL                  is returned if the JR is full
+ * @retval #SEC_DRIVER_RELEASE_IN_PROGRESS  is returned if SEC driver release is in progress
  * @retval #SEC_CONTEXT_MARKED_FOR_DELETION is returned if the SEC context was marked for deletion.
+ * @retval #SEC_PROCESSING_ERROR            indicates a fatal execution error that requires a SEC user space driver shutdown.
+ *                                          Call sec_get_last_error() to obtain specific error code, as reported by SEC device.
  * @retval >0 in case of error
  */
-int sec_process_packet(sec_context_handle_t sec_ctx_handle,
-                       sec_packet_t *in_packet,
-                       sec_packet_t *out_packet,
-                       ua_context_handle_t ua_ctx_handle);
+uint32_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
+                            sec_packet_t *in_packet,
+                            sec_packet_t *out_packet,
+                            ua_context_handle_t ua_ctx_handle);
+
+
+/** @brief Returns the last SEC user space driver error, if any.
+ *
+ * Use this function to query SEC user space driver status after an
+ * API function returned a #SEC_PROCESSING_ERROR error code.
+ * The last error is a thread specific value. Call this function on the same
+ * thread that received #SEC_PROCESSING_ERROR error.
+ *
+ * @note After an API returns #SEC_PROCESSING_ERROR code, besides calling sec_get_last_error()
+ * the only other valid API to call is sec_release().
+ *
+ * @retval Returns specific error code, as reported by SEC device.
+ *         On SEC 3.1, the error is extracted from Channel Status Register (CSR).
+ *         On SEC 4.4, the error is extracted from Job Ring Interrupt Status Register (JRINT)
+ */
+uint32_t sec_get_last_error(void);
+
 
 /*================================================================================================*/
 
