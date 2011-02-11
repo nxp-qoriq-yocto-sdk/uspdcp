@@ -500,8 +500,8 @@ uint32_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
  * the only other valid API to call is sec_release().
  *
  * @retval Returns specific error code, as reported by SEC device.
- *         On SEC 3.1, the error is extracted from Channel Status Register (CSR).
- *         On SEC 4.4, the error is extracted from Job Ring Interrupt Status Register (JRINT)
+ *         On SEC 3.1, the error is extracted from Channel Status Register (CSR), bits [32:63].
+ *         On SEC 4.4, the error is extracted from Job Ring Interrupt Status Register (JRINT), bits [0:32].
  */
 uint32_t sec_get_last_error(void);
 
