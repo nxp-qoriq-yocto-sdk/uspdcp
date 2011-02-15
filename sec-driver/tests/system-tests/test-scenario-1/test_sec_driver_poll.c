@@ -78,6 +78,10 @@ extern "C" {
 #define IRQ_COALESCING_TIMER    100
 
 #endif
+
+#define JOB_RING_POLL_UNLIMITED -1
+#define JOB_RING_POLL_LIMIT      5
+
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
 ==================================================================================================*/
@@ -762,9 +766,11 @@ static void* pdcp_thread_routine(void* config)
                                      &out_packet,
                                      (ua_context_handle_t)pdcp_context) == SEC_JR_IS_FULL)
             {
-                // wait while the producer JR is empty, and in the mean time do some
+            	// wait while the producer JR is empty, and in the mean time do some
                 // polling on the consumer JR -> retrieve only 5 notifications if available
-                ret = get_results(th_config_local->consumer_job_ring_id, -1, &packets_received);
+                ret = get_results(th_config_local->consumer_job_ring_id,
+                		          JOB_RING_POLL_LIMIT,
+                		          &packets_received);
                 assert(ret == 0);
             };
             if (ret != SEC_SUCCESS)
@@ -798,7 +804,9 @@ static void* pdcp_thread_routine(void* config)
     do
     {
         // poll the consumer JR
-        ret = get_results(th_config_local->consumer_job_ring_id, -1, &packets_received);
+        ret = get_results(th_config_local->consumer_job_ring_id,
+        		          JOB_RING_POLL_UNLIMITED,
+        		          &packets_received);
         assert(ret == 0);
 
         // try to delete the contexts with packets in flight
@@ -818,7 +826,9 @@ static void* pdcp_thread_routine(void* config)
     // did not finish its work
     while(th_config_local->should_exit == 0)
     {
-        ret = get_results(th_config_local->consumer_job_ring_id, -1, &packets_received);
+        ret = get_results(th_config_local->consumer_job_ring_id,
+        		          JOB_RING_POLL_UNLIMITED,
+        		          &packets_received);
         assert(ret == 0);
     }
 
