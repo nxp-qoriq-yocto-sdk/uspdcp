@@ -93,6 +93,12 @@ extern "C"{
                                 ((SEC_ASSIGNED_JOB_RINGS & SEC_JOB_RING_3) >> 3)
 
 
+#define SEC_NUMBER_JOB_RINGS_DTS(mask)  (((mask) & SEC_JOB_RING_0) + \
+                                        (((mask) & SEC_JOB_RING_1) >> 1)) + \
+                                        (((mask) & SEC_JOB_RING_2) >> 2) + \
+                                        (((mask) & SEC_JOB_RING_3) >> 3)
+
+
 /************************************************/
 /* SEC USER SPACE DRIVER related configuration. */
 /************************************************/

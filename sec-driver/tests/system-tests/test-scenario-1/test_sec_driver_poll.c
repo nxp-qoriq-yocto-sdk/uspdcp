@@ -45,6 +45,12 @@ extern "C" {
 #include <stdlib.h>
 #include <unistd.h>
 
+
+#include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/epoll.h>
+
 /*==================================================================================================
                                      LOCAL CONSTANTS
 ==================================================================================================*/
@@ -712,6 +718,7 @@ static void* pdcp_thread_routine(void* config)
     int ret = 0;
     unsigned int packets_received = 0;
     pdcp_context_t *pdcp_context;
+    int irq_fd;
 
     int total_no_of_contexts_deleted = 0;
     int no_of_contexts_deleted = 0;
@@ -723,13 +730,101 @@ static void* pdcp_thread_routine(void* config)
     printf("thread #%d:producer: start work, no of contexts to be created/deleted %d\n",
             th_config_local->tid, th_config_local->no_of_pdcp_contexts_to_test);
 
+    if (th_config_local->consumer_job_ring_id == 0 )
+    {
+        irq_fd = open("/dev/uio0", O_RDONLY);
+        if (irq_fd < 0) {
+            perror("uio open:");
+            pthread_exit(NULL);
+        }
+
+        printf("Opened /dev/uio0 for reading fd = %d\n", irq_fd);
+
+        int epfd;
+
+        epfd = epoll_create (2); /* plan to watch ~2 fds */
+        if (epfd < 0)
+            perror ("epoll_create"); 
+
+        struct epoll_event event;
+        int nr_events, i, irq_count;
+        struct epoll_event *events;
+
+        event.data.fd = irq_fd; /* return the fd to us later */
+        event.events = EPOLLIN; // file descriptor available for read()
+
+        printf("Registering for read event EPOLLIN = %d\n", EPOLLIN);
+
+        ret = epoll_ctl(epfd, EPOLL_CTL_ADD, irq_fd, &event);
+        if (ret)
+            perror ("epoll_ctl"); 
+
+        events = malloc (sizeof (struct epoll_event) * 10);
+        if (!events) {
+            perror ("malloc");
+            pthread_exit(NULL);
+        }         
+
+        do
+        {
+            nr_events = epoll_wait (epfd, events, 10, -1);
+            if (nr_events < 0) {
+                perror ("epoll_wait");
+                free (events);
+                pthread_exit(NULL);
+            }
+
+            for (i = 0; i < nr_events; i++) {
+                printf ("event=%d on fd=%d\n",
+                        events[i].events,
+                        events[i].data.fd);
+
+                ret = read(events[i].data.fd, &irq_count, 4);
+                if (ret != 4) {
+                    perror("uio read:");
+                    pthread_exit(NULL);
+                }
+                printf ("irq count = %d\n", irq_count);
+            }
+        }while(1);
+
+        free (events);
+    }
+
+
+
+
+    if (th_config_local->producer_job_ring_id == 0)
+    {
+        irq_fd = open("/dev/uio0", O_WRONLY);
+        if (irq_fd < 0) {
+            perror("uio open:");
+            pthread_exit(NULL);
+        }
+
+        printf("Opened /dev/uio0 for writing fd = %d\n", irq_fd);
+        int counter = 0;
+        int irq_on = 1;
+        do
+        {
+            ret = write(irq_fd, &irq_on, 4);
+            if (ret != 4)
+            {
+                perror("write error on UIO fd:");
+                pthread_exit(NULL);
+            }
+            counter++;
+        }while(counter < 50);
+
+    }
+
     // Create a number of configurable contexts and affine them to the producer JR, send a random
     // number of packets per each context
     while(total_no_of_contexts_created < th_config_local->no_of_pdcp_contexts_to_test)
     {
         ret = get_free_pdcp_context(th_config_local->pdcp_contexts,
-                                    th_config_local->no_of_used_pdcp_contexts,
-                                    &pdcp_context);
+                th_config_local->no_of_used_pdcp_contexts,
+                &pdcp_context);
         assert(ret == 0);
 
         printf("thread #%d:producer: create pdcp context %d\n", th_config_local->tid, pdcp_context->id);

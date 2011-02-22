@@ -38,11 +38,21 @@ extern "C" {
                                         INCLUDE FILES
 ==================================================================================================*/
 
-#include "fsl_sec.h"
+#include <fsl_sec.h>
+#include <sec_utils.h>
+#include <of.h>
 #include <stddef.h>
 #include <assert.h>
 #include <pthread.h>
 #include <stdio.h>
+
+// TODO: remove this
+#include <sys/epoll.h>
+
+#include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
+
 
 
 /**********************************************************************
@@ -195,6 +205,8 @@ static int enable_irq();
  */
 static int enable_irq_per_job_ring(sec_job_ring_t *job_ring);
 
+
+static void sec_driver_config(void);
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
@@ -315,6 +327,61 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t * job_ring,
     return SEC_SUCCESS;
 }
 
+static void sec_driver_config(void)
+{
+    struct device_node *dpa_node = NULL;
+    uint32_t *kernel_usr_channel_map = NULL;
+    uint32_t usr_channel_map;
+    uint32_t len;
+
+    // get device node for SEC 3.1
+    for_each_compatible_node(dpa_node, NULL, "fsl,sec3.1")
+    {
+        if(of_device_is_available(dpa_node) == false)
+        {
+            continue;
+        }
+
+        printf("Found %s...\n", dpa_node->full_name);
+
+        kernel_usr_channel_map = of_get_property(dpa_node, "fsl,channel-kernel-user-space-map", &len);
+        if(kernel_usr_channel_map == NULL)
+        {
+            fprintf(stderr, "%s:%hu:%s(): of_get_property(%s,"
+                    "fsl,channel-kernel-user-space-map\n", __FILE__,
+                    __LINE__, __func__, dpa_node->full_name);
+            return;
+        }
+
+        printf("SUCCESS reading fsl,channel-kernel-user-space-map = %x\n", *kernel_usr_channel_map);
+        usr_channel_map = ~(*kernel_usr_channel_map);
+        
+        if(SEC_NUMBER_JOB_RINGS_DTS(usr_channel_map) == 0)
+        {
+            printf("Configuration ERROR! No SEC Job Rings assigned for userspace usage!\n");
+            return;
+        }
+
+        if(usr_channel_map & SEC_JOB_RING_0)
+        {
+            printf("Using Job Ring number 0\n");
+        }
+        if(usr_channel_map & SEC_JOB_RING_1)
+        {
+            printf("Using Job Ring number 1\n");
+        }
+        if(usr_channel_map & SEC_JOB_RING_2)
+        {
+            printf("Using Job Ring number 2\n");
+        }
+        if(usr_channel_map & SEC_JOB_RING_3)
+        {
+            printf("Using Job Ring number 3\n");
+        }
+
+    }
+}
+
 /*==================================================================================================
                                      GLOBAL FUNCTIONS
 ==================================================================================================*/
@@ -325,6 +392,9 @@ uint32_t sec_init(sec_config_t *sec_config_data,
 {
     /* Stub Implementation - START */
     int i, j;
+
+    // Create UIO devices, obtain file descriptors for UIO device access.
+    sec_driver_config();
 
     for (i = 0; i < MAX_SEC_JOB_RINGS; i++)
     {
