@@ -39,10 +39,13 @@ extern "C" {
 ==================================================================================================*/
 
 #include "fsl_sec.h"
+#include "sec_contexts.h"
+
 #include <stddef.h>
 #include <assert.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <string.h>
 
 
 /**********************************************************************
@@ -56,8 +59,10 @@ extern "C" {
 /*==================================================================================================
                                      LOCAL CONSTANTS
 ==================================================================================================*/
-/* Max sec contexts per JR computed based on the SEC_ASSIGNED_JOB_RINGS bitmask */
-#define MAX_SEC_CONTEXTS_PER_JR   (SEC_MAX_PDCP_CONTEXTS / SEC_NUMBER_JOB_RINGS)
+/* Max sec contexts per pool computed based on the number of Job Rings assigned.
+ * There is one global pool and one pool per JR. All the available contexts will be
+ * split evenly between all the pools. */
+#define MAX_SEC_CONTEXTS_PER_POOL   (SEC_MAX_PDCP_CONTEXTS / (SEC_NUMBER_JOB_RINGS + 1))
 
 /* Maximum number of job rings supported by SEC hardware */
 #define MAX_SEC_JOB_RINGS         4
@@ -65,30 +70,6 @@ extern "C" {
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
 ==================================================================================================*/
-/* Status of a SEC context */
-typedef enum sec_context_usage_e
-{
-    SEC_CONTEXT_UNUSED = 0,
-    SEC_CONTEXT_USED,
-    SEC_CONTEXT_RETIRING,
-}sec_context_usage_t;
-
-/* SEC context structure. */
-typedef struct sec_context_s
-{
-    /* The callback called for UA notifications */
-    sec_out_cbk notify_packet_cbk;
-    /* The status of the sec context.*/
-    sec_context_usage_t usage;
-    /* The handle of the JR to which this context is affined */
-    sec_job_ring_handle_t * jr_handle;
-    /* Number of packets in flight for this context.*/
-    int packets_no;
-    /* Mutex used to synchronize the access to usage & packets_no members
-     * from two different threads: Producer and Consumer.
-     * TODO: find a solution to remove it.*/
-    pthread_mutex_t ctx_mutex;
-}sec_context_t;
 
 /* SEC job */
 typedef struct sec_job_s
@@ -103,14 +84,7 @@ typedef struct sec_job_s
 typedef struct sec_job_ring_s
 {
     /* Pool of SEC contexts */
-    sec_context_t sec_contexts[MAX_SEC_CONTEXTS_PER_JR];
-    int sec_contexts_no;
-    /* Mutex used to synchronize access to
-     * array of contexts (sec_contexts).
-       TODO: Remove this mutex by replacing the array
-       with a lock-free data structure (for the case with one
-       producer and one consumer) */
-    pthread_mutex_t ctx_pool_mutex;
+	sec_contexts_pool_t ctx_pool;
 
     /* Ring of jobs. In this stub the same ring is used for
      * input jobs and output jobs. */
@@ -149,6 +123,8 @@ static int sec_work_mode = 0;
  * Not used if UA associates the contexts created to a certain JR.*/
 static int last_jr_assigned = 0;
 
+// global context pool
+static sec_contexts_pool_t g_ctx_pool;
 /*==================================================================================================
                                      GLOBAL CONSTANTS
 ==================================================================================================*/
@@ -165,27 +141,6 @@ static int last_jr_assigned = 0;
  *
  **/
 static void reset_job_ring(sec_job_ring_t * job_ring);
-
-/** @brief Run the garbage collector on the retiring contexts.
- *
- * The contexts that have packets in flight are not deleted immediately when
- * sec_delete_pdcp_context() is called instead they are marked as retiring.
- *
- * When all the packets in flight were notified to UA with #SEC_STATUS_OVERDUE and
- * #SEC_STATUS_LAST_OVERDUE statuses, the contexts can be deleted. The function where
- * we can find out the first time that all packets in flight were notified is sec_poll().
- * To minimize the response time of the UA notifications, the contexts will not be deleted
- * in the sec_poll() function. Instead the retiring contexts with no more packets in flight
- * will be deleted whenever UA creates a new context or deletes another -> this is the purpose
- * of the garbage collector.
- *
- * The garbage collector will try to free retiring contexts from the pool associated to the
- * job ring of the created/deleted context.
- * TODO: handle also retiring contexts from the global pool (perhaps in a different function)
- *
- * @param [in] job_ring          The job ringInput packet read by SEC.
- */
-static void run_contexts_garbage_colector(sec_job_ring_t * job_ring);
 
 /** @brief Enable IRQ generation for all SEC's job rings.
  *
@@ -219,48 +174,10 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t * job_ring,
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
+
 static void reset_job_ring(sec_job_ring_t * job_ring)
 {
-    int j;
-
-    job_ring->sec_contexts_no = 0;
-    for (j = 0; j < MAX_SEC_CONTEXTS_PER_JR; j++)
-    {
-        job_ring->sec_contexts[j].usage = SEC_CONTEXT_UNUSED;
-
-        job_ring->sec_contexts[j].packets_no = 0;
-        job_ring->sec_contexts[j].notify_packet_cbk = NULL;
-        job_ring->sec_contexts[j].jr_handle = NULL;
-    }
-
-    job_ring->cidx = 0;
-    job_ring->pidx = 0;
-    for (j = 0; j < SEC_JOB_RING_SIZE; j++)
-    {
-        job_ring->jobs[j].sec_context = NULL;
-        job_ring->jobs[j].ua_handle = NULL;
-    }
-}
-
-static void run_contexts_garbage_colector(sec_job_ring_t * job_ring)
-{
-    int j = 0;
-    // Iterate through the pool of contexts and check if the retiring contexts
-    // can be deleted (meaning that all packets in flight were notified to UA)
-    // TODO: implement a list of retiring contexts and search only through that list
-    for (j = 0; j < MAX_SEC_CONTEXTS_PER_JR; j++)
-    {
-        // if no more packets in flight for this context, free the context
-        if(job_ring->sec_contexts[j].packets_no == 0 &&
-           job_ring->sec_contexts[j].usage == SEC_CONTEXT_RETIRING)
-        {
-            job_ring->sec_contexts[j].usage = SEC_CONTEXT_UNUSED;
-            job_ring->sec_contexts[j].notify_packet_cbk = NULL;
-            job_ring->sec_contexts[j].jr_handle = NULL;
-            job_ring->sec_contexts_no--;
-            assert(job_ring->sec_contexts_no >= 0);
-        }
-    }
+    memset(job_ring, 0, sizeof(sec_job_ring_t));
 }
 
 static int enable_irq()
@@ -307,7 +224,7 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t * job_ring,
         sec_context = job->sec_context;
         assert (sec_context->notify_packet_cbk != NULL);
 
-        pthread_mutex_lock(&sec_context->ctx_mutex);
+        pthread_mutex_lock(&sec_context->mutex);
 
         status = SEC_STATUS_SUCCESS;
         // if context is retiring, set a suggestive status for the
@@ -327,7 +244,7 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t * job_ring,
         // decrement packet reference count in sec context
         sec_context->packets_no--;
 
-        pthread_mutex_unlock(&sec_context->ctx_mutex);
+        pthread_mutex_unlock(&sec_context->mutex);
 
         notified_packets_no++;
 
@@ -349,17 +266,17 @@ uint32_t sec_init(sec_config_t *sec_config_data,
                   sec_job_ring_descriptor_t **job_ring_descriptors)
 {
     /* Stub Implementation - START */
-    int i, j;
+    int i;
+    int ret;
 
     for (i = 0; i < MAX_SEC_JOB_RINGS; i++)
     {
         reset_job_ring(&job_rings[i]);
 
-        for (j = 0; j < MAX_SEC_CONTEXTS_PER_JR; j++)
-        {
-            pthread_mutex_init(&job_rings[i].sec_contexts[j].ctx_mutex, NULL);
-        }
-        pthread_mutex_init(&job_rings[i].ctx_pool_mutex, NULL);
+        // initialize the context pool per JR
+        // no need for thread synchronizations mechanisms for this pool
+        ret = init_contexts_pool(&(job_rings[i].ctx_pool), MAX_SEC_CONTEXTS_PER_POOL, THREAD_UNSAFE_POOL);
+        assert(ret != 0);
 
         job_rings[i].irq_fd = i + 1;
 
@@ -368,6 +285,11 @@ uint32_t sec_init(sec_config_t *sec_config_data,
     }
 
     g_job_rings_no = job_rings_no;
+
+    // initialize the global pool of contexts also
+    // we need for thread synchronizations mechanisms for this pool
+    ret = init_contexts_pool(&g_ctx_pool, MAX_SEC_CONTEXTS_PER_POOL, THREAD_SAFE_POOL);
+    assert(ret != 0);
 
     // Remember initial work mode
     sec_work_mode = sec_config_data->work_mode;
@@ -385,18 +307,19 @@ uint32_t sec_init(sec_config_t *sec_config_data,
 uint32_t sec_release()
 {
     /* Stub Implementation - START */
-    int i, j;
+    int i;
 
     for (i = 0; i < g_job_rings_no; i++)
     {
+        // destroy the contexts pool per JR
+        destroy_contexts_pool(&(job_rings[i].ctx_pool));
+
         reset_job_ring(&job_rings[i]);
-        for (j = 0; j < MAX_SEC_CONTEXTS_PER_JR; j++)
-        {
-            pthread_mutex_destroy(&job_rings[i].sec_contexts[j].ctx_mutex);
-        }
-        pthread_mutex_destroy(&job_rings[i].ctx_pool_mutex);
     }
     g_job_rings_no = 0;
+
+    // destroy the global context pool also
+    destroy_contexts_pool(&g_ctx_pool);
 
     return SEC_SUCCESS;
 
@@ -408,9 +331,8 @@ uint32_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
                                   sec_context_handle_t *sec_ctx_handle)
 {
     /* Stub Implementation - START */
-    int i = 0;
-    int found = 0;
     sec_job_ring_t * job_ring =  (sec_job_ring_t *)job_ring_handle;
+    sec_context_t * ctx = NULL;
 
     if (sec_ctx_handle == NULL || sec_ctx_info == NULL)
     {
@@ -430,54 +352,34 @@ uint32_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
         job_ring = &job_rings[last_jr_assigned];
     }
 
-    // synchronize access to job ring's pool of contexts
-    pthread_mutex_lock(&job_ring->ctx_pool_mutex);
-
-    if(job_ring->sec_contexts_no >= MAX_SEC_CONTEXTS_PER_JR)
+    // Try to get a free context from the JR's pool
+    // The advantage of the JR's pool is that it needs NO synchronization mechanisms.
+    // However, if the JR's pool is full even after running the garbage collector,
+    // try to get a free context from the global pool. The disadvantage of the
+    // global pool is that the access to it needs to be synchronized because it can
+    // be accessed simultaneously by 2 threads (the producer thread of JR1 and the
+    // producer thread for JR2).
+    assert(job_ring->ctx_pool.get_free_ctx_func != NULL);
+    if((ctx = job_ring->ctx_pool.get_free_ctx_func(&job_ring->ctx_pool)) == NULL)
     {
-        // run a contexts garbage collector on the job ring's pool of contexts first
-        // The purpose is to free some retiring contexts for which all the packets in flight
-        // were notified to UA
-        run_contexts_garbage_colector(job_ring);
-        // if still no free contexts available in the job ring's pool of contexts
-        // then return error
-        // TODO: implement a global pool of contexts synchronized by a mutex
-        //       and try to get a context from the global pool if the JR pool is full.
-        if (job_ring->sec_contexts_no >= MAX_SEC_CONTEXTS_PER_JR)
+        // get free context from the global pool of contexts (with lock)
+    	assert(g_ctx_pool.get_free_ctx_func != NULL);
+        if((ctx = g_ctx_pool.get_free_ctx_func(&g_ctx_pool)) == NULL)
         {
-            return SEC_DRIVER_NO_FREE_CONTEXTS;
-        }
+			// no free contexts in the global pool
+			return SEC_DRIVER_NO_FREE_CONTEXTS;
+		}
     }
 
-    found = 0;
-    // find an unused context
+    assert(ctx != NULL);
+    assert(ctx->pool != NULL);
 
-    // TODO: Consider implementing a list of sec_contexts per job_ring having free contexts at head or tail.
-    // This way we only check the first item in list, no need to iterate the whole list.
-    for(i = 0; i < MAX_SEC_CONTEXTS_PER_JR; i++)
-    {
-        if (job_ring->sec_contexts[i].usage == SEC_CONTEXT_UNUSED)
-        {
-            job_ring->sec_contexts[i].notify_packet_cbk = sec_ctx_info->notify_packet;
-            job_ring->sec_contexts[i].usage = SEC_CONTEXT_USED;
-            job_ring->sec_contexts[i].jr_handle = (sec_job_ring_handle_t)job_ring;
-            // provide to UA a sec ctx handle
-            *sec_ctx_handle = (sec_context_handle_t)&job_ring->sec_contexts[i];
-            // increment the number of contexts associated to a job ring
-            assert(job_ring->sec_contexts_no >= 0);
-            job_ring->sec_contexts_no++;
-            found = 1;
-            break;
-        }
-    }
-    assert(found == 1);
+    ctx->notify_packet_cbk = sec_ctx_info->notify_packet;
+    // TODO: JR handle could be set when the pool of contexts is initialized
+    ctx->jr_handle = (sec_job_ring_handle_t)job_ring;
 
-    // Run a contexts garbage collector on the job ring's pool of contexts first
-    // The purpose is to free some retiring contexts for which all the packets in flight
-    // were notified to UA
-    run_contexts_garbage_colector(job_ring);
-
-    pthread_mutex_unlock(&job_ring->ctx_pool_mutex);
+	// provide to UA a sec ctx handle
+	*sec_ctx_handle = (sec_context_handle_t)ctx;
 
     return SEC_SUCCESS;
 
@@ -508,6 +410,8 @@ uint32_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
 uint32_t sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle)
 {
     /* Stub Implementation - START */
+	sec_contexts_pool_t * pool = NULL;
+
     sec_context_t * sec_context = (sec_context_t *)sec_ctx_handle;
     if (sec_context == NULL)
     {
@@ -518,47 +422,14 @@ uint32_t sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle)
     {
         return SEC_INVALID_INPUT_PARAM;
     }
+    pool = sec_context->pool;
+    assert (pool != NULL);
 
-    // synchronize access to job ring's pool of contexts
-    pthread_mutex_lock(&job_ring->ctx_pool_mutex);
-
-    // Run a contexts garbage collector on the job ring's pool of contexts first
-    // The contexts are deleted only from the Producer Thread such that to minimize the
-    // response time for the notifications raised on the Consumer Thread
-    run_contexts_garbage_colector(job_ring);
-
-    // Now check if the current context can be deleted or must be marked as
-    // retiring because there still are packets in flight.
-
-    // synchronize access to sec_context
-    pthread_mutex_lock(&sec_context->ctx_mutex);
-
-    if (sec_context->packets_no != 0)
-    {
-        // if packets in flight, do not release the context yet, move it to retiring
-        // the context will be deleted when all packets in flight are notified to UA
-        // TODO: move context to retiring list
-        sec_context->usage = SEC_CONTEXT_RETIRING;
-
-        pthread_mutex_unlock(&sec_context->ctx_mutex);
-        pthread_mutex_unlock(&job_ring->ctx_pool_mutex);
-
-        return SEC_PACKETS_IN_FLIGHT;
-    }
-    // end of critical area per context
-    pthread_mutex_unlock(&sec_context->ctx_mutex);
-
-    // if no packets in flight then we can safely release the context
-    // TODO: move context to free list
-    sec_context->usage = SEC_CONTEXT_UNUSED;
-    sec_context->notify_packet_cbk = NULL;
-    sec_context->jr_handle = NULL;
-    job_ring->sec_contexts_no--;
-
-    // end of critical area for pool of contexts
-    pthread_mutex_unlock(&job_ring->ctx_pool_mutex);
-
-    return SEC_SUCCESS;
+    // Now try to free the current context. If there are packets
+    // in flight the context will be retired (not freed). The context
+    // will be freed in the next garbage collector call.
+    assert(sec_context->pool->free_or_retire_ctx_func != NULL);
+    return pool->free_or_retire_ctx_func(pool, sec_context);
 
     /* Stub Implementation - END */
 
@@ -755,9 +626,9 @@ uint32_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
     job_ring->jobs[job_ring->pidx].ua_handle = ua_ctx_handle;
 
     // increment packet reference count in sec context
-    pthread_mutex_lock(&sec_context->ctx_mutex);
+    pthread_mutex_lock(&sec_context->mutex);
     sec_context->packets_no++;
-    pthread_mutex_unlock(&sec_context->ctx_mutex);
+    pthread_mutex_unlock(&sec_context->mutex);
 
     // increment the producer index for the current job ring
     job_ring->pidx = SEC_CIRCULAR_COUNTER(job_ring->pidx, SEC_JOB_RING_SIZE);
