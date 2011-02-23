@@ -39,9 +39,11 @@ extern "C" {
 ==================================================================================================*/
 #include "list.h"
 #include "sec_contexts.h"
+#include "sec_internal.h"
 
 #include <assert.h>
 #include <string.h>
+#include <stdio.h>
 /*==================================================================================================
                                      LOCAL CONSTANTS
 ==================================================================================================*/
@@ -58,6 +60,7 @@ extern "C" {
 #endif
 #endif
 
+#define GET_CONTEXT_FROM_LIST_NODE(list_node) ((sec_context_t*)((list_node) - offsetof(sec_context_t, node)))
 /*==================================================================================================
                                       LOCAL CONSTANTS
 ==================================================================================================*/
@@ -101,7 +104,12 @@ static void free_in_use_context_with_lock(sec_contexts_pool_t * pool, sec_contex
  *
  * The garbage collector will try to free retiring contexts from the pool associated to the
  * job ring of the created/deleted context.
- * TODO: handle also retiring contexts from the global pool (perhaps in a different function)
+ * TODO: The following corner case is not covered: free_or_retire_ctx_with_lock is called
+ * for global pool and context is moved to retire list. No more context from global pool is taken
+ * anymore so the garbage collector for the global pool is not called, thus leaving the context
+ * from the global pool in retire list. Why should this be a problem? We do not need to notify UA
+ * when the context is moved to free list ... the garbage collector will be called the next time a
+ * context is taken from the global pool ... right?
  *
  * @param [in] job_ring          The job ringInput packet read by SEC.
  */
@@ -109,8 +117,10 @@ static void run_contexts_garbage_colector(sec_contexts_pool_t * pool);
 static void run_contexts_garbage_colector_with_lock(sec_contexts_pool_t * pool);
 
 static sec_context_t* get_free_context(sec_contexts_pool_t * pool);
-
 static sec_context_t* get_free_context_with_lock(sec_contexts_pool_t * pool);
+
+static uint32_t free_or_retire_ctx(sec_contexts_pool_t * pool, sec_context_t * ctx);
+static uint32_t free_or_retire_ctx_with_lock(sec_contexts_pool_t * pool, sec_context_t * ctx);
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
@@ -124,7 +134,9 @@ static void destroy_pool_list(list_t * list)
 	while(!list_empty(list))
 	{
 		node = list_remove_first(list);
-		ctx = (sec_context_t*)(node - offsetof(sec_context_t, node));
+		ctx = GET_CONTEXT_FROM_LIST_NODE(node);
+		assert((uint32_t)ctx == (uint32_t)node);
+
 		pthread_mutex_destroy(&(ctx->mutex));
 		memset(ctx, 0, sizeof(sec_context_t));
 		ctx->usage = SEC_CONTEXT_UNUSED;
@@ -136,9 +148,10 @@ static uint32_t free_or_retire_ctx(sec_contexts_pool_t * pool, sec_context_t * c
 {
 	assert(pool != NULL);
 	assert(ctx != NULL);
-	assert(pool->thread_safe == THREAD_UNSAFE_POOL);
+	assert(pool->thread_safe == THREAD_UNSAFE);
+	assert(ctx->usage == SEC_CONTEXT_USED);
 
-	// TODO: find a solution to remove the locking
+	// start critical area per context
 	pthread_mutex_lock(&ctx->mutex);
 
 	if (ctx->packets_no != 0)
@@ -147,6 +160,7 @@ static uint32_t free_or_retire_ctx(sec_contexts_pool_t * pool, sec_context_t * c
 		// the context will be deleted when all packets in flight are notified to UA
 		retire_context(pool, ctx);
 
+		// end of critical area per context
 		pthread_mutex_unlock(&ctx->mutex);
 
 		return SEC_PACKETS_IN_FLIGHT;
@@ -156,9 +170,6 @@ static uint32_t free_or_retire_ctx(sec_contexts_pool_t * pool, sec_context_t * c
 
 	// if no packets in flight then we can safely release the context
 	free_in_use_context(pool, ctx);
-
-	ctx->notify_packet_cbk = NULL;
-	ctx->jr_handle = NULL;
 
 	// run the contexts garbage collector
 	run_contexts_garbage_colector(pool);
@@ -170,7 +181,8 @@ static uint32_t free_or_retire_ctx_with_lock(sec_contexts_pool_t * pool, sec_con
 {
 	assert(pool != NULL);
 	assert(ctx != NULL);
-	assert(pool->thread_safe == THREAD_SAFE_POOL);
+	assert(pool->thread_safe == THREAD_SAFE);
+
 	return SEC_SUCCESS;
 }
 
@@ -178,44 +190,54 @@ static void retire_context(sec_contexts_pool_t * pool, sec_context_t * ctx)
 {
 	assert(ctx != NULL);
 	assert(pool != NULL);
-	assert(pool->thread_safe == THREAD_UNSAFE_POOL);
+	assert(pool->thread_safe == THREAD_UNSAFE);
 
 	// remove context from in use list
 	assert(ctx->usage == SEC_CONTEXT_USED);
 	list_delete(&ctx->node);
+
+	// modify contex's usage before adding it to the retire list
+	// once it is added to the retire list it can be retrieved and
+	// used by other threads ... and we should not interfere
+	ctx->usage = SEC_CONTEXT_RETIRING;
+
 	// add context to retire list
 	list_add_tail(&pool->retire_list, &ctx->node);
-
-	ctx->usage = SEC_CONTEXT_RETIRING;
 }
 
 static void retire_context_with_lock(sec_contexts_pool_t * pool, sec_context_t * ctx)
 {
 	assert(ctx != NULL);
 	assert(pool != NULL);
-	assert(pool->thread_safe == THREAD_SAFE_POOL);
+	assert(pool->thread_safe == THREAD_SAFE);
 }
 
 static void free_in_use_context(sec_contexts_pool_t * pool, sec_context_t * ctx)
 {
 	assert(ctx != NULL);
 	assert(pool != NULL);
-	assert(pool->thread_safe == THREAD_UNSAFE_POOL);
+	assert(pool->thread_safe == THREAD_UNSAFE);
 
 	// remove context from in use list
 	assert(ctx->usage == SEC_CONTEXT_USED);
 	list_delete(&ctx->node);
+
+	// modify contex's usage before adding it to the free list
+	// once it is added to the free list it can be retrieved and
+	// used by other threads ... and we should not interfere
+	ctx->usage = SEC_CONTEXT_UNUSED;
+	ctx->notify_packet_cbk = NULL;
+	ctx->jr_handle = NULL;
+
 	// add context to free list
 	list_add_tail(&pool->free_list, &ctx->node);
-
-	ctx->usage = SEC_CONTEXT_UNUSED;
 }
 
 static void free_in_use_context_with_lock(sec_contexts_pool_t * pool, sec_context_t * ctx)
 {
 	assert(ctx != NULL);
 	assert(pool != NULL);
-	assert(pool->thread_safe == THREAD_SAFE_POOL);
+	assert(pool->thread_safe == THREAD_SAFE);
 }
 
 static void run_contexts_garbage_colector(sec_contexts_pool_t * pool)
@@ -225,7 +247,7 @@ static void run_contexts_garbage_colector(sec_contexts_pool_t * pool)
     list_node_t * delete_node = NULL;
 
     assert(pool != NULL);
-    assert(pool->thread_safe == THREAD_UNSAFE_POOL);
+    assert(pool->thread_safe == THREAD_UNSAFE);
 
     if (list_empty(&pool->retire_list))
     {
@@ -236,7 +258,7 @@ static void run_contexts_garbage_colector(sec_contexts_pool_t * pool)
     // free the ones that have no more packets in flight
     node = get_first(&pool->retire_list);
     do{
-    	ctx = (sec_context_t*)(node - offsetof(sec_context_t, node));
+    	ctx = GET_CONTEXT_FROM_LIST_NODE(node);
     	if(ctx->packets_no == 0 && ctx->usage == SEC_CONTEXT_RETIRING)
     	{
     		// remember the node to be removed from retire list
@@ -246,39 +268,49 @@ static void run_contexts_garbage_colector(sec_contexts_pool_t * pool)
 
     		// remove saved node from retire list
 			list_delete(delete_node);
+
+			// modify contex's usage before adding it to the free list
+			// once it is added to the free list it can be retrieved and
+			// used by other threads ... and we should not interfere
+			ctx->usage = SEC_CONTEXT_UNUSED;
+			ctx->notify_packet_cbk = NULL;
+			ctx->jr_handle = NULL;
+
 			// add deleted node to free list
 			list_add_tail(&pool->free_list, delete_node);
-
-			ctx->usage = SEC_CONTEXT_UNUSED;
     	}
     	else
     	{
     		node = get_next(node);
     	}
-    }while(list_end(&pool->retire_list, node));
+    }while(!list_end(&pool->retire_list, node));
 }
 
 static void run_contexts_garbage_colector_with_lock(sec_contexts_pool_t * pool)
 {
 	assert(pool != NULL);
-	assert(pool->thread_safe == THREAD_SAFE_POOL);
+	assert(pool->thread_safe == THREAD_SAFE);
 }
 
 static sec_context_t* get_free_context(sec_contexts_pool_t * pool)
 {
 	sec_context_t * ctx = NULL;
 	list_node_t * node = NULL;
+	uint8_t run_gc = 0;
 
 	assert(pool != NULL);
-	assert(pool->thread_safe == THREAD_UNSAFE_POOL);
+	assert(pool->thread_safe == THREAD_UNSAFE);
 
-    // check if there are nodes in the free list
+	// check if there are nodes in the free list
     if (list_empty(&pool->free_list))
     {
     	// try and run the garbage collector in case no contexts are free
     	// The purpose is to free some retiring contexts for which all the packets in flight
 		// were notified to UA
     	run_contexts_garbage_colector(pool);
+    	// remember that we already run the garbage collector so that
+    	// we do not run it again at exit
+    	run_gc = 1;
 
     	// try again
     	if (list_empty(&pool->free_list))
@@ -289,17 +321,20 @@ static sec_context_t* get_free_context(sec_contexts_pool_t * pool)
 
     // remove first element from the free list
 	node = list_remove_first(&pool->free_list);
-	// add the element to the tail of the in use list
-	list_add_tail(&pool->in_use_list, node);
 
-    ctx = (sec_context_t*)(node - offsetof(sec_context_t, node));
+    ctx = GET_CONTEXT_FROM_LIST_NODE(node);
     assert(ctx->usage == SEC_CONTEXT_UNUSED);
     ctx->usage = SEC_CONTEXT_USED;
 
-    // run the contexts garbage collector
-    // TODO: should we not run it, in case it was already run before because the
-    // free list was empty?
-    run_contexts_garbage_colector(pool);
+	// add the element to the tail of the in use list
+	list_add_tail(&pool->in_use_list, node);
+
+    if (run_gc == 0)
+    {
+    	// run the contexts garbage collector only if it was not already run
+    	// in this function call
+    	run_contexts_garbage_colector(pool);
+    }
 
     return ctx;
 }
@@ -307,7 +342,7 @@ static sec_context_t* get_free_context(sec_contexts_pool_t * pool)
 static sec_context_t* get_free_context_with_lock(sec_contexts_pool_t * pool)
 {
 	assert(pool != NULL);
-	assert(pool->thread_safe == THREAD_SAFE_POOL);
+	assert(pool->thread_safe == THREAD_SAFE);
 
 	return NULL;
 }
@@ -345,20 +380,23 @@ uint32_t init_contexts_pool(sec_contexts_pool_t * pool,
 		ctx = &sec_contexts[no_of_contexts_used];
 		no_of_contexts_used++;
 
-		// add the context to the free list
-		list_add_tail(&pool->free_list, &ctx->node);
-
 		// initialize the sec_context with valid values
 		memset(ctx, 0, sizeof(sec_context_t));
 		pthread_mutex_init(&(ctx->mutex), NULL);
 		ctx->usage = SEC_CONTEXT_UNUSED;
 		ctx->pool = pool;
+
+		// add the context to the free list
+		// WARNING: do not memset the context after adding it
+		// to the list because it will override the node's next and
+		// prev pointers
+		list_add_tail(&pool->free_list, &ctx->node);
 	}
 
 	pool->no_of_contexts = number_of_contexts;
 	pool->thread_safe = thread_safe;
 
-	if (pool->thread_safe == THREAD_UNSAFE_POOL)
+	if (pool->thread_safe == THREAD_UNSAFE)
 	{
 		pool->free_or_retire_ctx_func = &free_or_retire_ctx;
 		pool->get_free_ctx_func = &get_free_context;
@@ -388,6 +426,7 @@ void destroy_contexts_pool(sec_contexts_pool_t * pool)
 	memset(pool, 0, sizeof(sec_contexts_pool_t));
 	pool->thread_safe = -1;
 }
+
 
 /*================================================================================================*/
 

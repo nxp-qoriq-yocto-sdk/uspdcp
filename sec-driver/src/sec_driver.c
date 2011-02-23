@@ -40,6 +40,7 @@ extern "C" {
 
 #include "fsl_sec.h"
 #include "sec_contexts.h"
+#include "sec_internal.h"
 
 #include <stddef.h>
 #include <assert.h>
@@ -85,7 +86,6 @@ typedef struct sec_job_ring_s
 {
     /* Pool of SEC contexts */
 	sec_contexts_pool_t ctx_pool;
-
     /* Ring of jobs. In this stub the same ring is used for
      * input jobs and output jobs. */
     sec_job_t jobs[SEC_JOB_RING_SIZE];
@@ -93,7 +93,6 @@ typedef struct sec_job_ring_s
     int cidx;
     // producer index for job ring (jobs array)
     int pidx;
-
     /* The file descriptor used for polling from user space
      * for interrupts notifications */
     int irq_fd;
@@ -269,14 +268,14 @@ uint32_t sec_init(sec_config_t *sec_config_data,
     int i;
     int ret;
 
-    for (i = 0; i < MAX_SEC_JOB_RINGS; i++)
+    for (i = 0; i < SEC_NUMBER_JOB_RINGS; i++)
     {
         reset_job_ring(&job_rings[i]);
 
         // initialize the context pool per JR
         // no need for thread synchronizations mechanisms for this pool
-        ret = init_contexts_pool(&(job_rings[i].ctx_pool), MAX_SEC_CONTEXTS_PER_POOL, THREAD_UNSAFE_POOL);
-        assert(ret != 0);
+        ret = init_contexts_pool(&(job_rings[i].ctx_pool), MAX_SEC_CONTEXTS_PER_POOL, THREAD_UNSAFE);
+        assert(ret == 0);
 
         job_rings[i].irq_fd = i + 1;
 
@@ -288,8 +287,8 @@ uint32_t sec_init(sec_config_t *sec_config_data,
 
     // initialize the global pool of contexts also
     // we need for thread synchronizations mechanisms for this pool
-    ret = init_contexts_pool(&g_ctx_pool, MAX_SEC_CONTEXTS_PER_POOL, THREAD_SAFE_POOL);
-    assert(ret != 0);
+    ret = init_contexts_pool(&g_ctx_pool, MAX_SEC_CONTEXTS_PER_POOL, THREAD_SAFE);
+    assert(ret == 0);
 
     // Remember initial work mode
     sec_work_mode = sec_config_data->work_mode;
@@ -314,7 +313,7 @@ uint32_t sec_release()
         // destroy the contexts pool per JR
         destroy_contexts_pool(&(job_rings[i].ctx_pool));
 
-        reset_job_ring(&job_rings[i]);
+    	reset_job_ring(&job_rings[i]);
     }
     g_job_rings_no = 0;
 
@@ -362,7 +361,7 @@ uint32_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
     assert(job_ring->ctx_pool.get_free_ctx_func != NULL);
     if((ctx = job_ring->ctx_pool.get_free_ctx_func(&job_ring->ctx_pool)) == NULL)
     {
-        // get free context from the global pool of contexts (with lock)
+    	// get free context from the global pool of contexts (with lock)
     	assert(g_ctx_pool.get_free_ctx_func != NULL);
         if((ctx = g_ctx_pool.get_free_ctx_func(&g_ctx_pool)) == NULL)
         {
@@ -370,7 +369,6 @@ uint32_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
 			return SEC_DRIVER_NO_FREE_CONTEXTS;
 		}
     }
-
     assert(ctx != NULL);
     assert(ctx->pool != NULL);
 

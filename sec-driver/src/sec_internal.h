@@ -30,8 +30,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef LIST_H
-#define LIST_H
+#ifndef SEC_INTERNAL_H
+#define SEC_INTERNAL_H
 
 #ifdef __cplusplus
 /* *INDENT-OFF* */
@@ -43,12 +43,12 @@ extern "C"{
 /*==================================================================================================
                                          INCLUDE FILES
 ==================================================================================================*/
-#include <stdint.h>
-#include <pthread.h>
+#include "fsl_sec.h"
 /*==================================================================================================
                                        DEFINES AND MACROS
 ==================================================================================================*/
-
+#define THREAD_SAFE        OFF
+#define THREAD_UNSAFE      ON
 /*==================================================================================================
                                              ENUMS
 ==================================================================================================*/
@@ -56,22 +56,7 @@ extern "C"{
 /*==================================================================================================
                                  STRUCTURES AND OTHER TYPEDEFS
 ==================================================================================================*/
-typedef struct list_node_s
-{
-	struct list_node_s *next;
-	struct list_node_s *prev;
-}list_node_t;
 
-typedef struct list_s
-{
-	list_node_t head;
-
-	// Access to list could be synchronized, if requested so.
-	// If list is used in a single-producer and single-consumer model
-	// no synchronization is needed.
-	pthread_mutex_t mutex;
-	uint8_t thread_safe;
-}list_t;
 /*==================================================================================================
                                            CONSTANTS
 ==================================================================================================*/
@@ -86,23 +71,6 @@ typedef struct list_s
 
 /*================================================================================================*/
 
-inline uint32_t list_init(list_t * list, uint8_t thread_safe);
-inline uint32_t list_destroy(list_t *list);
-
-inline uint8_t list_empty(list_t * list);
-inline uint8_t list_end(list_t * list, list_node_t * node);
-
-inline list_node_t* list_remove_first(list_t *list);
-inline list_node_t* list_remove_first_with_lock(list_t *list);
-
-inline void list_add_tail(list_t *list, list_node_t* node);
-inline void list_add_tail_with_lock(list_t *list, list_node_t* node);
-
-inline void list_delete(list_node_t *node);
-inline void list_delete_with_lock(list_node_t *node);
-
-inline list_node_t* get_first(list_t * list);
-inline list_node_t* get_next(list_node_t * node);
 
 /*================================================================================================*/
 
@@ -112,4 +80,4 @@ inline list_node_t* get_next(list_node_t * node);
 /* *INDENT-ON* */
 #endif
 
-#endif //LIST_H
+#endif //SEC_INTERNAL_H

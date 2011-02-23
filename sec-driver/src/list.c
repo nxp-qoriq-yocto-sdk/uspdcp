@@ -38,7 +38,9 @@ extern "C" {
                                         INCLUDE FILES
 ==================================================================================================*/
 #include "list.h"
+#include "sec_internal.h"
 
+#include <assert.h>
 /*==================================================================================================
                                      LOCAL CONSTANTS
 ==================================================================================================*/
@@ -77,52 +79,137 @@ extern "C" {
 
 uint32_t list_init(list_t * list, uint8_t thread_safe)
 {
+	assert(list != NULL);
+
+	list->head.next = list->head.prev = &list->head;
+
+	// TODO: how to handle synchronization???
+	list->thread_safe = thread_safe;
+	if (list->thread_safe == THREAD_SAFE)
+	{
+		pthread_mutex_init(&list->mutex, NULL);
+	}
 	return 0;
 }
+
 uint32_t list_destroy(list_t *list)
 {
+	list->head.next = list->head.prev = NULL;
+
+	if (list->thread_safe == THREAD_SAFE)
+	{
+		pthread_mutex_destroy(&list->mutex);
+	}
 	return 0;
 }
 
 uint8_t list_empty(list_t * list)
 {
-	return 0;
+	assert(list != NULL);
+
+	return ((list->head.next == &list->head) && (list->head.prev == &list->head));
 }
+
 uint8_t list_end(list_t * list, list_node_t * node)
 {
-	return 0;
+	assert(list != NULL);
+	assert(node != NULL);
+
+	return (node->next == &list->head);
 }
 
 list_node_t* list_remove_first(list_t *list)
 {
-	return NULL;
+	assert(list != NULL);
+	list_node_t * node = list->head.next;
+
+	assert(node != NULL);
+	assert(node->next != NULL);
+	assert(node->next->prev != NULL);
+
+	list->head.next = node->next;
+	node->next->prev = &list->head;
+
+	node->next = node;
+	node->prev = node;
+
+	return node;
 }
+
 list_node_t* list_remove_first_with_lock(list_t *list)
 {
 	return NULL;
 }
 
-
-void list_add_tail(list_t *list, list_node_t* node){}
-void list_add_tail_with_lock(list_t *list, list_node_t* node){}
-
-uint32_t list_delete(list_node_t *node)
+void list_add_tail(list_t *list, list_node_t* node)
 {
-	return 0;
-}
-uint32_t list_delete_with_lock(list_node_t *node)
-{
-	return 0;
+	assert(list != NULL);
+	assert(node != NULL);
+
+	list->head.prev->next = node;
+	node->prev = list->head.prev;
+	list->head.prev = node;
+	node->next = &list->head;
+
+	assert(node->next != NULL);
+	assert(node->prev != NULL);
 }
 
-list_node_t* get_first(list_t * node)
+void list_add_tail_with_lock(list_t *list, list_node_t* node)
 {
-	return NULL;
 }
+
+void list_delete(list_node_t *node)
+{
+	assert(node != NULL);
+	assert(node->next != NULL);
+	assert(node->prev != NULL);
+	assert(node->prev->next != NULL);
+	assert(node->next->prev != NULL);
+
+	node->prev->next = node->next;
+	node->next->prev = node->prev;
+
+	node->next = node;
+	node->prev = node;
+}
+
+void list_delete_with_lock(list_node_t *node)
+{
+	assert(node != NULL);
+	assert(node->next != NULL);
+	assert(node->prev != NULL);
+}
+
+list_node_t* get_first(list_t * list)
+{
+	assert(list != NULL);
+	assert(list->head.next != NULL);
+
+	return list->head.next;
+}
+
 list_node_t* get_next(list_node_t * node)
 {
-	return NULL;
+	assert(node != NULL);
+	assert(node->next != NULL);
+
+	return node->next;
 }
+
+/*
+int main(void)
+{
+	list_t list;
+	list_init(&list);
+
+	list_node_t node[10];
+
+	list_add_tail(&node[0]);
+	list_add_tail(&node[1]);
+	list_add_tail(&node[2]);
+}
+*/
 /*================================================================================================*/
 
 #ifdef __cplusplus

@@ -30,8 +30,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef CONTEXTS_POOL_H
-#define CONTEXTS_POOL_H
+#ifndef SEC_CONTEXTS_H
+#define SEC_CONTEXTS_H
 
 #ifdef __cplusplus
 /* *INDENT-OFF* */
@@ -51,8 +51,7 @@ extern "C"{
 /*==================================================================================================
                                        DEFINES AND MACROS
 ==================================================================================================*/
-#define THREAD_SAFE_POOL     OFF
-#define THREAD_UNSAFE_POOL   ON
+
 /*==================================================================================================
                                              ENUMS
 ==================================================================================================*/
@@ -76,17 +75,18 @@ typedef struct sec_context_s* (*get_free_context_func_ptr)(struct sec_contexts_p
 
 typedef struct sec_contexts_pool_s
 {
-	uint32_t no_of_contexts;
-
 	list_t free_list; // list of free contexts
 	list_t retire_list; // list of retired contexts
 	list_t in_use_list; // list of in use contexts
 
-	uint8_t thread_safe; // valid values: #THREAD_SAFE_POOL, #THREAD_UNSAFE_POOL
+	uint32_t no_of_contexts;
 
 	// pointer to a function used to free or retire a context
-    free_or_retire_ctx_func_ptr free_or_retire_ctx_func;
-    get_free_context_func_ptr get_free_ctx_func;
+	free_or_retire_ctx_func_ptr free_or_retire_ctx_func;
+	get_free_context_func_ptr get_free_ctx_func;
+
+	uint8_t thread_safe; // valid values: #THREAD_SAFE_POOL, #THREAD_UNSAFE_POOL
+
 }sec_contexts_pool_t;
 
 /* SEC context structure. */
@@ -143,4 +143,4 @@ void destroy_contexts_pool(sec_contexts_pool_t * pool);
 /* *INDENT-ON* */
 #endif
 
-#endif //CONTEXTS_POOL_H
+#endif //SEC_CONTEXTS_H
