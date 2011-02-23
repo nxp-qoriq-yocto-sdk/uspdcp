@@ -52,6 +52,9 @@ extern "C"{
                                        DEFINES AND MACROS
 ==================================================================================================*/
 
+/** Constants used to configure a thread-safe/unsafe pool. */
+#define THREAD_SAFE_POOL    THREAD_SAFE_LIST
+#define THREAD_UNSAFE_POOL  THREAD_UNSAFE_LIST
 /*==================================================================================================
                                              ENUMS
 ==================================================================================================*/
@@ -59,58 +62,76 @@ extern "C"{
 /*==================================================================================================
                                  STRUCTURES AND OTHER TYPEDEFS
 ==================================================================================================*/
-/* Status of a SEC context */
+/** Status of a SEC context */
 typedef enum sec_context_usage_e
 {
-    SEC_CONTEXT_UNUSED = 0,
-    SEC_CONTEXT_USED,
-    SEC_CONTEXT_RETIRING,
+    SEC_CONTEXT_UNUSED = 0,  /*< SEC context is unused and is located in the free list. */
+    SEC_CONTEXT_USED,        /*< SEC context is unused and is located in the in-use list. */
+    SEC_CONTEXT_RETIRING,    /*< SEC context is unused and is located in the retire list. */
 }sec_context_usage_t;
 
 struct sec_contexts_pool_s;
 struct sec_context_s;
 
-typedef uint32_t (*free_or_retire_ctx_func_ptr)(struct sec_contexts_pool_s * pool, struct sec_context_s * ctx);
-typedef struct sec_context_s* (*get_free_context_func_ptr)(struct sec_contexts_pool_s * pool);
-
+/** The declaration of a context pool. */
 typedef struct sec_contexts_pool_s
 {
-	list_t free_list; // list of free contexts
-	list_t retire_list; // list of retired contexts
-	list_t in_use_list; // list of in use contexts
+	/* The list of free contexts */
+	list_t free_list;
+	/* The list of retired contexts */
+	list_t retire_list;
+	/* The list of in use contexts */
+	list_t in_use_list;
 
+	/* Total number of contexts available in all three lists. */
 	uint32_t no_of_contexts;
-
-	// pointer to a function used to free or retire a context
-	free_or_retire_ctx_func_ptr free_or_retire_ctx_func;
-	get_free_context_func_ptr get_free_ctx_func;
-
-	uint8_t thread_safe; // valid values: #THREAD_SAFE_POOL, #THREAD_UNSAFE_POOL
 
 }sec_contexts_pool_t;
 
-/* SEC context structure. */
+/** The declaration of a SEC context structure. */
 typedef struct sec_context_s
 {
-	/* Data used to iterate through a list of contexts */
+	/** A node in the list which holds this sec context.
+	 * @note: For the whole list concept to work the list_node_t must be defined
+	 * statically in the sec_context_t structure. This is needed because the address
+	 * of a sec_context is computed by subtracting the offset of the node member in
+	 * the sec_context_t structure from the address of the node.
+	 *
+	 * To optimize this, the node is placed right at the beginning of the sec_context_t
+	 * structure thus having the same address with the context itself. So no need for
+	 * subtraction.
+	 * @note: The macro #GET_CONTEXT_FROM_LIST_NODE is implemented with this optimization!!!!
+	 * @note: Do not change the position of the node member in the structure.
+	 * */
 	list_node_t node;
-
-    /* The callback called for UA notifications */
-    sec_out_cbk notify_packet_cbk;
-    /* The status of the sec context.*/
-    sec_context_usage_t usage;
-    /* The handle of the JR to which this context is affined */
+    /** The handle of the JR to which this context is affined.
+     *  This handle is needed in sec_process_packet() function to identify
+     *  the input JR in which the packet will be enqueued.  */
     sec_job_ring_handle_t * jr_handle;
     /* The pool this context belongs to.
-     * This info is needed when delete context is received from UA */
+     * This pointer is needed when delete_pdcp_context() is received from UA
+     * to be able to identify the pool from which this context was acquired.
+     * A context can be taken from:
+     *  - the affined JR's pool
+     *  - global pool if the affined JR's pool is full
+     *  */
     sec_contexts_pool_t * pool;
-    /* Number of packets in flight for this context.*/
-    int packets_no;
+    /** The callback called for UA notifications. */
+	sec_out_cbk notify_packet_cbk;
     /* Mutex used to synchronize the access to usage & packets_no members
      * from two different threads: Producer and Consumer.
      * TODO: find a solution to remove it.*/
     pthread_mutex_t mutex;
-
+    /** The status of the sec context.
+     *  This status is needed in the sec_poll function, to decide which packet status
+     *  to provide to UA when the notification callback is called.
+     *  This field may seem redundant (because of the three lists) but it is not. */
+    sec_context_usage_t usage;
+    /* Number of packets in flight for this context.
+	 * The maximum value this counter can have is the maximum size of a JR.
+	 * For SEC 4.4 being 1024 and for SEC 3.1 being 24.
+	 * It is safe to use 2 bytes for this counter. */
+	uint16_t packets_no;
 }sec_context_t;
 
 
@@ -126,12 +147,57 @@ typedef struct sec_context_s
                                      FUNCTION PROTOTYPES
 ==================================================================================================*/
 
+/** @brief Initialize a pool of sec contexts.
+ *
+ *  The pool can be configured thread safe or not.
+ *  A thread safe pool will use thread safe lists for storing the contexts.
+ *
+ * @param [in] pool                Pointer to a sec context pool structure.
+ * @param [in] number_of_contexts  The number of contexts to allocated for this pool.
+ * @param [in] thread_safe         Configure the thread safeness.
+ *                                 Valid values: #THREAD_SAFE_POOL, #THREAD_UNSAFE_POOL
+ */
 uint32_t init_contexts_pool(sec_contexts_pool_t * pool,
 		                    const uint32_t number_of_contexts,
 		                    const uint8_t thread_safe);
 
+/** @brief Destroy a pool of sec contexts.
+ *
+ *  Destroy the lists and free any memory allocated.
+ *
+ *  @param [in] pool                Pointer to a sec context pool structure.
+ * */
 void destroy_contexts_pool(sec_contexts_pool_t * pool);
 
+/** @brief Get a free context from the pool.
+ *
+ *  @note If the pool was configured as thread safe, then this function CAN be called
+ *  by multiple threads simultaneously.
+ *  @note If the pool was not configured as thread safe, then this function CANNOT be called
+ *  by multiple threads simultaneously.
+ *
+ *  @param [in] pool                Pointer to a sec context pool structure.
+ * */
+sec_context_t* get_free_context(sec_contexts_pool_t * pool);
+
+/** @brief Release a context from the pool.
+ *
+ *  If the context has packets in flight, the context will be moved to a retire list and
+ *  will not be available for reuse until all packets in flight are processed.
+ *
+ *  If the context has no packets in flight, the context will be moved to the free list
+ *  and will be available for reuse.
+ *
+ *  @note If the pool was configured as thread safe, then this function CAN be called
+ *  by multiple threads simultaneously.
+ *  @note If the pool was not configured as thread safe, then this function CANNOT be called
+ *  by multiple threads simultaneously.
+ *
+ *  @param [in] pool                Pointer to a sec context pool structure.
+ *  @param [in] ctx                 Pointer to the sec context that should be deleted.
+ * */
+
+uint32_t free_or_retire_context(sec_contexts_pool_t * pool, sec_context_t * ctx);
 /*================================================================================================*/
 
 

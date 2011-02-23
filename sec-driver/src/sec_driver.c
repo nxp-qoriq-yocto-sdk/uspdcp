@@ -40,7 +40,6 @@ extern "C" {
 
 #include "fsl_sec.h"
 #include "sec_contexts.h"
-#include "sec_internal.h"
 
 #include <stddef.h>
 #include <assert.h>
@@ -272,9 +271,11 @@ uint32_t sec_init(sec_config_t *sec_config_data,
     {
         reset_job_ring(&job_rings[i]);
 
-        // initialize the context pool per JR
-        // no need for thread synchronizations mechanisms for this pool
-        ret = init_contexts_pool(&(job_rings[i].ctx_pool), MAX_SEC_CONTEXTS_PER_POOL, THREAD_UNSAFE);
+        // Initialize the context pool per JR
+        // No need for thread synchronizations mechanisms for this pool because
+        // one of the assumptions for this API is that only one thread will
+        // create/delete contexts for a certain JR (also known as the producer of the JR).
+        ret = init_contexts_pool(&(job_rings[i].ctx_pool), MAX_SEC_CONTEXTS_PER_POOL, THREAD_UNSAFE_POOL);
         assert(ret == 0);
 
         job_rings[i].irq_fd = i + 1;
@@ -287,7 +288,7 @@ uint32_t sec_init(sec_config_t *sec_config_data,
 
     // initialize the global pool of contexts also
     // we need for thread synchronizations mechanisms for this pool
-    ret = init_contexts_pool(&g_ctx_pool, MAX_SEC_CONTEXTS_PER_POOL, THREAD_SAFE);
+    ret = init_contexts_pool(&g_ctx_pool, MAX_SEC_CONTEXTS_PER_POOL, THREAD_SAFE_POOL);
     assert(ret == 0);
 
     // Remember initial work mode
@@ -358,12 +359,10 @@ uint32_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
     // global pool is that the access to it needs to be synchronized because it can
     // be accessed simultaneously by 2 threads (the producer thread of JR1 and the
     // producer thread for JR2).
-    assert(job_ring->ctx_pool.get_free_ctx_func != NULL);
-    if((ctx = job_ring->ctx_pool.get_free_ctx_func(&job_ring->ctx_pool)) == NULL)
+    if((ctx = get_free_context(&job_ring->ctx_pool)) == NULL)
     {
     	// get free context from the global pool of contexts (with lock)
-    	assert(g_ctx_pool.get_free_ctx_func != NULL);
-        if((ctx = g_ctx_pool.get_free_ctx_func(&g_ctx_pool)) == NULL)
+        if((ctx = get_free_context(&g_ctx_pool)) == NULL)
         {
 			// no free contexts in the global pool
 			return SEC_DRIVER_NO_FREE_CONTEXTS;
@@ -415,19 +414,14 @@ uint32_t sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle)
     {
         return SEC_INVALID_INPUT_PARAM;
     }
-    sec_job_ring_t * job_ring = (sec_job_ring_t *)sec_context->jr_handle;
-    if(job_ring == NULL)
-    {
-        return SEC_INVALID_INPUT_PARAM;
-    }
+
     pool = sec_context->pool;
     assert (pool != NULL);
 
     // Now try to free the current context. If there are packets
     // in flight the context will be retired (not freed). The context
     // will be freed in the next garbage collector call.
-    assert(sec_context->pool->free_or_retire_ctx_func != NULL);
-    return pool->free_or_retire_ctx_func(pool, sec_context);
+    return free_or_retire_context(pool, sec_context);
 
     /* Stub Implementation - END */
 
@@ -605,7 +599,7 @@ uint32_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
         return SEC_INVALID_INPUT_PARAM;
     }
 
-
+    // check of the Job Ring is full (the difference between PI and CI is equal with the JR SIZE - 1)
     if(SEC_JOB_RING_DIFF(SEC_JOB_RING_SIZE, job_ring->pidx, job_ring->cidx) == (SEC_JOB_RING_SIZE - 1))
     {
         return SEC_JR_IS_FULL;
