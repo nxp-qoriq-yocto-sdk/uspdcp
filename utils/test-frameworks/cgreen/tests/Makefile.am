@@ -29,20 +29,11 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
-# Configure the toolchain path to that currently installed
-# by ltib (so adjust as required).
+
+bin_PROGRAMS = cgreen_test
+
+AM_CFLAGS := -I$(TOP_LEVEL)/utils/test_framework/cgreen
 
 
-# The target architecture
-ARCH := powerpc
-#ARCH := i686
-
-EXTRA_DEFINE := SEC_HW_VERSION_3_1
-#EXTRA_DEFINE := SEC_HW_VERSION_4_4
-
-# The path to the cross compilation tools
-CROSS_TOOLS_PATH := /opt/freescale/usr/local/gcc-4.3.74-eglibc-2.8.74-dp-2/powerpc-none-linux-gnuspe/bin
-
-# The prefix for compilation directives
-CROSS_COMPILE := $(CROSS_TOOLS_PATH)/powerpc-none-linux-gnuspe-
-
+cgreen_test_SOURCES := all_tests.c breadcrumb_tests.c messaging_tests.c assertion_tests.c vector_tests.c constraint_tests.c parameters_test.c mocks_tests.c
+cgreen_test_LDADD := cgreen

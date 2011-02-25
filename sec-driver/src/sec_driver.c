@@ -371,11 +371,12 @@ uint32_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
     assert(ctx != NULL);
     assert(ctx->pool != NULL);
 
+    // set the notification callback per context
     ctx->notify_packet_cbk = sec_ctx_info->notify_packet;
-    // TODO: JR handle could be set when the pool of contexts is initialized
+    // Set the JR handle.
     ctx->jr_handle = (sec_job_ring_handle_t)job_ring;
 
-	// provide to UA a sec ctx handle
+	// provide to UA a SEC ctx handle
 	*sec_ctx_handle = (sec_context_handle_t)ctx;
 
     return SEC_SUCCESS;

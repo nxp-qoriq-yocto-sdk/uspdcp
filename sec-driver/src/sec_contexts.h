@@ -85,6 +85,7 @@ typedef struct sec_contexts_pool_s
 
 	/* Total number of contexts available in all three lists. */
 	uint32_t no_of_contexts;
+	struct sec_context_s * sec_contexts;
 
 }sec_contexts_pool_t;
 
@@ -157,9 +158,9 @@ typedef struct sec_context_s
  * @param [in] thread_safe         Configure the thread safeness.
  *                                 Valid values: #THREAD_SAFE_POOL, #THREAD_UNSAFE_POOL
  */
-uint32_t init_contexts_pool(sec_contexts_pool_t * pool,
-		                    const uint32_t number_of_contexts,
-		                    const uint8_t thread_safe);
+sec_return_code_t init_contexts_pool(sec_contexts_pool_t * pool,
+		                             const uint32_t number_of_contexts,
+		                             const uint8_t thread_safe);
 
 /** @brief Destroy a pool of sec contexts.
  *
@@ -183,7 +184,10 @@ sec_context_t* get_free_context(sec_contexts_pool_t * pool);
 /** @brief Release a context from the pool.
  *
  *  If the context has packets in flight, the context will be moved to a retire list and
- *  will not be available for reuse until all packets in flight are processed.
+ *  will not be available for reuse until all packets in flight are processed. This function
+ *  should not be called again for the same context once all the packets in flight were processed.
+ *  A garbage collector is called for every call to get_free_context() or free_or_retire_context()
+ *  which will make the retired contexts with no packets in flight reusable.
  *
  *  If the context has no packets in flight, the context will be moved to the free list
  *  and will be available for reuse.
@@ -197,7 +201,7 @@ sec_context_t* get_free_context(sec_contexts_pool_t * pool);
  *  @param [in] ctx                 Pointer to the sec context that should be deleted.
  * */
 
-uint32_t free_or_retire_context(sec_contexts_pool_t * pool, sec_context_t * ctx);
+sec_return_code_t free_or_retire_context(sec_contexts_pool_t * pool, sec_context_t * ctx);
 /*================================================================================================*/
 
 

@@ -42,7 +42,7 @@ extern "C" {
 
 #include <assert.h>
 #include <string.h>
-#include <stdio.h>
+#include <stdlib.h>
 /*==================================================================================================
                                      LOCAL CONSTANTS
 ==================================================================================================*/
@@ -74,10 +74,6 @@ extern "C" {
                                       LOCAL VARIABLES
 ==================================================================================================*/
 
-/* Statically allocate memory for SEC contexts.
- * These contexts will be used for filling the JR pools and the global pool. */
-static sec_context_t sec_contexts[SEC_MAX_PDCP_CONTEXTS];
-static int no_of_contexts_used = 0;
 /*==================================================================================================
                                      GLOBAL CONSTANTS
 ==================================================================================================*/
@@ -168,7 +164,7 @@ static void destroy_pool_list(list_t * list)
 	{
 		node = list->remove_first(list);
 		ctx = GET_CONTEXT_FROM_LIST_NODE(node);
-		assert((uint32_t)ctx == (uint32_t)node);
+		assert((void*)ctx == (void*)node);
 
 		// destroy the context's mutex
 		pthread_mutex_destroy(&(ctx->mutex));
@@ -284,20 +280,19 @@ static void run_contexts_garbage_colector(sec_contexts_pool_t * pool)
                                      GLOBAL FUNCTIONS
 ==================================================================================================*/
 
-uint32_t init_contexts_pool(sec_contexts_pool_t * pool,
-		                    const uint32_t number_of_contexts,
-		                    const uint8_t thread_safe)
+sec_return_code_t init_contexts_pool(sec_contexts_pool_t * pool,
+		                             const uint32_t number_of_contexts,
+		                             const uint8_t thread_safe)
 {
 	int i = 0;
 	sec_context_t * ctx = NULL;
 
 	assert(pool != NULL);
+	assert(thread_safe == THREAD_SAFE_POOL || thread_safe == THREAD_UNSAFE_POOL);
 
-	if(no_of_contexts_used + number_of_contexts > SEC_MAX_PDCP_CONTEXTS)
+	if (number_of_contexts == 0)
 	{
-		// not enough contexts allocated statically
-		// consider increasing #SEC_MAX_PDCP_CONTEXTS
-		return 1;
+		return SEC_INVALID_INPUT_PARAM;
 	}
 
 	// init lists
@@ -305,12 +300,20 @@ uint32_t init_contexts_pool(sec_contexts_pool_t * pool,
 	list_init(&pool->retire_list, thread_safe);
 	list_init(&pool->in_use_list, thread_safe);
 
+	// Allocate memory for this pool from heap
+	// The pool is allocated at startup so this should not impact the runtime performance.
+	pool->sec_contexts = malloc(number_of_contexts * sizeof(sec_context_t));
+	if (pool->sec_contexts == NULL)
+	{
+		// failed to allocate memory
+		return SEC_OUT_OF_MEMORY;
+	}
+
 	// fill up free list with free contexts from the statically defined array of contexts
 	for (i = 0; i < number_of_contexts; i++)
 	{
 		// get a context from the statically allocated global array
-		ctx = &sec_contexts[no_of_contexts_used];
-		no_of_contexts_used++;
+		ctx = &pool->sec_contexts[i];
 
 		// initialize the sec_context with valid values
 		memset(ctx, 0, sizeof(sec_context_t));
@@ -318,31 +321,28 @@ uint32_t init_contexts_pool(sec_contexts_pool_t * pool,
 		ctx->usage = SEC_CONTEXT_UNUSED;
 		ctx->pool = pool;
 
-		// add the context to the free list
-		// WARNING: do not memset the context after adding it
+		// Add the context to the free list
+		// WARNING: do not memset with zero the context after adding it
 		// to the list because it will override the node's next and
-		// prev pointers
+		// prev pointers.
 		pool->free_list.add_tail(&pool->free_list, &ctx->node);
 	}
 
-	pool->no_of_contexts = number_of_contexts;
-
-	return 0;
+	return SEC_SUCCESS;
 }
 
 void destroy_contexts_pool(sec_contexts_pool_t * pool)
 {
 	assert(pool != NULL);
 
+	// destroy the lists
 	destroy_pool_list(&pool->free_list);
 	destroy_pool_list(&pool->retire_list);
 	destroy_pool_list(&pool->in_use_list);
 
-	// TODO: Implement a safe mechanism for releasing contexts
-	// In case some pools are destroyed at runtime, a simple index in the array
-	// is not enough to keep track of the released/used contexts from the array
-	// sec_contexts
-	no_of_contexts_used -= pool->no_of_contexts;
+	// free the memory allocated for the contexts
+	assert(pool->sec_contexts != NULL);
+	free(pool->sec_contexts);
 
 	memset(pool, 0, sizeof(sec_contexts_pool_t));
 }
@@ -393,7 +393,7 @@ sec_context_t* get_free_context(sec_contexts_pool_t * pool)
     return ctx;
 }
 
-uint32_t free_or_retire_context(sec_contexts_pool_t * pool, sec_context_t * ctx)
+sec_return_code_t free_or_retire_context(sec_contexts_pool_t * pool, sec_context_t * ctx)
 {
 	assert(pool != NULL);
 	assert(ctx != NULL);

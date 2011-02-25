@@ -36,7 +36,15 @@
 /* These types are for linux-compatibility, eg. they're used by single-source
  * qbman drivers. These aren't in compat.h because that would lead to
  * dependencies being back-to-front. */
+
+#if defined(__powerpc64__) || defined(CONFIG_PHYS_64BIT)
+/** Physical address on 36 bits or more. MUST be kept in synch with same define from kernel! */
+typedef uint64_t dma_addr_t;
+#else
+/** Physical address on 32 bits. MUST be kept in synch with same define from kernel!*/
 typedef uint32_t dma_addr_t;
+#endif
+
 enum dma_data_direction {
 	DMA_BIDIRECTIONAL = 0,
 	DMA_TO_DEVICE = 1,
