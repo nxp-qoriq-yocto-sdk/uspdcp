@@ -30,9 +30,10 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-lib_LIBRARIES = sec-driver
+bin_PROGRAMS = cgreen_test
 
-AM_CFLAGS := -I$(TOP_LEVEL)/sec-driver/include -I$(TOP_LEVEL)/of/include 
+AM_CFLAGS := -I$(TOP_LEVEL)/utils/test_framework/cgreen
 
-SRC=src
-sec-driver_SOURCES := $(SRC)/sec_driver.c $(SRC)/list.c $(SRC)/sec_contexts.c
+
+cgreen_test_SOURCES := all_tests.c breadcrumb_tests.c messaging_tests.c assertion_tests.c vector_tests.c constraint_tests.c parameters_test.c mocks_tests.c
+cgreen_test_LDADD := cgreen

@@ -30,9 +30,10 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-lib_LIBRARIES = sec-driver
+lib_LIBRARIES = cgreen
 
-AM_CFLAGS := -I$(TOP_LEVEL)/sec-driver/include -I$(TOP_LEVEL)/of/include 
+AM_CFLAGS := -I$(TOP_LEVEL)/utils/test_framework/cgreen
 
 SRC=src
-sec-driver_SOURCES := $(SRC)/sec_driver.c $(SRC)/list.c $(SRC)/sec_contexts.c
+
+cgreen_SOURCES := reporter.c  breadcrumb.c mocks.c  unit.c constraint.c messaging.c  parameters.c text_reporter.c vector.c assertions.c

@@ -186,7 +186,6 @@ typedef phys_addr_t (*vtop_function)(void *address);
  */
 typedef void* (*ptov_function)(phys_addr_t address);
 
-
 /** @brief Function called by SEC user space driver to notify every processed packet.
  *
  * Callback provided by the User Application when a SEC PDCP context is created.
