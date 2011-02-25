@@ -33,7 +33,7 @@
 include ./Makefile.config
 
 # All "Makefile.am"s found beneath these directories are processed;
-DIRS := sec-driver of
+DIRS := sec-driver of utils
 
 # ----=[ Arch specific definitions ]=----
 ifneq (distclean,$(MAKECMDGOALS))

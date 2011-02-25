@@ -78,25 +78,25 @@ extern "C"{
 #define SEC_DRIVER_LOG_INFO  1
 
 /** Bit mask in #SEC_ASSIGNED_JOB_RINGS for Job Ring id 0 */
-#define SEC_JOB_RING_0  0x1
+#define SEC_JOB_RING_0  0x8
 /** Bit mask in #SEC_ASSIGNED_JOB_RINGS for Job Ring id 1 */
-#define SEC_JOB_RING_1  0x2
+#define SEC_JOB_RING_1  0x4
 /** Bit mask in #SEC_ASSIGNED_JOB_RINGS for Job Ring id 2 */
-#define SEC_JOB_RING_2  0x4
+#define SEC_JOB_RING_2  0x2
 /** Bit mask in #SEC_ASSIGNED_JOB_RINGS for Job Ring id 3 */
-#define SEC_JOB_RING_3  0x8
+#define SEC_JOB_RING_3  0x1
 
 /** Calculate the number of Job Rings enabled from the SEC_ASSIGNED_JOB_RINGS mask*/
-#define SEC_NUMBER_JOB_RINGS    ((SEC_ASSIGNED_JOB_RINGS & SEC_JOB_RING_0) + \
-                                ((SEC_ASSIGNED_JOB_RINGS & SEC_JOB_RING_1) >> 1)) + \
-                                ((SEC_ASSIGNED_JOB_RINGS & SEC_JOB_RING_2) >> 2) + \
-                                ((SEC_ASSIGNED_JOB_RINGS & SEC_JOB_RING_3) >> 3)
+#define SEC_NUMBER_JOB_RINGS    ((SEC_ASSIGNED_JOB_RINGS & SEC_JOB_RING_3) + \
+                                ((SEC_ASSIGNED_JOB_RINGS & SEC_JOB_RING_2) >> 1)) + \
+                                ((SEC_ASSIGNED_JOB_RINGS & SEC_JOB_RING_1) >> 2) + \
+                                ((SEC_ASSIGNED_JOB_RINGS & SEC_JOB_RING_0) >> 3)
 
 
-#define SEC_NUMBER_JOB_RINGS_DTS(mask)  (((mask) & SEC_JOB_RING_0) + \
-                                        (((mask) & SEC_JOB_RING_1) >> 1)) + \
-                                        (((mask) & SEC_JOB_RING_2) >> 2) + \
-                                        (((mask) & SEC_JOB_RING_3) >> 3)
+#define SEC_NUMBER_JOB_RINGS_DTS(mask)  (((mask) & SEC_JOB_RING_3) + \
+                                        (((mask) & SEC_JOB_RING_2) >> 1)) + \
+                                        (((mask) & SEC_JOB_RING_1) >> 2) + \
+                                        (((mask) & SEC_JOB_RING_0) >> 3)
 
 
 /************************************************/

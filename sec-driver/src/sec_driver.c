@@ -67,7 +67,8 @@ extern "C" {
                                      LOCAL CONSTANTS
 ==================================================================================================*/
 /* Max sec contexts per JR computed based on the SEC_ASSIGNED_JOB_RINGS bitmask */
-#define MAX_SEC_CONTEXTS_PER_JR   (SEC_MAX_PDCP_CONTEXTS / SEC_NUMBER_JOB_RINGS)
+//#define MAX_SEC_CONTEXTS_PER_JR   (SEC_MAX_PDCP_CONTEXTS / SEC_NUMBER_JOB_RINGS)
+#define MAX_SEC_CONTEXTS_PER_JR   (SEC_MAX_PDCP_CONTEXTS)
 
 /* Maximum number of job rings supported by SEC hardware */
 #define MAX_SEC_JOB_RINGS         4
@@ -115,17 +116,21 @@ typedef struct sec_job_ring_s
     /* Pool of SEC contexts */
     sec_context_t sec_contexts[MAX_SEC_CONTEXTS_PER_JR];
     int sec_contexts_no;
-
-    /* Array of jobs per job ring */
-    sec_job_t jobs[SEC_JOB_RING_SIZE];
-    int jobs_no;
-
-    /* Mutex used to synchronize access to jobs array and
+    /* Mutex used to synchronize access to
      * array of contexts (sec_contexts).
-       TODO: Remove this mutex by replacing the arrays
-       with lock-free queues (for the case with one
+       TODO: Remove this mutex by replacing the array
+       with a lock-free data structure (for the case with one
        producer and one consumer) */
-    pthread_mutex_t mutex;
+    pthread_mutex_t ctx_pool_mutex;
+
+    /* Ring of jobs. In this stub the same ring is used for
+     * input jobs and output jobs. */
+    sec_job_t jobs[SEC_JOB_RING_SIZE];
+    // consumer index for job ring (jobs array)
+    int cidx;
+    // producer index for job ring (jobs array)
+    int pidx;
+
     /* The file descriptor used for polling from user space
      * for interrupts notifications */
     int irq_fd;
@@ -135,6 +140,9 @@ typedef struct sec_job_ring_s
 ==================================================================================================*/
 
 #define SEC_CIRCULAR_COUNTER(x, max)   ((x) + 1) * ((x) != (max - 1))
+
+// The number of jobs in a JOB RING
+#define SEC_JOB_RING_DIFF(ring_max_size, pi, ci) (((pi) < (ci)) ? ((ring_max_size) + (pi) - (ci)) : ((pi) - (ci)))
 
 /*==================================================================================================
                                       LOCAL VARIABLES
@@ -207,6 +215,20 @@ static int enable_irq_per_job_ring(sec_job_ring_t *job_ring);
 
 
 static void sec_driver_config(void);
+/** @brief Poll the HW for already processed jobs in the JR
+ * and notify the available jobs to UA.
+ *
+ * @param [in]  job_ring    The job ring to poll.
+ * @param [in]  limit       The maximum number of jobs to notify.
+ *                          If set to -1, all available jobs are notified.
+ * @param [out] packets_no  No of jobs notified to UA.
+ *
+ * @retval 0 for success
+ * @retval other value for error
+ */
+static uint32_t hw_poll_job_ring(sec_job_ring_t * job_ring,
+                                 int32_t limit,
+                                 uint32_t *packets_no);
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
@@ -224,7 +246,8 @@ static void reset_job_ring(sec_job_ring_t * job_ring)
         job_ring->sec_contexts[j].jr_handle = NULL;
     }
 
-    job_ring->jobs_no = 0;
+    job_ring->cidx = 0;
+    job_ring->pidx = 0;
     for (j = 0; j < SEC_JOB_RING_SIZE; j++)
     {
         job_ring->jobs[j].sec_context = NULL;
@@ -269,58 +292,61 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t * job_ring,
                                  int32_t limit,
                                  uint32_t *packets_no)
 {
-     /* Stub Implementation - START */
+    /* Stub Implementation - START */
     sec_context_t * sec_context;
     sec_job_t *job;
-    int j = 0;
     int jobs_no_to_notify = 0; // the number of done jobs to notify to UA
     sec_status_t status = SEC_STATUS_SUCCESS;
     int notified_packets_no = 0;
-
-    pthread_mutex_lock( &job_ring->mutex );
+    int number_of_jobs_available = 0;
 
     // Compute the number of notifications that need to be raised to UA
     // If limit < 0 -> notify all done jobs
     // If limit > total number of done jobs -> notify all done jobs
     // If limit = 0 -> error
     // If limit > 0 && limit < total number of done jobs -> notify a number of done jobs equal with limit
-    jobs_no_to_notify = (limit < 0 || limit > job_ring->jobs_no) ? job_ring->jobs_no : limit;
-    if (jobs_no_to_notify != 0 )
+
+    // compute the number of jobs available in the job ring based on the
+    // producer and consumer index values.
+    number_of_jobs_available = SEC_JOB_RING_DIFF(SEC_JOB_RING_SIZE, job_ring->pidx, job_ring->cidx);
+
+    jobs_no_to_notify = (limit < 0 || limit > number_of_jobs_available) ? number_of_jobs_available : limit;
+
+    while(jobs_no_to_notify > notified_packets_no)
     {
-        for (j = 0; j < jobs_no_to_notify; j++)
+        // get the first un-notified job from the job ring
+        job = &job_ring->jobs[job_ring->cidx];
+
+        sec_context = job->sec_context;
+        assert (sec_context->notify_packet_cbk != NULL);
+
+        pthread_mutex_lock(&sec_context->ctx_mutex);
+
+        status = SEC_STATUS_SUCCESS;
+        // if context is retiring, set a suggestive status for the
+        // packets notified to UA
+        if (sec_context->usage == SEC_CONTEXT_RETIRING)
         {
-            job = &job_ring->jobs[j];
-            sec_context = job->sec_context;
-            assert (sec_context->notify_packet_cbk != NULL);
-
-            pthread_mutex_lock(&sec_context->ctx_mutex);
-
-            status = SEC_STATUS_SUCCESS;
-            // if context is retiring, set a suggestive status for the
-            // packets notified to UA
-            if (sec_context->usage == SEC_CONTEXT_RETIRING)
-            {
-                assert(sec_context->packets_no >= 1);
-                status = (sec_context->packets_no > 1) ? SEC_STATUS_OVERDUE : SEC_STATUS_LAST_OVERDUE;
-            }
-            // call the calback
-            sec_context->notify_packet_cbk(&job->in_packet,
-                                           &job->out_packet,
-                                           job->ua_handle,
-                                           status,
-                                           0);
-
-            // decrement packet reference count in sec context
-            sec_context->packets_no--;
-
-            pthread_mutex_unlock(&sec_context->ctx_mutex);
-
-            notified_packets_no++;
-
-            job_ring->jobs_no--;
+            assert(sec_context->packets_no >= 1);
+            status = (sec_context->packets_no > 1) ? SEC_STATUS_OVERDUE : SEC_STATUS_LAST_OVERDUE;
         }
+        // call the calback
+        sec_context->notify_packet_cbk(&job->in_packet,
+                                       &job->out_packet,
+                                       job->ua_handle,
+                                       status,
+                                       0);
+
+        // decrement packet reference count in sec context
+        sec_context->packets_no--;
+
+        pthread_mutex_unlock(&sec_context->ctx_mutex);
+
+        notified_packets_no++;
+
+        // increment the consumer index for the current job ring
+        job_ring->cidx = SEC_CIRCULAR_COUNTER(job_ring->cidx, SEC_JOB_RING_SIZE);
     }
-    pthread_mutex_unlock( &job_ring->mutex );
 
     *packets_no = notified_packets_no;
 
@@ -404,7 +430,7 @@ uint32_t sec_init(sec_config_t *sec_config_data,
         {
             pthread_mutex_init(&job_rings[i].sec_contexts[j].ctx_mutex, NULL);
         }
-        pthread_mutex_init(&job_rings[i].mutex, NULL);
+        pthread_mutex_init(&job_rings[i].ctx_pool_mutex, NULL);
 
         job_rings[i].irq_fd = i + 1;
 
@@ -439,7 +465,7 @@ uint32_t sec_release()
         {
             pthread_mutex_destroy(&job_rings[i].sec_contexts[j].ctx_mutex);
         }
-        pthread_mutex_destroy(&job_rings[i].mutex);
+        pthread_mutex_destroy(&job_rings[i].ctx_pool_mutex);
     }
     g_job_rings_no = 0;
 
@@ -476,7 +502,7 @@ uint32_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
     }
 
     // synchronize access to job ring's pool of contexts
-    pthread_mutex_lock(&job_ring->mutex);
+    pthread_mutex_lock(&job_ring->ctx_pool_mutex);
 
     if(job_ring->sec_contexts_no >= MAX_SEC_CONTEXTS_PER_JR)
     {
@@ -522,7 +548,7 @@ uint32_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
     // were notified to UA
     run_contexts_garbage_colector(job_ring);
 
-    pthread_mutex_unlock(&job_ring->mutex);
+    pthread_mutex_unlock(&job_ring->ctx_pool_mutex);
 
     return SEC_SUCCESS;
 
@@ -565,7 +591,7 @@ uint32_t sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle)
     }
 
     // synchronize access to job ring's pool of contexts
-    pthread_mutex_lock(&job_ring->mutex);
+    pthread_mutex_lock(&job_ring->ctx_pool_mutex);
 
     // Run a contexts garbage collector on the job ring's pool of contexts first
     // The contexts are deleted only from the Producer Thread such that to minimize the
@@ -586,7 +612,7 @@ uint32_t sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle)
         sec_context->usage = SEC_CONTEXT_RETIRING;
 
         pthread_mutex_unlock(&sec_context->ctx_mutex);
-        pthread_mutex_unlock(&job_ring->mutex);
+        pthread_mutex_unlock(&job_ring->ctx_pool_mutex);
 
         return SEC_PACKETS_IN_FLIGHT;
     }
@@ -601,7 +627,7 @@ uint32_t sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle)
     job_ring->sec_contexts_no--;
 
     // end of critical area for pool of contexts
-    pthread_mutex_unlock(&job_ring->mutex);
+    pthread_mutex_unlock(&job_ring->ctx_pool_mutex);
 
     return SEC_SUCCESS;
 
@@ -753,13 +779,13 @@ uint32_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
                             sec_packet_t *out_packet,
                             ua_context_handle_t ua_ctx_handle)
 {
-
     /* Stub Implementation - START */
+
 #if FSL_SEC_ENABLE_SCATTER_GATHER == ON
 #error "Scatter/Gather support is not implemented!"
 #endif
-
     sec_context_t * sec_context = (sec_context_t *)sec_ctx_handle;
+
     if (sec_context == NULL ||
         sec_context->usage == SEC_CONTEXT_UNUSED)
     {
@@ -782,32 +808,30 @@ uint32_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
     }
 
 
-    pthread_mutex_lock( &job_ring->mutex );
-
-    if(job_ring->jobs_no >= SEC_JOB_RING_SIZE)
+    if(SEC_JOB_RING_DIFF(SEC_JOB_RING_SIZE, job_ring->pidx, job_ring->cidx) == (SEC_JOB_RING_SIZE - 1))
     {
-        pthread_mutex_unlock( &job_ring->mutex );
         return SEC_JR_IS_FULL;
     }
 
     // add new job in job ring
-    job_ring->jobs[job_ring->jobs_no].in_packet.address = in_packet->address;
-    job_ring->jobs[job_ring->jobs_no].in_packet.offset = in_packet->offset;
-    job_ring->jobs[job_ring->jobs_no].in_packet.length = in_packet->length;
+    job_ring->jobs[job_ring->pidx].in_packet.address = in_packet->address;
+    job_ring->jobs[job_ring->pidx].in_packet.offset = in_packet->offset;
+    job_ring->jobs[job_ring->pidx].in_packet.length = in_packet->length;
 
-    job_ring->jobs[job_ring->jobs_no].out_packet.address = out_packet->address;
-    job_ring->jobs[job_ring->jobs_no].out_packet.offset = out_packet->offset;
-    job_ring->jobs[job_ring->jobs_no].out_packet.length = out_packet->length;
+    job_ring->jobs[job_ring->pidx].out_packet.address = out_packet->address;
+    job_ring->jobs[job_ring->pidx].out_packet.offset = out_packet->offset;
+    job_ring->jobs[job_ring->pidx].out_packet.length = out_packet->length;
 
-    job_ring->jobs[job_ring->jobs_no].sec_context = sec_context;
-    job_ring->jobs[job_ring->jobs_no].ua_handle = ua_ctx_handle;
+    job_ring->jobs[job_ring->pidx].sec_context = sec_context;
+    job_ring->jobs[job_ring->pidx].ua_handle = ua_ctx_handle;
 
     // increment packet reference count in sec context
+    pthread_mutex_lock(&sec_context->ctx_mutex);
     sec_context->packets_no++;
-    // increment the number of jobs in jr
-    job_ring->jobs_no++;
+    pthread_mutex_unlock(&sec_context->ctx_mutex);
 
-    pthread_mutex_unlock( &job_ring->mutex );
+    // increment the producer index for the current job ring
+    job_ring->pidx = SEC_CIRCULAR_COUNTER(job_ring->pidx, SEC_JOB_RING_SIZE);
 
     return SEC_SUCCESS;
     /* Stub Implementation - END */
