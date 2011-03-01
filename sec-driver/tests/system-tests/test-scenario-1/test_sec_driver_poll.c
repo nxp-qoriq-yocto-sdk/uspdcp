@@ -143,8 +143,12 @@ typedef struct thread_config_s
     int tid;
     // the JR ID for which this thread is a producer
     int producer_job_ring_id;
+    // the UIO device file descriptor for the JR which this thread is a producer of
+    int producer_job_ring_fd;
     // the JR ID for which this thread is a consumer
     int consumer_job_ring_id;
+    // the UIO device file descriptor for the JR which this thread is a consumer of
+    int consumer_job_ring_fd;
     // the pool of contexts for this thread
     pdcp_context_t * pdcp_contexts;
     // no of used contexts from the pool
@@ -652,7 +656,11 @@ static int start_sec_worker_threads(void)
     th_config[0].tid = 0;
     // PDCP UL thread is consumer on JR ID 0 and producer on JR ID 1
     th_config[0].consumer_job_ring_id = 0;
+    th_config[0].consumer_job_ring_fd = job_ring_descriptors[0].job_ring_irq_fd;
+
     th_config[0].producer_job_ring_id = 1;
+    th_config[0].producer_job_ring_fd = job_ring_descriptors[1].job_ring_irq_fd;
+
     th_config[0].pdcp_contexts = &pdcp_ul_contexts[0];
     th_config[0].no_of_used_pdcp_contexts = &no_of_used_pdcp_ul_contexts;
     th_config[0].no_of_pdcp_contexts_to_test =
@@ -668,7 +676,11 @@ static int start_sec_worker_threads(void)
     th_config[1].tid = 1;
     // PDCP DL thread is consumer on JR ID 1 and producer on JR ID 0
     th_config[1].consumer_job_ring_id = 1;
+    th_config[1].consumer_job_ring_fd = job_ring_descriptors[1].job_ring_irq_fd;
+
     th_config[1].producer_job_ring_id = 0;
+    th_config[1].producer_job_ring_fd = job_ring_descriptors[0].job_ring_irq_fd;
+
     th_config[1].pdcp_contexts = &pdcp_dl_contexts[0];
     th_config[1].no_of_used_pdcp_contexts = &no_of_used_pdcp_dl_contexts;
     th_config[1].no_of_pdcp_contexts_to_test =
@@ -722,7 +734,7 @@ static void* pdcp_thread_routine(void* config)
     int ret = 0;
     unsigned int packets_received = 0;
     pdcp_context_t *pdcp_context;
-    int irq_fd;
+//    int irq_fd;
 
     int total_no_of_contexts_deleted = 0;
     int no_of_contexts_deleted = 0;
@@ -733,9 +745,16 @@ static void* pdcp_thread_routine(void* config)
 
     printf("thread #%d:producer: start work, no of contexts to be created/deleted %d\n",
             th_config_local->tid, th_config_local->no_of_pdcp_contexts_to_test);
+    printf("thread #%d:Consumer job ring UIO device fd = %d\n", 
+            th_config_local->tid, th_config_local->consumer_job_ring_fd);
+    printf("thread #%d:Producer job ring UIO device fd = %d\n", 
+            th_config_local->tid, th_config_local->producer_job_ring_fd);
+
+    pthread_exit(NULL);
 
     if (th_config_local->consumer_job_ring_id == 0 )
     {
+        /*
         irq_fd = open("/dev/uio0", O_RDONLY);
         if (irq_fd < 0) {
             perror("uio open:");
@@ -743,7 +762,7 @@ static void* pdcp_thread_routine(void* config)
         }
 
         printf("Opened /dev/uio0 for reading fd = %d\n", irq_fd);
-
+        */
         int epfd;
 
         epfd = epoll_create (2); /* plan to watch ~2 fds */
@@ -754,12 +773,15 @@ static void* pdcp_thread_routine(void* config)
         int nr_events, i, irq_count;
         struct epoll_event *events;
 
-        event.data.fd = irq_fd; /* return the fd to us later */
+        event.data.fd = th_config_local->consumer_job_ring_fd; /* return the fd to us later */
         event.events = EPOLLIN; // file descriptor available for read()
 
         printf("Registering for read event EPOLLIN = %d\n", EPOLLIN);
 
-        ret = epoll_ctl(epfd, EPOLL_CTL_ADD, irq_fd, &event);
+        ret = epoll_ctl(epfd, 
+                        EPOLL_CTL_ADD, 
+                        th_config_local->consumer_job_ring_fd, 
+                        &event);
         if (ret)
             perror ("epoll_ctl"); 
 
@@ -800,6 +822,7 @@ static void* pdcp_thread_routine(void* config)
 
     if (th_config_local->producer_job_ring_id == 0)
     {
+        /*
         irq_fd = open("/dev/uio0", O_WRONLY);
         if (irq_fd < 0) {
             perror("uio open:");
@@ -807,11 +830,12 @@ static void* pdcp_thread_routine(void* config)
         }
 
         printf("Opened /dev/uio0 for writing fd = %d\n", irq_fd);
+        */
         int counter = 0;
-        int irq_on = 1;
+        int irq_on = 2;
         do
         {
-            ret = write(irq_fd, &irq_on, 4);
+            ret = write(th_config_local->producer_job_ring_fd, &irq_on, 4);
             if (ret != 4)
             {
                 perror("write error on UIO fd:");

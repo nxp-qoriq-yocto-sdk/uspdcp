@@ -1,11 +1,11 @@
-lib_LIBRARIES = sec-of
+lib_LIBRARIES = of
 
 
-AM_CFLAGS := -I$(TOP_LEVEL)/of/include 
+AM_CFLAGS := -I$(TOP_LEVEL)/utils/of/include 
 
 SRC=src
 
-sec-of_SOURCES := $(SRC)/of.c
+of_SOURCES := $(SRC)/of.c
 
 dist_DATA = $(SRC)/of.sh
 

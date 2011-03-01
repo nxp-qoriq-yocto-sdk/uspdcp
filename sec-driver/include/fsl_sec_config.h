@@ -67,6 +67,9 @@ extern "C"{
 #define  ON  1
 #define  OFF 0
 
+/** Maximum length for #SEC_UIO_DEVICE_NAME. */
+#define SEC_UIO_MAX_DEVICE_NAME_LENGTH  30
+
 /** SEC is configured to work in polling mode */
 #define SEC_POLLING_MODE     0
 /** SEC is configured to work in interrupt mode */
@@ -77,36 +80,37 @@ extern "C"{
 /** Logging level for SEC user space driver: log both errors and info messages */
 #define SEC_DRIVER_LOG_INFO  1
 
-/** Bit mask in #SEC_ASSIGNED_JOB_RINGS for Job Ring id 0 */
+/** Bit mask for Job Ring id 0 in DTS Job Ring mapping.
+ * DTS Job Ring mapping distributes SEC's job rings among SEC user space driver and SEC kernel driver. */
 #define SEC_JOB_RING_0  0x8
-/** Bit mask in #SEC_ASSIGNED_JOB_RINGS for Job Ring id 1 */
+/** Bit mask Job Ring id 1 in DTS Job Ring mapping.
+ * DTS Job Ring mapping distributes SEC's job rings among SEC user space driver and SEC kernel driver. */
 #define SEC_JOB_RING_1  0x4
-/** Bit mask in #SEC_ASSIGNED_JOB_RINGS for Job Ring id 2 */
+/** Bit mask for Job Ring id 2 in DTS Job Ring mapping.
+ * DTS Job Ring mapping distributes SEC's job rings among SEC user space driver and SEC kernel driver. */
 #define SEC_JOB_RING_2  0x2
-/** Bit mask in #SEC_ASSIGNED_JOB_RINGS for Job Ring id 3 */
+/** Bit mask for Job Ring id 3 in DTS Job Ring mapping.
+ * DTS Job Ring mapping distributes SEC's job rings among SEC user space driver and SEC kernel driver. */
 #define SEC_JOB_RING_3  0x1
 
-/** Calculate the number of Job Rings enabled from the SEC_ASSIGNED_JOB_RINGS mask*/
-#define SEC_NUMBER_JOB_RINGS    ((SEC_ASSIGNED_JOB_RINGS & SEC_JOB_RING_3) + \
-                                ((SEC_ASSIGNED_JOB_RINGS & SEC_JOB_RING_2) >> 1)) + \
-                                ((SEC_ASSIGNED_JOB_RINGS & SEC_JOB_RING_1) >> 2) + \
-                                ((SEC_ASSIGNED_JOB_RINGS & SEC_JOB_RING_0) >> 3)
-
-
-#define SEC_NUMBER_JOB_RINGS_DTS(mask)  (((mask) & SEC_JOB_RING_3) + \
-                                        (((mask) & SEC_JOB_RING_2) >> 1)) + \
-                                        (((mask) & SEC_JOB_RING_1) >> 2) + \
-                                        (((mask) & SEC_JOB_RING_0) >> 3)
+/** Calculate the number of Job Rings enabled from the DTS Job Ring mapping. */
+#define SEC_NUMBER_JOB_RINGS(mask)  (((mask) & SEC_JOB_RING_3) + \
+                                    (((mask) & SEC_JOB_RING_2) >> 1)) + \
+                                    (((mask) & SEC_JOB_RING_1) >> 2) + \
+                                    (((mask) & SEC_JOB_RING_0) >> 3)
 
 
 /************************************************/
 /* SEC USER SPACE DRIVER related configuration. */
 /************************************************/
 
-/** Job Ring mask indicating which Job Rings are assigned for SEC user space driver.
- *  All 4 Job Rings of SEC device are divided among SEC user space driver and SEC 
- *  kernel driver. Keep in synch with TBD define from kernel! */
-#define SEC_ASSIGNED_JOB_RINGS  ((SEC_JOB_RING_0) | (SEC_JOB_RING_1))
+/** Name of UIO device. Each user space SEC job ring will have a corresponding UIO device
+ * with the name sec-channelX, where X is the job ring id.
+ * Maximum length is #SEC_UIO_MAX_DEVICE_NAME_LENGTH.
+ *
+ * @note  Must be kept in synch with SEC kernel driver define #SEC_UIO_DEVICE_NAME !
+ */
+#define SEC_UIO_DEVICE_NAME     "sec-channel"
 
 
 /** Maximum number of PDCP contexts  per direction (uplink/downlink). */
@@ -162,9 +166,9 @@ extern "C"{
  *  to allocate data (like SEC descriptors) that needs to be passed to 
  *  SEC device in physical addressing and later on retrieved from SEC device. 
  *  At sec_init() the UA provides specialized ptov/vtop functions to
- *  translate addresses allocated from this memory area.  */
+ *  translate addresses allocated from this memory area. */
 #define SEC_DMA_MEMORY_SIZE     (SEC_CRYPTO_DESCRIPTOR_SIZE) * (SEC_MAX_PDCP_CONTEXTS)  + \
-                                (SEC_DMA_MEM_JOB_RING_SIZE) * (SEC_NUMBER_JOB_RINGS)
+                                (SEC_DMA_MEM_JOB_RING_SIZE) * (MAX_SEC_JOB_RINGS)
 
 /** PDCP sequence number length */
 #define SEC_PDCP_SN_SIZE_5  5
@@ -193,9 +197,9 @@ extern "C"{
  * ON - enable logging
  * OFF - disable logging
  *
- * TODO: specify where are the messages logged, at stdout?
+ * The messages are logged at stdout.
  */
-#define SEC_DRIVER_LOGGING OFF
+#define SEC_DRIVER_LOGGING ON
 
 /** Configure logging level at compile time.
  * Valid values:
@@ -221,6 +225,9 @@ extern "C"{
  *  on SEC 4.4) is hardware fixed to 24. */
 #define SEC_JOB_RING_SIZE  24
 #endif
+
+/** Maximum number of job rings supported by SEC hardware */
+#define MAX_SEC_JOB_RINGS         4
 
 /************************************************/
 /* Scatter/Gather support related configuration */

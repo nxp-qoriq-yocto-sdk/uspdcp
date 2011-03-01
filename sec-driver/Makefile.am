@@ -32,7 +32,7 @@
 
 lib_LIBRARIES = sec-driver
 
-AM_CFLAGS := -I$(TOP_LEVEL)/sec-driver/include -I$(TOP_LEVEL)/of/include 
+AM_CFLAGS := -I$(TOP_LEVEL)/sec-driver/include -I$(TOP_LEVEL)/utils/of/include -I$(TOP_LEVEL)/sec-driver/src
 
 SRC=src
 sec-driver_SOURCES := $(SRC)/sec_driver.c $(SRC)/list.c $(SRC)/sec_contexts.c

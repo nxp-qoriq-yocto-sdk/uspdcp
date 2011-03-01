@@ -277,8 +277,6 @@ typedef struct sec_config_s
                                      FUNCTION PROTOTYPES
 ==================================================================================================*/
 
-/*================================================================================================*/
-
 /**
  * @brief Initialize the SEC user space driver.
  *
@@ -305,9 +303,9 @@ typedef struct sec_config_s
  *                                          Call sec_get_last_error() to obtain specific error code, as reported by SEC device.
  * @retval >0 in case of error
  */
-uint32_t sec_init(sec_config_t *sec_config_data,
-                  uint8_t job_rings_no,
-                  sec_job_ring_descriptor_t **job_ring_descriptors);
+sec_return_code_t sec_init(sec_config_t *sec_config_data,
+                           uint8_t job_rings_no,
+                           sec_job_ring_descriptor_t **job_ring_descriptors);
 
 /**
  * @brief Release the resources used by the SEC user space driver.

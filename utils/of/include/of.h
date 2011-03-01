@@ -33,10 +33,24 @@
 #ifndef __OF_H
 #define	__OF_H
 
+#ifdef __cplusplus
+/* *INDENT-OFF* */
+
+extern "C"{
+/* *INDENT-ON* */
+#endif
+
+/*==================================================================================================
+                                         INCLUDE FILES
+==================================================================================================*/
 #include <stdint.h>
 #include <stdbool.h>
 #include <limits.h>	/* PATH_MAX */
 #include <string.h>	/* strcmp(), strcasecmp() */
+
+/*==================================================================================================
+                                       DEFINES AND MACROS
+==================================================================================================*/
 
 #define of_prop_cmp	strcmp
 #define of_compat_cmp	strncasecmp
@@ -46,43 +60,60 @@
 #define unlikely(x)     __builtin_expect(!!(x), 0)
 #define __always_unused	__attribute__((unused))
 
+#define for_each_compatible_node(dev_node, type, compatible)			\
+    for (dev_node = of_find_compatible_node(NULL, type, compatible);	\
+            dev_node != NULL;							\
+            dev_node = of_find_compatible_node(NULL, type, compatible))
 
+/*==================================================================================================
+                                             ENUMS
+==================================================================================================*/
+
+/*==================================================================================================
+                                 STRUCTURES AND OTHER TYPEDEFS
+==================================================================================================*/
 
 typedef int		phandle;
 
 struct device_node
 {
-	char	*name;
-	char	 full_name[PATH_MAX];
+    char	*name;
+    char	 full_name[PATH_MAX];
 
-	uint8_t	 _property[64];
+    uint8_t	 _property[64];
 };
+
+/*==================================================================================================
+                                           CONSTANTS
+==================================================================================================*/
+
+/*==================================================================================================
+                                 GLOBAL VARIABLE DECLARATIONS
+==================================================================================================*/
+
+/*==================================================================================================
+                                     FUNCTION PROTOTYPES
+==================================================================================================*/
 
 struct device_node *of_get_parent(const struct device_node *dev_node);
 
-void *of_get_property(struct device_node *from, const char *name, size_t *lenp)
-	__attribute__((nonnull(2)));
+void *of_get_property(struct device_node *from, const char *name, size_t *lenp) __attribute__((nonnull(2)));
 
 uint32_t of_n_addr_cells(const struct device_node *dev_node);
 uint32_t of_n_size_cells(const struct device_node *dev_node);
 
 const uint32_t *of_get_address(struct device_node	*dev_node,
-			       size_t			 index,
-			       uint64_t			*size,
-			       uint32_t			*flags);
+        size_t			 index,
+        uint64_t			*size,
+        uint32_t			*flags);
 
 uint64_t of_translate_address(struct device_node *dev_node, const uint32_t *addr)
-	__attribute__((nonnull));
+    __attribute__((nonnull));
 
 struct device_node *of_find_compatible_node(const struct device_node	*from,
-					    const char			*type,
-					    const char			*compatible)
-	__attribute__((nonnull(3)));
+        const char			*type,
+        const char			*compatible) __attribute__((nonnull(3)));
 
-#define for_each_compatible_node(dev_node, type, compatible)			\
-	for (dev_node = of_find_compatible_node(NULL, type, compatible);	\
-	     dev_node != NULL;							\
-	     dev_node = of_find_compatible_node(NULL, type, compatible))
 
 struct device_node *of_find_node_by_phandle(phandle ph);
 
