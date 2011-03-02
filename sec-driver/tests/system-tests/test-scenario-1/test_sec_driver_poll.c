@@ -750,19 +750,9 @@ static void* pdcp_thread_routine(void* config)
     printf("thread #%d:Producer job ring UIO device fd = %d\n", 
             th_config_local->tid, th_config_local->producer_job_ring_fd);
 
-    pthread_exit(NULL);
 
     if (th_config_local->consumer_job_ring_id == 0 )
     {
-        /*
-        irq_fd = open("/dev/uio0", O_RDONLY);
-        if (irq_fd < 0) {
-            perror("uio open:");
-            pthread_exit(NULL);
-        }
-
-        printf("Opened /dev/uio0 for reading fd = %d\n", irq_fd);
-        */
         int epfd;
 
         epfd = epoll_create (2); /* plan to watch ~2 fds */
@@ -791,6 +781,9 @@ static void* pdcp_thread_routine(void* config)
             pthread_exit(NULL);
         }         
 
+        int new_irq_count = 0;
+        int old_irq_count = 0;
+        int first_run = 1;
         do
         {
             nr_events = epoll_wait (epfd, events, 10, -1);
@@ -810,11 +803,31 @@ static void* pdcp_thread_routine(void* config)
                     perror("uio read:");
                     pthread_exit(NULL);
                 }
-                printf ("irq count = %d\n", irq_count);
+
+                if(first_run)
+                {
+                    first_run = 0;
+                    old_irq_count = irq_count;
+                    new_irq_count++;
+                }
+                else
+                {
+                    new_irq_count += irq_count - old_irq_count;
+                    old_irq_count = irq_count;
+                }
+
+                printf("\n/dev/uioX has %d new irqs. irq_counter = %d\n", new_irq_count, irq_count);
+                if(new_irq_count == 50)
+                {
+                    printf ("Received irq count = %d\n", irq_count);
+                    free (events);
+                    th_config_local->work_done = 1;
+                    printf("thread #%d: exit\n", th_config_local->tid);
+                    pthread_exit(NULL);
+                }
             }
         }while(1);
 
-        free (events);
     }
 
 
@@ -833,7 +846,8 @@ static void* pdcp_thread_routine(void* config)
         */
         int counter = 0;
         int irq_on = 2;
-        do
+
+        for(counter = 0; counter < 50; counter++)
         {
             ret = write(th_config_local->producer_job_ring_fd, &irq_on, 4);
             if (ret != 4)
@@ -841,9 +855,13 @@ static void* pdcp_thread_routine(void* config)
                 perror("write error on UIO fd:");
                 pthread_exit(NULL);
             }
-            counter++;
-        }while(counter < 50);
+        }
 
+        printf("Generated %d job done IRQs\n", counter);
+        th_config_local->work_done = 1;
+        printf("thread #%d: exit\n", th_config_local->tid);
+
+        pthread_exit(NULL);
     }
 
     // Create a number of configurable contexts and affine them to the producer JR, send a random

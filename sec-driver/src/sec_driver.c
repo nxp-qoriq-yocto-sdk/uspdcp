@@ -232,6 +232,7 @@ static bool uio_find_device_file(int jr_id, char *device_file);
 static void reset_job_ring(sec_job_ring_t * job_ring)
 {
     //memset(job_ring, 0, sizeof(sec_job_ring_t));
+    // TODO: close UIO fd
 }
 
 static int enable_irq()
