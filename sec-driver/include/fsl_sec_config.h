@@ -110,7 +110,7 @@ extern "C"{
  *
  * @note  Must be kept in synch with SEC kernel driver define #SEC_UIO_DEVICE_NAME !
  */
-#define SEC_UIO_DEVICE_NAME     "sec-channel"
+#define SEC_UIO_DEVICE_NAME     "sec-job-ring"
 
 
 /** Maximum number of PDCP contexts  per direction (uplink/downlink). */

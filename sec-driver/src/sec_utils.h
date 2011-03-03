@@ -124,7 +124,7 @@
 #define SEC_ASSERT_STOP(cond, str, ...) \
     if (unlikely(!(cond))) {\
         SEC_ERROR(str ,## __VA_ARGS__); \
-        assert(cond); \
+        ASSERT(cond); \
     }
 
 
@@ -134,8 +134,17 @@
 
 /** compute offset for structure member B in structure A */
 #ifndef offsetof
- #define offsetof(A,B) ((int)&(((A*)0)->B))
+#ifdef __GNUC__
+#define offsetof(a,b)           __builtin_offsetof(a,b)
+#else
+#define offsetof(type,member)   ((size_t) &((type*)0)->member)
 #endif
+#endif
+
+/** Get a pointer to beginning of structure which contains <member> */
+#define container_of(ptr, type, member) ({            \
+ const typeof( ((type *)0)->member ) *__mptr = (ptr);    \
+  (type *)( (char *)__mptr - offsetof(type,member) );})
 
 /** counts the number of elements in an array */
 #ifndef countof
@@ -148,9 +157,7 @@
  */
 #define CTASSERT(a) extern char __dummy[(a)?1:-1];
 
-/** ASSERT definition
- *  For the moment undefined. To be decided later how we define assert
- */
+/** ASSERT definition */
 #define ASSERT(x)   assert(x)
 
 #define likely(x)       __builtin_expect(!!(x), 1)

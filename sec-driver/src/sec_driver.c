@@ -231,8 +231,10 @@ static bool uio_find_device_file(int jr_id, char *device_file);
 
 static void reset_job_ring(sec_job_ring_t * job_ring)
 {
+    ASSERT(job_ring != NULL);
+    SEC_INFO("job ring %d UIO fd = %d", job_ring->jr_id, job_ring->uio_fd);
     //memset(job_ring, 0, sizeof(sec_job_ring_t));
-    // TODO: close UIO fd
+    close(job_ring->uio_fd);
 }
 
 static int enable_irq()
@@ -277,7 +279,7 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t * job_ring,
         job = &job_ring->jobs[job_ring->cidx];
 
         sec_context = job->sec_context;
-        assert (sec_context->notify_packet_cbk != NULL);
+        ASSERT (sec_context->notify_packet_cbk != NULL);
 
         pthread_mutex_lock(&sec_context->mutex);
 
@@ -286,7 +288,7 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t * job_ring,
         // packets notified to UA
         if (sec_context->usage == SEC_CONTEXT_RETIRING)
         {
-            assert(sec_context->packets_no >= 1);
+            ASSERT(sec_context->packets_no >= 1);
             status = (sec_context->packets_no > 1) ? SEC_STATUS_OVERDUE : SEC_STATUS_LAST_OVERDUE;
         }
         // call the calback
@@ -363,7 +365,7 @@ static int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
             return SEC_INVALID_INPUT_PARAM;
         }
 
-        // Use and configure requested number of job rings for the total
+        // Use and configure requested number of job rings from the total
         // user space available job rings.
         jr_idx = 0;
         jr_no = 0;
@@ -374,11 +376,14 @@ static int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
                 SEC_INFO("Using Job Ring number %d", jr_idx);
                 job_rings[jr_no].jr_id = jr_idx;
                 jr_no++;
+                if (jr_no == job_ring_number)
+                {
+                    break;
+                }
             }
             jr_idx++;
 
-        }while(jr_idx <= job_ring_number);
-
+        }while(jr_idx < MAX_SEC_JOB_RINGS);
     }
     return SEC_SUCCESS; 
 }
@@ -450,7 +455,7 @@ static bool uio_find_device_file(int jr_id, char *device_file)
             {
                 if(jr_number == jr_id)
                 {
-                    sprintf(device_file, "%s%d", SEC_UIO_DEVICE_FILE_NAME, jr_id);
+                    sprintf(device_file, "%s%d", SEC_UIO_DEVICE_FILE_NAME, uio_minor_number);
                     SEC_INFO("Found UIO device %s for job ring id %d\n", 
                             device_file,
                             jr_id);
@@ -533,7 +538,7 @@ sec_return_code_t sec_init(sec_config_t *sec_config_data,
         // one of the assumptions for this API is that only one thread will
         // create/delete contexts for a certain JR (also known as the producer of the JR).
         ret = init_contexts_pool(&(g_job_rings[i].ctx_pool), MAX_SEC_CONTEXTS_PER_POOL, THREAD_UNSAFE_POOL);
-        assert(ret == 0);
+        ASSERT(ret == 0);
 
         // Obtain UIO device file descriptor for each owned job ring      
         sec_config_uio_job_ring(&g_job_rings[i]);
@@ -545,7 +550,7 @@ sec_return_code_t sec_init(sec_config_t *sec_config_data,
     // initialize the global pool of contexts also
     // we need for thread synchronizations mechanisms for this pool
     ret = init_contexts_pool(&g_ctx_pool, MAX_SEC_CONTEXTS_PER_POOL, THREAD_SAFE_POOL);
-    assert(ret == 0);
+    ASSERT(ret == 0);
 
     // Remember initial work mode
     sec_work_mode = sec_config_data->work_mode;
@@ -603,7 +608,7 @@ uint32_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
     {
         /* Implement a round-robin assignment of JRs to this context */
         last_jr_assigned = SEC_CIRCULAR_COUNTER(last_jr_assigned, g_job_rings_no);
-        assert(last_jr_assigned >= 0 && last_jr_assigned < g_job_rings_no);
+        ASSERT(last_jr_assigned >= 0 && last_jr_assigned < g_job_rings_no);
         job_ring = &g_job_rings[last_jr_assigned];
     }
 
@@ -623,8 +628,8 @@ uint32_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
 			return SEC_DRIVER_NO_FREE_CONTEXTS;
 		}
     }
-    assert(ctx != NULL);
-    assert(ctx->pool != NULL);
+    ASSERT(ctx != NULL);
+    ASSERT(ctx->pool != NULL);
 
     // set the notification callback per context
     ctx->notify_packet_cbk = sec_ctx_info->notify_packet;
@@ -672,7 +677,7 @@ uint32_t sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle)
     }
 
     pool = sec_context->pool;
-    assert (pool != NULL);
+    ASSERT (pool != NULL);
 
     // Now try to free the current context. If there are packets
     // in flight the context will be retired (not freed). The context
@@ -722,7 +727,7 @@ uint32_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
                                      limit is reached.
      */
 
-    assert (g_job_rings_no != 0);
+    ASSERT (g_job_rings_no != 0);
     /* Exit from while if one of the following is true:
      * - the required number of notifications were raised to UA.
      * - there are no more done jobs on either of the available JRs.

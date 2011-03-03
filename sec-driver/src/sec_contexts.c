@@ -39,6 +39,7 @@ extern "C" {
 ==================================================================================================*/
 #include "list.h"
 #include "sec_contexts.h"
+#include "sec_utils.h"
 
 #include <assert.h>
 #include <string.h>
@@ -51,20 +52,13 @@ extern "C" {
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
 ==================================================================================================*/
 
-#ifndef offsetof
-#ifdef __GNUC__
-#define offsetof(a,b)           __builtin_offsetof(a,b)
-#else
-#define offsetof(type,member)   ((size_t) &((type*)0)->member)
-#endif
-#endif
 
 /** @brief Compute the address of a context based on the address of the associated list node
  *
  * @note: Because the node (list_node_t) is placed right at the beginning of the sec_context_t
  * structure there is no need for subtraction: the node and the associated context have the
  * same address. */
-//#define GET_CONTEXT_FROM_LIST_NODE(list_node) ((sec_context_t*)((list_node) - offsetof(sec_context_t, node)))
+//#define GET_CONTEXT_FROM_LIST_NODE(list_node) container_of(list_node, sec_context_t, node)
 #define GET_CONTEXT_FROM_LIST_NODE(list_node) ((sec_context_t*)(list_node))
 /*==================================================================================================
                                       LOCAL CONSTANTS
@@ -158,13 +152,12 @@ static void destroy_pool_list(list_t * list)
 	sec_context_t *ctx = NULL;
 	list_node_t * node = NULL;
 
-	assert(list != NULL);
+	ASSERT(list != NULL);
 
 	while(!list->is_empty(list))
 	{
 		node = list->remove_first(list);
 		ctx = GET_CONTEXT_FROM_LIST_NODE(node);
-		assert((void*)ctx == (void*)node);
 
 		// destroy the context's mutex
 		pthread_mutex_destroy(&(ctx->mutex));
@@ -176,11 +169,11 @@ static void destroy_pool_list(list_t * list)
 
 static void retire_context(sec_contexts_pool_t * pool, sec_context_t * ctx)
 {
-	assert(ctx != NULL);
-	assert(pool != NULL);
+	ASSERT(ctx != NULL);
+	ASSERT(pool != NULL);
 
 	// remove context from in use list
-	assert(ctx->usage == SEC_CONTEXT_USED);
+	ASSERT(ctx->usage == SEC_CONTEXT_USED);
 	pool->in_use_list.delete_node(&pool->in_use_list, &ctx->node);
 
 	// modify contex's usage before adding it to the retire list
@@ -194,11 +187,11 @@ static void retire_context(sec_contexts_pool_t * pool, sec_context_t * ctx)
 
 static void free_in_use_context(sec_contexts_pool_t * pool, sec_context_t * ctx)
 {
-	assert(ctx != NULL);
-	assert(pool != NULL);
+	ASSERT(ctx != NULL);
+	ASSERT(pool != NULL);
 
 	// remove context from in use list
-	assert(ctx->usage == SEC_CONTEXT_USED);
+	ASSERT(ctx->usage == SEC_CONTEXT_USED);
 	pool->in_use_list.delete_node(&pool->in_use_list, &ctx->node);
 
 	// modify contex's usage before adding it to the free list
@@ -216,10 +209,10 @@ static uint8_t node_match(list_node_t *node)
 {
 	sec_context_t * ctx = NULL;
 
-	assert(node != NULL);
+	ASSERT(node != NULL);
 
 	ctx = GET_CONTEXT_FROM_LIST_NODE(node);
-	assert(ctx->usage == SEC_CONTEXT_RETIRING);
+	ASSERT(ctx->usage == SEC_CONTEXT_RETIRING);
 
 	if(ctx->packets_no == 0)
 	{
@@ -233,7 +226,7 @@ static void node_modify_after_delete(list_node_t *node)
 {
 	sec_context_t * ctx = NULL;
 
-	assert(node != NULL);
+	ASSERT(node != NULL);
 
 	ctx = GET_CONTEXT_FROM_LIST_NODE(node);
 
@@ -250,7 +243,7 @@ static void run_contexts_garbage_colector(sec_contexts_pool_t * pool)
 {
     list_t deleted_nodes;
 
-    assert(pool != NULL);
+    ASSERT(pool != NULL);
 
     // if there is no retiring contexts then exit the garbage collector
     if (pool->retire_list.is_empty(&pool->retire_list))
@@ -272,7 +265,7 @@ static void run_contexts_garbage_colector(sec_contexts_pool_t * pool)
     	pool->free_list.attach_list_to_tail(&pool->free_list, &deleted_nodes);
 	}
 
-    assert(deleted_nodes.is_empty(&deleted_nodes) == 1);
+    ASSERT(deleted_nodes.is_empty(&deleted_nodes) == 1);
     list_destroy(&deleted_nodes);
 }
 
@@ -287,8 +280,8 @@ sec_return_code_t init_contexts_pool(sec_contexts_pool_t * pool,
 	int i = 0;
 	sec_context_t * ctx = NULL;
 
-	assert(pool != NULL);
-	assert(thread_safe == THREAD_SAFE_POOL || thread_safe == THREAD_UNSAFE_POOL);
+	ASSERT(pool != NULL);
+	ASSERT(thread_safe == THREAD_SAFE_POOL || thread_safe == THREAD_UNSAFE_POOL);
 
 	if (number_of_contexts == 0)
 	{
@@ -333,7 +326,7 @@ sec_return_code_t init_contexts_pool(sec_contexts_pool_t * pool,
 
 void destroy_contexts_pool(sec_contexts_pool_t * pool)
 {
-	assert(pool != NULL);
+	ASSERT(pool != NULL);
 
 	// destroy the lists
 	destroy_pool_list(&pool->free_list);
@@ -341,7 +334,7 @@ void destroy_contexts_pool(sec_contexts_pool_t * pool)
 	destroy_pool_list(&pool->in_use_list);
 
 	// free the memory allocated for the contexts
-	assert(pool->sec_contexts != NULL);
+	ASSERT(pool->sec_contexts != NULL);
 	free(pool->sec_contexts);
 
 	memset(pool, 0, sizeof(sec_contexts_pool_t));
@@ -353,7 +346,7 @@ sec_context_t* get_free_context(sec_contexts_pool_t * pool)
 	list_node_t * node = NULL;
 	uint8_t run_gc = 0;
 
-	assert(pool != NULL);
+	ASSERT(pool != NULL);
 
 	// check if there are nodes in the free list
     if (pool->free_list.is_empty(&pool->free_list))
@@ -375,9 +368,8 @@ sec_context_t* get_free_context(sec_contexts_pool_t * pool)
 
     // remove first element from the free list
 	node = pool->free_list.remove_first(&pool->free_list);
-
     ctx = GET_CONTEXT_FROM_LIST_NODE(node);
-    assert(ctx->usage == SEC_CONTEXT_UNUSED);
+    ASSERT(ctx->usage == SEC_CONTEXT_UNUSED);
     ctx->usage = SEC_CONTEXT_USED;
 
 	// add the element to the tail of the in use list
@@ -395,9 +387,9 @@ sec_context_t* get_free_context(sec_contexts_pool_t * pool)
 
 sec_return_code_t free_or_retire_context(sec_contexts_pool_t * pool, sec_context_t * ctx)
 {
-	assert(pool != NULL);
-	assert(ctx != NULL);
-	assert(ctx->usage == SEC_CONTEXT_USED);
+	ASSERT(pool != NULL);
+	ASSERT(ctx != NULL);
+	ASSERT(ctx->usage == SEC_CONTEXT_USED);
 
 	// start critical area per context
 	pthread_mutex_lock(&ctx->mutex);

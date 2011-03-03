@@ -38,6 +38,7 @@ extern "C" {
                                         INCLUDE FILES
 ==================================================================================================*/
 #include "list.h"
+#include "sec_utils.h"
 
 #include <assert.h>
 #include <string.h>
@@ -190,7 +191,7 @@ static uint8_t list_empty_with_lock(list_t * list)
 {
 	uint8_t ret;
 
-	assert(list != NULL);
+	ASSERT(list != NULL);
 	pthread_mutex_lock(&list->mutex);
 	ret = list_empty(list);
 	pthread_mutex_unlock(&list->mutex);
@@ -200,8 +201,8 @@ static uint8_t list_empty_with_lock(list_t * list)
 
 static uint8_t list_end(list_t * list, list_node_t * node)
 {
-	assert(list != NULL);
-	assert(node != NULL);
+	ASSERT(list != NULL);
+	ASSERT(node != NULL);
 
 	return (node == &list->head);
 }
@@ -211,9 +212,9 @@ static list_node_t* list_remove_first(list_t *list)
 
 	list_node_t * node = list->head.next;
 
-	assert(node != NULL);
-	assert(node->next != NULL);
-	assert(node->next->prev != NULL);
+	ASSERT(node != NULL);
+	ASSERT(node->next != NULL);
+	ASSERT(node->next->prev != NULL);
 
 	list->head.next = node->next;
 	node->next->prev = &list->head;
@@ -228,7 +229,7 @@ static list_node_t* list_remove_first_with_lock(list_t *list)
 {
 	list_node_t * node;
 
-	assert(list != NULL);
+	ASSERT(list != NULL);
 	pthread_mutex_lock(&list->mutex);
 	node = list_remove_first(list);
 	pthread_mutex_unlock(&list->mutex);
@@ -238,20 +239,20 @@ static list_node_t* list_remove_first_with_lock(list_t *list)
 
 static void list_add_tail(list_t *list, list_node_t* node)
 {
-	assert(node != NULL);
+	ASSERT(node != NULL);
 
 	list->head.prev->next = node;
 	node->prev = list->head.prev;
 	list->head.prev = node;
 	node->next = &list->head;
 
-	assert(node->next != NULL);
-	assert(node->prev != NULL);
+	ASSERT(node->next != NULL);
+	ASSERT(node->prev != NULL);
 }
 
 static void list_add_tail_with_lock(list_t *list, list_node_t* node)
 {
-	assert(list != NULL);
+	ASSERT(list != NULL);
 	pthread_mutex_lock(&list->mutex);
 	list_add_tail(list, node);
 	pthread_mutex_unlock(&list->mutex);
@@ -259,11 +260,11 @@ static void list_add_tail_with_lock(list_t *list, list_node_t* node)
 
 static void list_delete_node(list_t * list, list_node_t *node)
 {
-	assert(node != NULL);
-	assert(node->next != NULL);
-	assert(node->prev != NULL);
-	assert(node->prev->next != NULL);
-	assert(node->next->prev != NULL);
+	ASSERT(node != NULL);
+	ASSERT(node->next != NULL);
+	ASSERT(node->prev != NULL);
+	ASSERT(node->prev->next != NULL);
+	ASSERT(node->next->prev != NULL);
 
 	node->prev->next = node->next;
 	node->next->prev = node->prev;
@@ -274,7 +275,7 @@ static void list_delete_node(list_t * list, list_node_t *node)
 
 static void list_delete_node_with_lock(list_t * list, list_node_t *node)
 {
-	assert(list != NULL);
+	ASSERT(list != NULL);
 	pthread_mutex_lock(&list->mutex);
 	list_delete_node(list, node);
 	pthread_mutex_unlock(&list->mutex);
@@ -282,24 +283,24 @@ static void list_delete_node_with_lock(list_t * list, list_node_t *node)
 
 static list_node_t* get_first(list_t * list)
 {
-	assert(list != NULL);
-	assert(list->head.next != NULL);
+	ASSERT(list != NULL);
+	ASSERT(list->head.next != NULL);
 
 	return list->head.next;
 }
 
 static list_node_t* get_next(list_node_t * node)
 {
-	assert(node != NULL);
-	assert(node->next != NULL);
+	ASSERT(node != NULL);
+	ASSERT(node->next != NULL);
 
 	return node->next;
 }
 
 static void list_attach_list_to_tail(list_t *list, list_t *new_list)
 {
-	assert(new_list != NULL);
-	assert(list_empty(new_list) == 0);
+	ASSERT(new_list != NULL);
+	ASSERT(list_empty(new_list) == 0);
 
 	// connect first node from the new list with the last node from the first list
 	list->head.prev->next = new_list->head.next;
@@ -315,7 +316,7 @@ static void list_attach_list_to_tail(list_t *list, list_t *new_list)
 
 static void list_attach_list_to_tail_with_lock(list_t *list, list_t *new_list)
 {
-	assert(list != NULL);
+	ASSERT(list != NULL);
 	pthread_mutex_lock(&list->mutex);
 	list_attach_list_to_tail(list, new_list);
 	pthread_mutex_unlock(&list->mutex);
@@ -329,9 +330,9 @@ static void list_delete_matching_nodes(list_t *list,
 	list_node_t * node = NULL;
 	list_node_t * node_to_delete = NULL;
 
-	assert(deleted_nodes_list != NULL);
-	assert(is_match != NULL);
-	assert(node_modify_after_delete != NULL);
+	ASSERT(deleted_nodes_list != NULL);
+	ASSERT(is_match != NULL);
+	ASSERT(node_modify_after_delete != NULL);
 
 	node = get_first(list);
 	do{
@@ -363,7 +364,7 @@ static void list_delete_matching_nodes_with_lock(list_t *list,
 		                                         node_match_func is_match,
 		                                         node_modify_after_delete_func node_modify_after_delete)
 {
-	assert(list != NULL);
+	ASSERT(list != NULL);
 	pthread_mutex_lock(&list->mutex);
 	list_delete_matching_nodes(list, deleted_nodes_list, is_match, node_modify_after_delete);
 	pthread_mutex_unlock(&list->mutex);
@@ -375,12 +376,12 @@ static void list_delete_matching_nodes_with_lock(list_t *list,
 
 void list_init(list_t * list, uint8_t thread_safe)
 {
-	assert(list != NULL);
+	ASSERT(list != NULL);
 
 	list->head.next = list->head.prev = &list->head;
 
 	list->thread_safe = thread_safe;
-	assert(thread_safe == THREAD_SAFE_LIST || thread_safe == THREAD_UNSAFE_LIST);
+	ASSERT(thread_safe == THREAD_SAFE_LIST || thread_safe == THREAD_UNSAFE_LIST);
 
 	// if list needs to be thread safe initialize
 	// the pointers to the functions with synchronized functions

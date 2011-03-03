@@ -172,7 +172,7 @@ static void test_one_jr_alternate_irq_gen_irq_read(void)
 {
     int ret = 0;
     int irq_count;
-    int old_irq_count;
+    int old_irq_count = 0;
     int new_irq_count = 0;
     int counter = 0;
     int irq_control = SIMULATE_IRQ;
