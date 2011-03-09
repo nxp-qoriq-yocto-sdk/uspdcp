@@ -47,6 +47,7 @@ extern "C"{
 
 #include "list.h"
 #include "fsl_sec.h"
+#include "sec_atomic.h"
 
 /*==================================================================================================
                                        DEFINES AND MACROS
@@ -55,6 +56,16 @@ extern "C"{
 /** Constants used to configure a thread-safe/unsafe pool. */
 #define THREAD_SAFE_POOL    THREAD_SAFE_LIST
 #define THREAD_UNSAFE_POOL  THREAD_UNSAFE_LIST
+
+/** Get state bitfield from state_packets_no member in ::sec_context_t structure.
+ * First 3 bits in state_packets_no represent the state. */
+#define CONTEXT_GET_STATE(value)        ((value) >> 29)
+#define CONTEXT_SET_STATE(value, state) ((value) = ((value) & 0x1fffffff) | ((state) << 29))
+
+/** Get packets_no bitfield from state_packets_no member in ::sec_context_t structure.
+ * Last 29 bits in state_packets_no represent the packets_no. */
+#define CONTEXT_GET_PACKETS_NO(value)   ((value) & 0x1fffffff)
+#define CONTEXT_SET_PACKETS_NO(value, packets_no)   ((value) = ((value) & 0xe0000000) | (packets_no))
 /*==================================================================================================
                                              ENUMS
 ==================================================================================================*/
@@ -62,11 +73,14 @@ extern "C"{
 /*==================================================================================================
                                  STRUCTURES AND OTHER TYPEDEFS
 ==================================================================================================*/
-/** Status of a SEC context */
+/** Status of a SEC context.
+ * @note: Can have at most 4 values in the range 0...3!
+ * If required to add more values, increase size of state bitfield from
+ * state_packets_no member in ::sec_context_t structure! */
 typedef enum sec_context_usage_e
 {
     SEC_CONTEXT_UNUSED = 0,  /*< SEC context is unused and is located in the free list. */
-    SEC_CONTEXT_USED,        /*< SEC context is unused and is located in the in-use list. */
+    SEC_CONTEXT_USED,        /*< SEC context is used and is located in the in-use list. */
     SEC_CONTEXT_RETIRING,    /*< SEC context is unused and is located in the retire list. */
 }sec_context_usage_t;
 
@@ -119,20 +133,24 @@ typedef struct sec_context_s
     sec_contexts_pool_t * pool;
     /** The callback called for UA notifications. */
 	sec_out_cbk notify_packet_cbk;
-    /* Mutex used to synchronize the access to usage & packets_no members
-     * from two different threads: Producer and Consumer.
-     * TODO: find a solution to remove it.*/
-    pthread_mutex_t mutex;
-    /** The status of the sec context.
+    /* Bitfield representing:
+     *      state:3 bits | packet_no:29 bits
+     *
+     * @note Writes to this field MUST be done using the primitives defined
+     * in sec_atomic.h when executed in a concurrent access context!
+     *
+     * State:
+     *  The status of the sec context. Can have values from ::sec_context_usage_t enum.
      *  This status is needed in the sec_poll function, to decide which packet status
      *  to provide to UA when the notification callback is called.
-     *  This field may seem redundant (because of the three lists) but it is not. */
-    sec_context_usage_t usage;
-    /* Number of packets in flight for this context.
-	 * The maximum value this counter can have is the maximum size of a JR.
-	 * For SEC 4.4 being 1024 and for SEC 3.1 being 24.
-	 * It is safe to use 2 bytes for this counter. */
-	uint16_t packets_no;
+     *  This field may seem redundant (because of the three lists) but it is not.
+     *
+     * Packets_no:
+     *  Number of packets in flight for this context.
+     *  The maximum value this counter can have is the maximum size of a JR.
+     *  For SEC 4.4 being 1024 and for SEC 3.1 being 24.
+     * */
+	atomic_t state_packets_no;
 }sec_context_t;
 
 

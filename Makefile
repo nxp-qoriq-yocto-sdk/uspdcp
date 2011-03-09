@@ -50,7 +50,7 @@ ifneq (distclean,$(MAKECMDGOALS))
      $(ARCH)_SPEC_DEFINE	:=
      $(ARCH)_SPEC_INC_PATH:=
      $(ARCH)_SPEC_LIB_PATH:=
-     $(ARCH)_SPEC_CFLAGS	:= -pthread -O2 -Wall -Wshadow -DCONFIG_PHYS_64BIT
+     $(ARCH)_SPEC_CFLAGS	:= -pthread -O2 -Wall -Wshadow
      $(ARCH)_SPEC_LDFLAGS	:= -pthread
    else
      $(error "ARCH not defined.")

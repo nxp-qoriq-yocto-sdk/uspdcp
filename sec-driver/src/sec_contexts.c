@@ -41,8 +41,6 @@ extern "C" {
 #include "sec_contexts.h"
 #include "sec_utils.h"
 
-#include <assert.h>
-#include <string.h>
 #include <stdlib.h>
 /*==================================================================================================
                                      LOCAL CONSTANTS
@@ -108,10 +106,12 @@ static void free_in_use_context(sec_contexts_pool_t * pool, sec_context_t * ctx)
  * The contexts that have packets in flight are not deleted immediately when
  * sec_delete_pdcp_context() is called instead they are marked as retiring.
  *
- * When all the packets in flight were notified to UA with #SEC_STATUS_OVERDUE and
- * #SEC_STATUS_LAST_OVERDUE statuses, the contexts can be deleted (ctx->packets_no == 0).
- * The function where we can find out the first time that all packets in flight
- * were notified is sec_poll().
+ * When all the packets in flight were notified to UA,
+ * the contexts can be deleted (ctx packets_no == 0).
+ *
+ * Inside this function we can find out the first time that all packets in flight
+ * on a context were notified is sec_poll().
+ *
  * To minimize the response time of the UA notifications, the contexts will not be deleted
  * in the sec_poll() function. Instead the retiring contexts with no more packets in flight
  * will be deleted whenever UA creates a new context or deletes another -> this is the purpose
@@ -125,7 +125,7 @@ static void free_in_use_context(sec_contexts_pool_t * pool, sec_context_t * ctx)
 static void run_contexts_garbage_colector(sec_contexts_pool_t * pool);
 
 /** @brief This function modifies the context associated to a list node
- * after deletion from the retiring list (the usage member is changed and
+ * after deletion from the retiring list (the state_packets_no member is changed and
  * other members of the context structure).
  *
  * This function is needed by the list's API delete_matching_nodes.
@@ -159,10 +159,8 @@ static void destroy_pool_list(list_t * list)
 		node = list->remove_first(list);
 		ctx = GET_CONTEXT_FROM_LIST_NODE(node);
 
-		// destroy the context's mutex
-		pthread_mutex_destroy(&(ctx->mutex));
 		memset(ctx, 0, sizeof(sec_context_t));
-		ctx->usage = SEC_CONTEXT_UNUSED;
+		CONTEXT_SET_STATE(ctx->state_packets_no, SEC_CONTEXT_UNUSED);
 	}
 	list_destroy(list);
 }
@@ -173,13 +171,7 @@ static void retire_context(sec_contexts_pool_t * pool, sec_context_t * ctx)
 	ASSERT(pool != NULL);
 
 	// remove context from in use list
-	ASSERT(ctx->usage == SEC_CONTEXT_USED);
 	pool->in_use_list.delete_node(&pool->in_use_list, &ctx->node);
-
-	// modify contex's usage before adding it to the retire list
-	// once it is added to the retire list it can be retrieved and
-	// used by other threads ... and we should not interfere
-	ctx->usage = SEC_CONTEXT_RETIRING;
 
 	// add context to retire list
 	pool->retire_list.add_tail(&pool->retire_list, &ctx->node);
@@ -191,13 +183,12 @@ static void free_in_use_context(sec_contexts_pool_t * pool, sec_context_t * ctx)
 	ASSERT(pool != NULL);
 
 	// remove context from in use list
-	ASSERT(ctx->usage == SEC_CONTEXT_USED);
 	pool->in_use_list.delete_node(&pool->in_use_list, &ctx->node);
 
 	// modify contex's usage before adding it to the free list
 	// once it is added to the free list it can be retrieved and
 	// used by other threads ... and we should not interfere
-	ctx->usage = SEC_CONTEXT_UNUSED;
+	CONTEXT_SET_STATE(ctx->state_packets_no, SEC_CONTEXT_UNUSED);
 	ctx->notify_packet_cbk = NULL;
 	ctx->jr_handle = NULL;
 
@@ -212,9 +203,9 @@ static uint8_t node_match(list_node_t *node)
 	ASSERT(node != NULL);
 
 	ctx = GET_CONTEXT_FROM_LIST_NODE(node);
-	ASSERT(ctx->usage == SEC_CONTEXT_RETIRING);
+	ASSERT(CONTEXT_GET_STATE(ctx->state_packets_no) == SEC_CONTEXT_RETIRING);
 
-	if(ctx->packets_no == 0)
+	if(CONTEXT_GET_PACKETS_NO(ctx->state_packets_no) == 0)
 	{
 		return 1;
 	}
@@ -233,7 +224,7 @@ static void node_modify_after_delete(list_node_t *node)
 	// modify contex's usage before adding it to the free list
 	// once it is added to the free list it can be retrieved and
 	// used by other threads ... and we should not interfere
-	ctx->usage = SEC_CONTEXT_UNUSED;
+	CONTEXT_SET_STATE(ctx->state_packets_no, SEC_CONTEXT_UNUSED);
 	ctx->notify_packet_cbk = NULL;
 	ctx->jr_handle = NULL;
 
@@ -310,8 +301,7 @@ sec_return_code_t init_contexts_pool(sec_contexts_pool_t * pool,
 
 		// initialize the sec_context with valid values
 		memset(ctx, 0, sizeof(sec_context_t));
-		pthread_mutex_init(&(ctx->mutex), NULL);
-		ctx->usage = SEC_CONTEXT_UNUSED;
+		CONTEXT_SET_STATE(ctx->state_packets_no, SEC_CONTEXT_UNUSED);
 		ctx->pool = pool;
 
 		// Add the context to the free list
@@ -369,8 +359,8 @@ sec_context_t* get_free_context(sec_contexts_pool_t * pool)
     // remove first element from the free list
 	node = pool->free_list.remove_first(&pool->free_list);
     ctx = GET_CONTEXT_FROM_LIST_NODE(node);
-    ASSERT(ctx->usage == SEC_CONTEXT_UNUSED);
-    ctx->usage = SEC_CONTEXT_USED;
+    ASSERT(CONTEXT_GET_STATE(ctx->state_packets_no) == SEC_CONTEXT_UNUSED);
+    CONTEXT_SET_STATE(ctx->state_packets_no, SEC_CONTEXT_USED);
 
 	// add the element to the tail of the in use list
     pool->in_use_list.add_tail(&pool->in_use_list, node);
@@ -387,31 +377,34 @@ sec_context_t* get_free_context(sec_contexts_pool_t * pool)
 
 sec_return_code_t free_or_retire_context(sec_contexts_pool_t * pool, sec_context_t * ctx)
 {
+    uint32_t new_state = 0;
+    uint32_t packets_no = 0;
 	ASSERT(pool != NULL);
 	ASSERT(ctx != NULL);
-	ASSERT(ctx->usage == SEC_CONTEXT_USED);
+	ASSERT(CONTEXT_GET_STATE(ctx->state_packets_no) == SEC_CONTEXT_USED);
+    ASSERT(SEC_CONTEXT_USED < SEC_CONTEXT_RETIRING);
 
-	// start critical area per context
-	pthread_mutex_lock(&ctx->mutex);
+    // Set state to retire. First 3 bits from sec_context_t::state_packets_no
+    // contain the state. Add the difference between SEC_CONTEXT_RETIRING and SEC_CONTEXT_USED
+    // integer codes.
+    CONTEXT_SET_STATE(new_state, SEC_CONTEXT_RETIRING - SEC_CONTEXT_USED);
 
-	if (ctx->packets_no != 0)
-	{
-		// If packets in flight, do not release the context yet, move it to retiring.
-		// The context will be deleted when all packets in flight are notified to UA
-		retire_context(pool, ctx);
+    // Atomically set the context state and read back the state_packets_no value.
+    atomic_add_load(&ctx->state_packets_no, new_state);
 
-		// end of critical area per context
-		pthread_mutex_unlock(&ctx->mutex);
+    // If packets in flight, do not release the context yet, move it to retiring.
+    // The context will be deleted when all packets in flight are notified to UA
+    packets_no = CONTEXT_GET_PACKETS_NO(ctx->state_packets_no);
+    if (packets_no != 0)
+    {
+        retire_context(pool, ctx);
+        return (packets_no == 1 ? SEC_LAST_PACKET_IN_FLIGHT : SEC_PACKETS_IN_FLIGHT);
+    }
 
-		return SEC_PACKETS_IN_FLIGHT;
-	}
-	// end of critical area per context
-	pthread_mutex_unlock(&ctx->mutex);
-
-	// if no packets in flight then we can safely release the context
+	// If no packets in flight then we can safely release the context
 	free_in_use_context(pool, ctx);
 
-	// run the contexts garbage collector
+	// Run the contexts garbage collector
 	run_contexts_garbage_colector(pool);
 
 	return SEC_SUCCESS;

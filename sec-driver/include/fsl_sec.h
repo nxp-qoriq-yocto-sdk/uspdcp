@@ -64,6 +64,12 @@ typedef enum sec_return_code_e
     SEC_PACKETS_IN_FLIGHT,           /*< API function indicates there are packets in flight
                                          for SEC to process that belong to a certain PDCP context.
                                          Can be returned by sec_delete_pdcp_context().*/
+    SEC_LAST_PACKET_IN_FLIGHT,       /*< API function indicates there is one last packet in flight
+                                         for SEC to process that belongs to a certain PDCP context.
+                                         When processed, the last packet in flight willl be notified to
+                                         User Application with a status of #SEC_STATUS_SUCCESS or
+                                         #SEC_STATUS_LAST_OVERDUE.
+                                         Can be returned by sec_delete_pdcp_context().*/
     SEC_PROCESSING_ERROR,            /*< Indicates a SEC processing error occurred on a Job Ring which requires a 
                                          SEC user space driver shutdown. Call sec_get_last_error() to obtain specific
                                          error code, as reported by SEC device.

@@ -70,7 +70,7 @@ extern "C" {
 // This test application will process a random number of packets per context ranging
 // from a minimum to a maximum value.
 #define MAX_PACKET_NUMBER_PER_CTX   10
-#define MIN_PACKET_NUMBER_PER_CTX   4
+#define MIN_PACKET_NUMBER_PER_CTX   1
 
 #ifdef SEC_HW_VERSION_4_4
 
@@ -91,6 +91,7 @@ typedef enum pdcp_context_usage_e
     PDCP_CONTEXT_FREE = 0,
     PDCP_CONTEXT_USED,
     PDCP_CONTEXT_MARKED_FOR_DELETION,
+    PDCP_CONTEXT_MARKED_FOR_DELETION_LAST_IN_FLIGHT_PACKET,
     PDCP_CONTEXT_CAN_BE_DELETED
 }pdcp_context_usage_t;
 
@@ -102,7 +103,7 @@ typedef enum pdcp_buffer_usage_e
 
 typedef struct buffer_s
 {
-    pdcp_buffer_usage_t usage;
+    volatile pdcp_buffer_usage_t usage;
     uint8_t buffer[PDCP_BUFFER_SIZE];
     uint32_t offset;
 }buffer_t;
@@ -438,7 +439,9 @@ static int release_pdcp_buffers(pdcp_context_t * pdcp_context,
     // was received.
     if (status == SEC_STATUS_LAST_OVERDUE)
     {
-        assert(pdcp_context->usage == PDCP_CONTEXT_MARKED_FOR_DELETION);
+        assert(pdcp_context->usage == PDCP_CONTEXT_MARKED_FOR_DELETION ||
+        pdcp_context->usage == PDCP_CONTEXT_MARKED_FOR_DELETION_LAST_IN_FLIGHT_PACKET);
+
         pdcp_context->usage = PDCP_CONTEXT_CAN_BE_DELETED;
     }
     else if (status == SEC_STATUS_OVERDUE)
@@ -450,6 +453,11 @@ static int release_pdcp_buffers(pdcp_context_t * pdcp_context,
     {
         // the stub implementation does not return an error status
         assert(status == SEC_STATUS_SUCCESS);
+        if (pdcp_context->usage == PDCP_CONTEXT_MARKED_FOR_DELETION &&
+            pdcp_context->no_of_buffers_processed == pdcp_context->no_of_buffers_to_process)
+        {
+            pdcp_context->usage = PDCP_CONTEXT_CAN_BE_DELETED;
+        }
     }
 
     return 0;
@@ -508,8 +516,15 @@ static int pdcp_ready_packet_handler (sec_packet_t *in_packet,
 
     pdcp_context = (pdcp_context_t *)ua_ctx_handle;
 
-    printf("thread #%d:consumer: sec_callback called for context_id = %d, buffer_id = %d, status = %d\n",
-            (pdcp_context->thread_id + 1)%2, pdcp_context->id, pdcp_context->no_of_buffers_processed, status);
+    printf("thread #%d:consumer: sec_callback called for context_id = %d, "
+            "context usage = %d, no of buffers processed = %d, no of buffers to process = %d, "
+            "status = %d\n",
+            (pdcp_context->thread_id + 1)%2,
+            pdcp_context->id,
+            pdcp_context->usage,
+            pdcp_context->no_of_buffers_processed + 1,
+            pdcp_context->no_of_buffers_to_process,
+            status);
 
     // Buffers processing.
     // In this test application we will release the input and output buffers
@@ -563,6 +578,11 @@ static int delete_context(pdcp_context_t * pdcp_context, int *no_of_used_pdcp_co
             printf("thread #%d:producer: delete PDCP context no %d -> packets in flight \n",
                     pdcp_context->thread_id, pdcp_context->id);
         }
+        else if (ret == SEC_LAST_PACKET_IN_FLIGHT)
+        {
+            printf("thread #%d:producer: delete PDCP context no %d -> last packet in flight \n",
+                    pdcp_context->thread_id, pdcp_context->id);
+        }
         else if (ret == SEC_SUCCESS)
         {
             // context was successfully removed from SEC driver
@@ -596,6 +616,11 @@ static int delete_context(pdcp_context_t * pdcp_context, int *no_of_used_pdcp_co
     {
         // nothing to do here
         // wait for the last overdue packet to be received
+    }
+    else if (pdcp_context->usage == PDCP_CONTEXT_MARKED_FOR_DELETION_LAST_IN_FLIGHT_PACKET)
+    {
+        // nothing to do here
+        // wait for the last packet to be received with status SUCCESS
     }
     else
     {
