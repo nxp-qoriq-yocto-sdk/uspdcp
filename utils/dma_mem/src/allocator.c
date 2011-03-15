@@ -30,6 +30,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#define LOCAL_DMA_ADDR_TYPE
 #include "private.h"
 
 #undef ALLOC_DEBUG

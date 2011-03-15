@@ -73,6 +73,8 @@ extern "C" {
 /*==================================================================================================
                                      GLOBAL VARIABLES
 ==================================================================================================*/
+// TODO remove this and replace it with macro
+extern vtop_function sec_vtop;
 
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
@@ -265,13 +267,15 @@ static void run_contexts_garbage_colector(sec_contexts_pool_t * pool)
 ==================================================================================================*/
 
 sec_return_code_t init_contexts_pool(sec_contexts_pool_t * pool,
-		                             const uint32_t number_of_contexts,
-		                             const uint8_t thread_safe)
+                                     void **dma_mem,
+                                     uint32_t number_of_contexts,
+                                     uint8_t thread_safe)
 {
 	int i = 0;
 	sec_context_t * ctx = NULL;
 
 	ASSERT(pool != NULL);
+    ASSERT(dma_mem != NULL);
 	ASSERT(thread_safe == THREAD_SAFE_POOL || thread_safe == THREAD_UNSAFE_POOL);
 
 	if (number_of_contexts == 0)
@@ -303,6 +307,14 @@ sec_return_code_t init_contexts_pool(sec_contexts_pool_t * pool,
 		memset(ctx, 0, sizeof(sec_context_t));
 		CONTEXT_SET_STATE(ctx->state_packets_no, SEC_CONTEXT_UNUSED);
 		ctx->pool = pool;
+
+        // For crypto information allocate DMA-capable memory 
+        // from memory area configured by UA.
+        ctx->crypto_info = *dma_mem;
+
+        // Increment address for available DMA memory area
+        *dma_mem += sizeof(sec_crypto_info_t);
+
 
 		// Add the context to the free list
 		// WARNING: do not memset with zero the context after adding it

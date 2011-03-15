@@ -44,13 +44,13 @@ extern "C" {
 #include "sec_config.h"
 #include "sec_job_ring.h"
 #include "sec_atomic.h"
+#include "sec_hw_specific.h"
 
 #include <stdio.h>
 
 /*==================================================================================================
                                      LOCAL DEFINES
 ==================================================================================================*/
-
 /** Max sec contexts per pool computed based on the number of Job Rings assigned.
  *  All the available contexts will be split evenly between all the per-job-ring pools. 
  *  There is one additional global pool besides the per-job-ring pools. */
@@ -68,8 +68,6 @@ extern "C" {
 /*==================================================================================================
                                       LOCAL VARIABLES
 ==================================================================================================*/
-/* Job rings used for communication with SEC HW */
-static sec_job_ring_t g_job_rings[MAX_SEC_JOB_RINGS];
 static int g_job_rings_no = 0;
 
 /* Array of job ring handles provided to UA from sec_init() function. */
@@ -81,8 +79,9 @@ static int sec_work_mode = 0;
  * Not used if UA associates the contexts created to a certain JR.*/
 static int last_jr_assigned = 0;
 
-// global context pool
+/* Global context pool */
 static sec_contexts_pool_t g_ctx_pool;
+
 /*==================================================================================================
                                      GLOBAL CONSTANTS
 ==================================================================================================*/
@@ -90,15 +89,18 @@ static sec_contexts_pool_t g_ctx_pool;
 /*==================================================================================================
                                      GLOBAL VARIABLES
 ==================================================================================================*/
+/** Start address for DMA-able memory area configured by UA */
+void* global_dma_mem_start = NULL;
+/** Current address for unused DMA-able memory area configured by UA */
+void* global_dma_mem_free = NULL;
+
+ptov_function sec_ptov = NULL;
+vtop_function sec_vtop = NULL;
 
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
 ==================================================================================================*/
 
-/** @brief Initialize the data stored in a ::sec_job_ring_t structure.
- *
- **/
-static void reset_job_ring(sec_job_ring_t *job_ring);
 
 /** @brief Enable IRQ generation for all SEC's job rings.
  *
@@ -134,15 +136,6 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
-
-static void reset_job_ring(sec_job_ring_t * job_ring)
-{
-    ASSERT(job_ring != NULL);
-    SEC_INFO("job ring %d UIO fd = %d", job_ring->jr_id, job_ring->uio_fd);
-    //memset(job_ring, 0, sizeof(sec_job_ring_t));
-    close(job_ring->uio_fd);
-}
-
 static int enable_irq()
 {
     // to be implemented
@@ -208,7 +201,8 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t * job_ring,
         notified_packets_no++;
 
         // increment the consumer index for the current job ring
-        job_ring->cidx = SEC_CIRCULAR_COUNTER(job_ring->cidx, SEC_JOB_RING_SIZE);
+        job_ring->cidx = SEC_CIRCULAR_COUNTER_POW_2(job_ring->cidx, SEC_JOB_RING_SIZE);
+        job_ring->free_slots--;
     }
 
     *packets_no = notified_packets_no;
@@ -227,16 +221,34 @@ sec_return_code_t sec_init(sec_config_t *sec_config_data,
     int i;
     int ret;
 
-    if(job_rings_no > MAX_SEC_JOB_RINGS)
-    {
-        SEC_ERROR("Requested number of job rings(%d) is greater than maximum hw supported(%d)",
-                job_rings_no, MAX_SEC_JOB_RINGS);
-        return SEC_INVALID_INPUT_PARAM;
-    }
+    // Validate input arguments
+    SEC_ASSERT(job_rings_no <= MAX_SEC_JOB_RINGS,
+               SEC_INVALID_INPUT_PARAM,
+               "Requested number of job rings(%d) is greater than maximum hw supported(%d)",
+               job_rings_no, MAX_SEC_JOB_RINGS);
+
+    SEC_ASSERT(job_ring_descriptors != NULL, SEC_INVALID_INPUT_PARAM, "job_ring_descriptors is NULL");
+    SEC_ASSERT(sec_config_data != NULL, SEC_INVALID_INPUT_PARAM, "sec_config_data is NULL");
+    SEC_ASSERT(sec_config_data->memory_area != NULL, 
+               SEC_INVALID_INPUT_PARAM, 
+               "sec_config_data->memory_area is NULL");
+    // DMA memory area must be cacheline aligned
+    SEC_ASSERT ((dma_addr_t)sec_config_data->memory_area % CACHE_LINE_SIZE == 0, 
+                SEC_INVALID_INPUT_PARAM,
+                "Configured memory is not cacheline aligned (to 64 bytes)");
 
     g_job_rings_no = job_rings_no;
     memset(g_job_rings, 0, sizeof(g_job_rings));
     SEC_INFO("Configuring %d SEC job rings", g_job_rings_no);
+
+    // Configure DMA-capable memory area assigned to the driver by UA
+    global_dma_mem_start = sec_config_data->memory_area;
+    global_dma_mem_free = global_dma_mem_start;
+    SEC_INFO("Using DMA memory area with start address = %p", global_dma_mem_start);
+
+    // TODO replace with macros
+    sec_ptov = sec_config_data->ptov;
+    sec_vtop = sec_config_data->vtop;
     
     // Read configuration data from DTS (Device Tree Specification).
     ret = sec_configure(g_job_rings_no, g_job_rings);
@@ -245,25 +257,38 @@ sec_return_code_t sec_init(sec_config_t *sec_config_data,
     // Per-job ring initialization
     for (i = 0; i < g_job_rings_no; i++)
     {
-        reset_job_ring(&g_job_rings[i]);
-
         // Initialize the context pool per JR
         // No need for thread synchronizations mechanisms for this pool because
         // one of the assumptions for this API is that only one thread will
         // create/delete contexts for a certain JR (also known as the producer of the JR).
-        ret = init_contexts_pool(&(g_job_rings[i].ctx_pool), MAX_SEC_CONTEXTS_PER_POOL, THREAD_UNSAFE_POOL);
+        ret = init_contexts_pool(&(g_job_rings[i].ctx_pool), 
+                                 &global_dma_mem_free,
+                                 MAX_SEC_CONTEXTS_PER_POOL, 
+                                 THREAD_UNSAFE_POOL);
         ASSERT(ret == 0);
 
-        // Obtain UIO device file descriptor for each owned job ring      
+        // Configure each owned job ring with UIO data:
+        // - UIO device file descriptor
+        // - UIO mapping for SEC registers
         sec_config_uio_job_ring(&g_job_rings[i]);
+
+        // Initialize job ring
+        ret = init_job_ring(&g_job_rings[i], &global_dma_mem_free);
+
+        SEC_ASSERT(ret == SEC_SUCCESS, ret, 
+                "Failed to initialize job ring with id %d ",
+                g_job_rings[i].jr_id);
 
         g_job_ring_handles[i].job_ring_handle = (sec_job_ring_handle_t)&g_job_rings[i];
         g_job_ring_handles[i].job_ring_irq_fd = g_job_rings[i].uio_fd;
     }
 
-    // initialize the global pool of contexts also
-    // we need for thread synchronizations mechanisms for this pool
-    ret = init_contexts_pool(&g_ctx_pool, MAX_SEC_CONTEXTS_PER_POOL, THREAD_SAFE_POOL);
+    // Initialize the global pool of contexts also.
+    // We need thread synchronizations mechanisms for this pool.
+    ret = init_contexts_pool(&g_ctx_pool, 
+                             &global_dma_mem_free, 
+                             MAX_SEC_CONTEXTS_PER_POOL, 
+                             THREAD_SAFE_POOL);
     ASSERT(ret == 0);
 
     // Remember initial work mode
@@ -288,7 +313,7 @@ uint32_t sec_release()
         // destroy the contexts pool per JR
         destroy_contexts_pool(&(g_job_rings[i].ctx_pool));
 
-    	reset_job_ring(&g_job_rings[i]);
+    	shutdown_job_ring(&g_job_rings[i]);
     }
     g_job_rings_no = 0;
 
@@ -570,8 +595,8 @@ uint32_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
         return SEC_INVALID_INPUT_PARAM;
     }
 
-    // check of the Job Ring is full (the difference between PI and CI is equal with the JR SIZE - 1)
-    if(SEC_JOB_RING_DIFF(SEC_JOB_RING_SIZE, job_ring->pidx, job_ring->cidx) == (SEC_JOB_RING_SIZE - 1))
+    // check if the Job Ring is full (job ring's free_slots counter is 0)
+    if(job_ring->free_slots == 0)
     {
         return SEC_JR_IS_FULL;
     }
@@ -592,7 +617,8 @@ uint32_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
     atomic_add_load(&sec_context->state_packets_no, 1);
 
     // increment the producer index for the current job ring
-    job_ring->pidx = SEC_CIRCULAR_COUNTER(job_ring->pidx, SEC_JOB_RING_SIZE);
+    job_ring->pidx = SEC_CIRCULAR_COUNTER_POW_2(job_ring->pidx, SEC_JOB_RING_SIZE);
+    job_ring->free_slots++;
 
     return SEC_SUCCESS;
     /* Stub Implementation - END */

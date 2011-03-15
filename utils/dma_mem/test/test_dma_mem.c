@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <unistd.h>
+
+#define LOCAL_DMA_ADDR_TYPE 
 #include "compat.h"
 
 #define BUFFER_ALIGNEMENT 64

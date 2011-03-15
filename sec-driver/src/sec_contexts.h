@@ -48,6 +48,7 @@ extern "C"{
 #include "list.h"
 #include "fsl_sec.h"
 #include "sec_atomic.h"
+#include "sec_utils.h"
 
 /*==================================================================================================
                                        DEFINES AND MACROS
@@ -99,9 +100,21 @@ typedef struct sec_contexts_pool_s
 
 	/* Total number of contexts available in all three lists. */
 	uint32_t no_of_contexts;
-	struct sec_context_s * sec_contexts;
+	struct sec_context_s *sec_contexts;
 
 }sec_contexts_pool_t;
+
+/** Cryptographic information accessed and used by SEC engine for
+ * a SEC context.
+ * TODO: STUB structure, needs to be properly defined.
+ */
+typedef struct sec_crypto_info_s
+{
+    uint32_t hfn;
+    uint32_t crypto_key;
+    uint32_t auth_key;
+
+}__attribute__((aligned(CACHE_LINE_SIZE))) sec_crypto_info_t;
 
 /** The declaration of a SEC context structure. */
 typedef struct sec_context_s
@@ -122,7 +135,7 @@ typedef struct sec_context_s
     /** The handle of the JR to which this context is affined.
      *  This handle is needed in sec_process_packet() function to identify
      *  the input JR in which the packet will be enqueued.  */
-    sec_job_ring_handle_t * jr_handle;
+    sec_job_ring_handle_t *jr_handle;
     /* The pool this context belongs to.
      * This pointer is needed when delete_pdcp_context() is received from UA
      * to be able to identify the pool from which this context was acquired.
@@ -130,10 +143,10 @@ typedef struct sec_context_s
      *  - the affined JR's pool
      *  - global pool if the affined JR's pool is full
      *  */
-    sec_contexts_pool_t * pool;
+    sec_contexts_pool_t *pool;
     /** The callback called for UA notifications. */
 	sec_out_cbk notify_packet_cbk;
-    /* Bitfield representing:
+    /** Bitfield representing:
      *      state:3 bits | packet_no:29 bits
      *
      * @note Writes to this field MUST be done using the primitives defined
@@ -151,6 +164,9 @@ typedef struct sec_context_s
      *  For SEC 4.4 being 1024 and for SEC 3.1 being 24.
      * */
 	atomic_t state_packets_no;
+    /** Cryptographic information that defines this SEC context.
+     * The data from this structure is DMA-accesible by SEC device. */
+    sec_crypto_info_t *crypto_info;
 }sec_context_t;
 
 
@@ -172,13 +188,16 @@ typedef struct sec_context_s
  *  A thread safe pool will use thread safe lists for storing the contexts.
  *
  * @param [in] pool                Pointer to a sec context pool structure.
+ * @param [in,out] dma_mem         Pointer to a DMA-capable memory zone, to be used 
+ *                                 for allocating SEC crypto info.
  * @param [in] number_of_contexts  The number of contexts to allocated for this pool.
  * @param [in] thread_safe         Configure the thread safeness.
  *                                 Valid values: #THREAD_SAFE_POOL, #THREAD_UNSAFE_POOL
  */
-sec_return_code_t init_contexts_pool(sec_contexts_pool_t * pool,
-		                             const uint32_t number_of_contexts,
-		                             const uint8_t thread_safe);
+sec_return_code_t init_contexts_pool(sec_contexts_pool_t *pool,
+                                     void **dma_mem,
+                                     uint32_t number_of_contexts,
+                                     uint8_t thread_safe);
 
 /** @brief Destroy a pool of sec contexts.
  *
@@ -186,7 +205,7 @@ sec_return_code_t init_contexts_pool(sec_contexts_pool_t * pool,
  *
  *  @param [in] pool                Pointer to a sec context pool structure.
  * */
-void destroy_contexts_pool(sec_contexts_pool_t * pool);
+void destroy_contexts_pool(sec_contexts_pool_t *pool);
 
 /** @brief Get a free context from the pool.
  *
@@ -197,7 +216,7 @@ void destroy_contexts_pool(sec_contexts_pool_t * pool);
  *
  *  @param [in] pool                Pointer to a sec context pool structure.
  * */
-sec_context_t* get_free_context(sec_contexts_pool_t * pool);
+sec_context_t* get_free_context(sec_contexts_pool_t *pool);
 
 /** @brief Release a context from the pool.
  *
@@ -219,7 +238,7 @@ sec_context_t* get_free_context(sec_contexts_pool_t * pool);
  *  @param [in] ctx                 Pointer to the sec context that should be deleted.
  * */
 
-sec_return_code_t free_or_retire_context(sec_contexts_pool_t * pool, sec_context_t * ctx);
+sec_return_code_t free_or_retire_context(sec_contexts_pool_t *pool, sec_context_t *ctx);
 /*================================================================================================*/
 
 

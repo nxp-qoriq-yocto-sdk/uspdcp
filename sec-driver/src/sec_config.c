@@ -39,9 +39,13 @@ extern "C" {
 ==================================================================================================*/
 #include "sec_config.h"
 #include "sec_utils.h"
+#include "sec_hw_specific.h"
 #include "fsl_sec_config.h"
 #include "fsl_sec.h"
+
 #include <dirent.h>
+#include <sys/mman.h>
+#include <errno.h>
 // For DTS parsing
 #include <of.h>
 #include <fcntl.h>
@@ -54,12 +58,14 @@ extern "C" {
  * Path for UIO device X is /sys/class/uio/uioX */
 #define SEC_UIO_DEVICE_SYS_ATTR_PATH    "/sys/class/uio"
 
+/** Subfolder in sysfs where mapping attributes are exported 
+ * for each UIO device. Path for mapping Y for device X is:
+ *      /sys/class/uio/uioX/maps/mapY */
+#define SEC_UIO_DEVICE_SYS_MAP_ATTR     "maps/map"
+
 /** Name of UIO device file prefix. Each UIO device will have a device file /dev/uioX, 
  * where X is the minor device number. */
 #define SEC_UIO_DEVICE_FILE_NAME    "/dev/uio"
-
-/** Bit mask for each job ring in a bitfield of format: jr0 | jr1 | jr2 | jr3 */
-#define JOB_RING_MASK(jr_id)        (1 << (MAX_SEC_JOB_RINGS - (jr_id) -1 ))
 
 /** Maximum length for the name of an UIO device file.
  * Device file name format is: /dev/uioX. */
@@ -70,6 +76,10 @@ extern "C" {
  *      /sys/class/uio/uioX/<attribute_file_name>
  */
 #define SEC_UIO_MAX_ATTR_FILE_NAME  100
+
+/** The id for the mapping used to export SEC's registers to 
+ * user space through UIO devices. */
+#define SEC_UIO_MAP_ID              0
 
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
@@ -124,14 +134,26 @@ static int file_read_first_line(char root[], char subdir[], char filename[], cha
  *
  * @param [in]  jr_id           Job ring id
  * @param [out] device_file     UIO device file name
+ * @param [out] uio_device_id   UIO device id
+ *
  * @retval true if UIO device found
  * @retval false if UIO device not found
  */
-static bool uio_find_device_file(int jr_id, char *device_file);
+static bool uio_find_device_file(int jr_id, char *device_file, int *uio_device_id);
+/** @brief Maps register range assigned for a job ring.
+ *
+ * @param [in] uio_device_fd    UIO device file descriptor
+ * @param [in] uio_device_id    UIO device id
+ * @param [in] uio_map_id       UIO allows maximum 5 different mapping for each device.
+ *                              Maps start with id 0.
+ * @retval  NULL if failed to map registers
+ * @retval  Virtual address for mapped register address range
+ */
+static void* uio_map_registers(int uio_device_fd, int uio_device_id, int uio_map_id);
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
-static bool uio_find_device_file(int jr_id, char *device_file)
+static bool uio_find_device_file(int jr_id, char *device_file, int *uio_device_id)
 {
     bool device_file_found = false;
     int uio_minor_number = -1;
@@ -176,6 +198,7 @@ static bool uio_find_device_file(int jr_id, char *device_file)
                             device_file,
                             jr_id);
                     device_file_found = true;
+                    *uio_device_id = uio_minor_number;
                     break;
                 }
             }
@@ -202,22 +225,69 @@ static bool file_name_match_extract(char filename[], char match[], int *number)
 
 static int file_read_first_line(char root[], char subdir[], char filename[], char* line)
 {
-    char file_name[SEC_UIO_MAX_ATTR_FILE_NAME];
+    char absolute_file_name[SEC_UIO_MAX_ATTR_FILE_NAME];
     int fd = 0, ret = 0;
 
     // compose the file name: root/subdir/filename
-    memset(file_name, 0, sizeof(file_name));
-    sprintf(file_name, "%s/%s/%s", root, subdir, filename);
+    memset(absolute_file_name, 0, sizeof(absolute_file_name));
+    sprintf(absolute_file_name, "%s/%s/%s", root, subdir, filename);
 
-    fd = open(file_name, O_RDONLY );
-    SEC_ASSERT(fd > 0, -1, "Error opening file %s", file_name);
+    fd = open(absolute_file_name, O_RDONLY );
+    SEC_ASSERT(fd > 0, -1, "Error opening file %s", absolute_file_name);
 
     // read UIO device name from first line in file
     ret = read(fd, line, SEC_UIO_MAX_DEVICE_FILE_NAME_LENGTH);
-    SEC_ASSERT(ret != 0, -1, "Error reading from file %s", file_name);
+    SEC_ASSERT(ret != 0, -1, "Error reading from file %s", absolute_file_name);
     
     close(fd);
     return 0;
+}
+
+static void* uio_map_registers(int uio_device_fd, int uio_device_id, int uio_map_id)
+{
+    void *mapped_address = NULL;
+    unsigned int uio_map_size = 0;
+    char uio_sys_root[SEC_UIO_MAX_ATTR_FILE_NAME];
+    char uio_sys_map_subdir[SEC_UIO_MAX_ATTR_FILE_NAME];
+    char uio_map_size_str[SEC_UIO_MAX_DEVICE_NAME_LENGTH];
+    int ret = 0;
+
+    // compose the file name: root/subdir/filename
+    memset(uio_sys_root, 0, sizeof(uio_sys_root));
+    memset(uio_sys_map_subdir, 0, sizeof(uio_sys_map_subdir));
+    memset(uio_map_size_str, 0, sizeof(uio_map_size_str));
+
+    // Compose string: /sys/class/uio/uioX
+    sprintf(uio_sys_root, "%s/%s%d", SEC_UIO_DEVICE_SYS_ATTR_PATH, "uio", uio_device_id);
+    // Compose string: maps/mapY
+    sprintf(uio_sys_map_subdir, "%s%d", SEC_UIO_DEVICE_SYS_MAP_ATTR, uio_map_id);
+
+    // Read first (and only) line from file /sys/class/uio/uioX/maps/mapY/size
+    ret = file_read_first_line(uio_sys_root, uio_sys_map_subdir, "size", uio_map_size_str);
+    SEC_ASSERT(ret == 0, NULL, "file_read_first_line() failed");
+
+    // Read mapping size, expressed in hexa(base 16)
+    uio_map_size = strtol(uio_map_size_str, NULL, 16);
+
+    // Map the region in user space
+    mapped_address = mmap(0, //dynamically choose virtual address
+                          uio_map_size,
+                          PROT_READ | PROT_WRITE,
+                          MAP_SHARED,
+                          uio_device_fd,
+                          0); // offset = 0 because UIO device has only one mapping for the entire SEC register memory
+    if (mapped_address == MAP_FAILED)
+    {
+        SEC_ERROR("Failed to map registers! errno = %d job ring fd  = %d, "
+                  "uio device id = %d, uio map id = %d", 
+                  errno, uio_device_fd, uio_device_id, uio_map_id);
+        return NULL;
+    }
+
+    SEC_INFO("UIO device id %d, mapped region from map id %d of size 0x%x",
+             uio_device_id, uio_map_id, uio_map_size);
+
+    return mapped_address;
 }
 /*==================================================================================================
                                      GLOBAL FUNCTIONS
@@ -226,8 +296,10 @@ static int file_read_first_line(char root[], char subdir[], char filename[], cha
 int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
 {
     struct device_node *dpa_node = NULL;
-    uint32_t *kernel_usr_channel_map = NULL;
-    uint32_t usr_channel_map = 0;
+    uint32_t *prop = NULL;
+    uint32_t channel_remap = 0;
+    uint32_t kernel_usr_channel_map = 0;
+    uint32_t usr_channel_map = 0; 
     uint32_t len = 0;
     uint8_t config_jr_no = 0;
     int jr_idx = 0, jr_no = 0;
@@ -242,17 +314,28 @@ int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
             continue;
         }
 
+        // Read channel remap which dictates register mapping of channels
+        // into an alternate 4k page.
+        prop = of_get_property(dpa_node, "fsl,channel-remap", &len);
+        if(prop == NULL)
+        {
+            SEC_ERROR("Error reading <fsl,channel-remap> property from DTS!");
+            return SEC_INVALID_INPUT_PARAM;
+        }
+        channel_remap = *prop;
+
         // Read from DTS job ring distribution map between user space and kernel space.
         // If bit is set, job ring belongs to kernel space.
         // Bitfield: jr0 | jr1 | jr2 | jr3
-        kernel_usr_channel_map = of_get_property(dpa_node, "fsl,channel-kernel-user-space-map", &len);
-        if(kernel_usr_channel_map == NULL)
+        prop = of_get_property(dpa_node, "fsl,channel-kernel-user-space-map", &len);
+        if(prop == NULL)
         {
             SEC_ERROR("Error reading <fsl,channel-kernel-user-space-map> property from DTS!");
             return SEC_INVALID_INPUT_PARAM;
         }
-        
-        usr_channel_map = ~(*kernel_usr_channel_map);
+
+        kernel_usr_channel_map = *prop;        
+        usr_channel_map = ~kernel_usr_channel_map;
       
 #endif // SEC_HW_VERSION_3_1
 
@@ -282,6 +365,17 @@ int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
             {
                 SEC_INFO("Using Job Ring number %d", jr_idx);
                 job_rings[jr_no].jr_id = jr_idx;
+
+                // remember if the registers for this job ring are mapped in an alternate 4k page
+                if(channel_remap & JOB_RING_MASK(jr_idx))
+                {
+                    job_rings[jr_no].alternate_register_range = TRUE;
+                }
+                else
+                {
+                    job_rings[jr_no].alternate_register_range = FALSE;
+                }
+
                 jr_no++;
                 if (jr_no == job_ring_number)
                 {
@@ -299,14 +393,17 @@ int sec_config_uio_job_ring(sec_job_ring_t *job_ring)
 {
     bool uio_device_found = false;
     char uio_device_file_name[SEC_UIO_MAX_DEVICE_FILE_NAME_LENGTH];
+    int uio_device_id = -1;
 
     // Find UIO device created by SEC kernel driver for this job ring.
     memset(uio_device_file_name,  0, sizeof(uio_device_file_name));
-    uio_device_found = uio_find_device_file(job_ring->jr_id, uio_device_file_name);
+    uio_device_found = uio_find_device_file(job_ring->jr_id, 
+            uio_device_file_name,
+            &uio_device_id);
 
-    SEC_ASSERT(uio_device_found == true, 
-            SEC_INVALID_INPUT_PARAM, 
-            "UIO device for job ring %d not found!", 
+    SEC_ASSERT(uio_device_found == true,
+            SEC_INVALID_INPUT_PARAM,
+            "UIO device for job ring %d not found!",
             job_ring->jr_id);
 
     // Open device file
@@ -318,6 +415,21 @@ int sec_config_uio_job_ring(sec_job_ring_t *job_ring)
 
     SEC_INFO("Opened device file for job ring %d , fd = %d", job_ring->jr_id, job_ring->uio_fd);
 
+    // Map register range for this job ring.
+    // On SEC 4.x each job ring has its specific registers 
+    // in a separate 4K map-able memory area.
+    // On SEC 3.1 we cannot separate register address ranges for each channel.
+    // We will map only once the entire register address range for SEC device.
+    if (register_base_addr == NULL)
+    {
+        register_base_addr = uio_map_registers(job_ring->uio_fd, 
+                uio_device_id, 
+                SEC_UIO_MAP_ID);
+
+        SEC_ASSERT(register_base_addr != NULL,
+                SEC_INVALID_INPUT_PARAM,
+                "Failed to map SEC registers");
+    }
 
     return SEC_SUCCESS; 
 }

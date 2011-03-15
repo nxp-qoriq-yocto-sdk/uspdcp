@@ -37,14 +37,15 @@ extern "C" {
 /*=================================================================================================
                                         INCLUDE FILES
 ==================================================================================================*/
-#include "sec_job_ring.h"
-#include "sec_utils.h"
 #include "sec_hw_specific.h"
-
+#include "sec_utils.h"
 
 /*==================================================================================================
                                      LOCAL DEFINES
 ==================================================================================================*/
+
+/** Used to retry resetting a job ring in SEC hardware. */
+#define SEC_TIMEOUT 100000
 
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
@@ -65,11 +66,8 @@ extern "C" {
 /*==================================================================================================
                                      GLOBAL VARIABLES
 ==================================================================================================*/
-/* Job rings used for communication with SEC HW */
-sec_job_ring_t g_job_rings[MAX_SEC_JOB_RINGS];
-
-extern ptov_function sec_ptov;
-extern vtop_function sec_vtop;
+/* Base address for SEC's register memory. */
+volatile void *register_base_addr = NULL;
 
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
@@ -82,63 +80,57 @@ extern vtop_function sec_vtop;
 /*==================================================================================================
                                      GLOBAL FUNCTIONS
 ==================================================================================================*/
-int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem)
+
+int hw_reset_job_ring(sec_job_ring_t *job_ring)
 {
     int ret = 0;
-    int i = 0;
+    uint32_t reg_val = 0;
 
-    ASSERT(job_ring != NULL);
-    ASSERT(dma_mem != NULL);
+    // First reset the job ring in hw
+    ret = hw_shutdown_job_ring(job_ring);
+    SEC_ASSERT(ret == 0, ret, "Failed resetting job ring in hardware");
 
-    SEC_INFO("Job ring %d UIO fd = %d", job_ring->jr_id, job_ring->uio_fd);
+    // Set done writeback enable and done IRQ enable at job ring level
+    reg_val = SEC_REG_VAL_CCCR_LO_CDWE | SEC_REG_VAL_CCCR_LO_CDIE;
+#ifdef CONFIG_PHYS_64BIT
+    // Set 36-bit addressing if enabled
+    reg_val |= SEC_REG_VAL_CCCR_LO_EAE; 
+#endif
+    setbits32(register_base_addr + SEC_REG_CCCR_LO(job_ring), reg_val);
 
-    // Reset job ring in SEC hw and configure job ring registers
-    ret = hw_reset_job_ring(job_ring);
-    SEC_ASSERT(ret == 0, ret, "Failed to reset hardware job ring with id %d", job_ring->jr_id);
+    // Configure interrupt generation at controller level, in SEC hw
+    // TODO; if in pure polling mode do not enable IRQs at controller level.
+    reg_val = SEC_REG_SET_VAL_IER_DONE(job_ring->jr_id);
+    setbits32(register_base_addr + SEC_REG_IER , reg_val);
 
-    // Memory area must start from cacheline-aligned boundary.
-    // Each job entry is itself aligned to cacheline.
-    SEC_ASSERT ((dma_addr_t)*dma_mem % CACHE_LINE_SIZE == 0, 
-            SEC_INVALID_INPUT_PARAM,
-            "Current memory position is not cacheline aligned (to 64 bytes)."
-            "Job ring id = %d", job_ring->jr_id);
+    // TODO: integrity check required for PDCP processing ?
+    return 0;
+}
 
-    // Allocate job items from the DMA-capable memory area provided by UA
-    ASSERT(job_ring->descriptors == NULL);
+int hw_shutdown_job_ring(sec_job_ring_t *job_ring)
+{
+    unsigned int timeout = SEC_TIMEOUT;
+    int usleep_interval = 10;
 
-    job_ring->descriptors = *dma_mem;
-    *dma_mem += SEC_JOB_RING_SIZE * sizeof(sec_descriptor_t);
+    ASSERT(register_base_addr != NULL);
 
-    for(i = 0; i < SEC_JOB_RING_SIZE; i++)
+    // Ask the SEC hw to reset this job ring
+    out_be32(register_base_addr + SEC_REG_CCCR(job_ring), SEC_REG_CCCR_VAL_RESET);
+
+    // Loop until the SEC engine has finished the job ring reset
+    while ((in_be32(register_base_addr + SEC_REG_CCCR(job_ring)) & SEC_REG_CCCR_VAL_RESET) && --timeout)
     {
-        //job_ring->jobs[i].descr = &job_ring->descriptors[i];
-        
-        // Obtain and store the physical address for a job descriptor        
-        job_ring->jobs[i].descr_phys_addr = sec_vtop(&job_ring->descriptors[i]);
-
+        usleep(usleep_interval);
     }
 
-    // Initialize free slots to count SEC_JOB_RING_SIZE(=24 on SEC 3.1) jobs.
-    // The total size of the job ring can be bigger as it is rounded up to the next
-    // power of two. This helps to update producer/consumer index with bitwise operations.
-    job_ring->free_slots = -(SEC_JOB_RING_SIZE -1);
+    if (timeout == 0)
+    {
+        SEC_ERROR("Failed to reset hw job ring with id  %d\n", job_ring->jr_id);
+        return -1;
+    }
 
-    return SEC_SUCCESS;
+    return 0;
 }
-
-int shutdown_job_ring(sec_job_ring_t * job_ring)
-{
-    int ret = 0;
-
-    ASSERT(job_ring != NULL);
-    close(job_ring->uio_fd);
-
-    ret = hw_shutdown_job_ring(job_ring);
-    SEC_ASSERT(ret == 0, ret, "Failed to shutdown hardware job ring with id %d", job_ring->jr_id);
-
-    return SEC_SUCCESS;
-}
-
 /*================================================================================================*/
 
 #ifdef __cplusplus

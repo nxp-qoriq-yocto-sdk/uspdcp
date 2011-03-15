@@ -41,9 +41,12 @@ extern "C" {
 #include <string.h>
 #include <assert.h>
 #include <pthread.h>
-#include "fsl_sec.h"
 #include <stdlib.h>
 #include <unistd.h>
+
+#include "fsl_sec.h"
+// for dma_mem library
+#include "compat.h"
 
 /*==================================================================================================
                                      LOCAL CONSTANTS
@@ -266,16 +269,6 @@ static int delete_context(pdcp_context_t * pdcp_context, int *no_of_used_pdcp_co
 static int delete_contexts(pdcp_context_t * pdcp_contexts,
                            int *no_of_used_pdcp_contexts,
                            int* contexts_deleted);
-
-/** @brief Convert virtual address to physical address.
- * This function will be called from inside SEC driver when it needs
- * to make an address conversion. */
-static phys_addr_t custom_vtop(void *address);
-
-/** @brief Convert physical address to virtual address.
- * This function will be called from inside SEC driver when it needs
- * to make an address conversion.*/
-static void* custom_ptov(phys_addr_t address);
 /*==================================================================================================
                                         LOCAL MACROS
 ==================================================================================================*/
@@ -310,18 +303,6 @@ static pthread_t threads[THREADS_NUMBER];
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
-static phys_addr_t custom_vtop(void *address)
-{
-	// to be implemented
-    return 0;
-}
-
-static void* custom_ptov(phys_addr_t address)
-{
-	// to be implemented
-    return NULL;
-}
-
 static int get_free_pdcp_context(pdcp_context_t * pdcp_contexts,
                                  int * no_of_used_pdcp_contexts,
                                  pdcp_context_t ** pdcp_context)
@@ -882,12 +863,23 @@ static int setup_sec_environment(void)
     //////////////////////////////////////////////////////////////////////////////
     // 1. Initialize SEC user space driver requesting #JOB_RING_NUMBER Job Rings
     //////////////////////////////////////////////////////////////////////////////
-    sec_config_data.memory_area = malloc (SEC_DMA_MEMORY_SIZE);
+
+    // map the physical memory
+    ret = dma_mem_setup();
+    if (ret != 0)
+    {
+        printf("dma_mem_setup failed with ret = %d\n", ret);
+        return 1;
+    }
+	printf("dma_mem_setup: mapped virtual mem 0x%x to physical mem 0x%x\n", __dma_virt, DMA_MEM_PHYS);
+
+
+    sec_config_data.memory_area = (void*)__dma_virt;
     assert(sec_config_data.memory_area != NULL);
 
     // Fill SEC driver configuration data
-    sec_config_data.ptov = &custom_ptov;
-    sec_config_data.vtop = &custom_vtop;
+    sec_config_data.ptov = &dma_mem_ptov;
+    sec_config_data.vtop = &dma_mem_vtop;
     sec_config_data.work_mode = SEC_POLLING_MODE;
 #ifdef SEC_HW_VERSION_4_4
     sec_config_data.irq_coalescing_count = IRQ_COALESCING_COUNT;
@@ -924,8 +916,12 @@ static int cleanup_sec_environment(void)
     }
     printf("thread main: released SEC user space driver\n");
 
-    // free the memory area allocated for SEC driver
-    free(sec_config_data.memory_area);
+	// unmap the physical memory
+	ret = dma_mem_release();
+	if (ret != 0)
+	{
+		return 1;
+	}
 
     return 0;
 }

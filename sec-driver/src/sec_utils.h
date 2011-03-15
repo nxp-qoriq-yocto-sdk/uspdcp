@@ -42,6 +42,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
+#include <stdlib.h>
 
 /*==============================================================================
                               DEFINES AND MACROS
@@ -171,6 +172,35 @@
 #define unlikely(x)     __builtin_expect(!!(x), 0)
 #define __always_unused __attribute__((unused))
 
+/** Size in bytes of a cacheline. */
+#define CACHE_LINE_SIZE  64
+
+/** Set indicated bits in register */
+#define setbits32(_addr, _v) out_be32((_addr), in_be32(_addr) |  (_v))
+
+/** Clear indicated bits in register */
+#define clrbits32(_addr, _v) out_be32((_addr), in_be32(_addr) & ~(_v))
+
+/** Determine whether some value is a power of two, where zero is
+ * *not* considered a power of two. */
+static inline bool is_power_of_2(unsigned int n)
+{
+    return (n != 0 && ((n & (n - 1)) == 0));
+}
+
+/** Round up to nearest power of two  */
+static inline unsigned int roundup_pow_of_two(unsigned int n)
+{
+    n--;
+    n |= n >> 1;
+    n |= n >> 2;
+    n |= n >> 4;
+    n |= n >> 8;
+    n |= n >> 16;
+    n++;
+
+    return n;
+}
 
 /*==============================================================================
                                     ENUMS

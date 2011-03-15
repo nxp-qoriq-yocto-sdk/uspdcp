@@ -132,6 +132,7 @@ extern "C"{
 /** Size of job descriptor submitted to SEC device for each packet to be processed.
  *  Contains 3 DMA address pointers: to shared descriptor, to input buffer and to output buffer.
  *  The job descriptor contains other SEC specific commands as well. */
+// TODO: keep count of cacheline alignment, size may be bigger
 #define SEC_JOB_DESCRIPTOR_SIZE     sizeof(dma_addr_t) * 3 + 20
 
 /** DMA memory required for an input ring of a job ring. */
@@ -149,8 +150,9 @@ extern "C"{
 #define SEC_CRYPTO_DESCRIPTOR_SIZE  0
 /** Size of cryptographic context that is used directly in communicating with SEC device.
  *  SEC device works only with physical addresses. This is the maximum size for a SEC
- *  descriptor on SEC 3.1 device, 7 double words. */
-#define SEC_JOB_DESCRIPTOR_SIZE     56
+ *  descriptor on SEC 3.1 device, 8 double words. */
+// TODO: keep count of cacheline alignment, size may be bigger
+#define SEC_JOB_DESCRIPTOR_SIZE     64
 /** DMA memory required for a channel (similar with job ring in SEC 4.4). */
 #define SEC_DMA_MEM_INPUT_RING_SIZE     (SEC_JOB_DESCRIPTOR_SIZE) * (SEC_JOB_RING_SIZE)
 /** DMA memory required for a channel (similar with job ring in SEC 4.4). 
@@ -223,7 +225,7 @@ extern "C"{
 /** Configure the size of the JOB RING.
  *  For SEC 3.1 the size of the FIFO (concept similar to JOB INPUT RING
  *  on SEC 4.4) is hardware fixed to 24. */
-#define SEC_JOB_RING_SIZE  24
+#define SEC_JOB_RING_SIZE  /*24*/32
 #endif
 
 /** Maximum number of job rings supported by SEC hardware */

@@ -44,8 +44,9 @@ extern "C" {
 #include <assert.h>
 #include <string.h>
 /*==================================================================================================
-                                     LOCAL CONSTANTS
+                                     LOCAL DEFINES
 ==================================================================================================*/
+#define MAX_SEC_CONTEXTS_PER_POOL   (SEC_MAX_PDCP_CONTEXTS / (MAX_SEC_JOB_RINGS))
 
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
@@ -66,14 +67,24 @@ extern "C" {
 /*==================================================================================================
                                      GLOBAL VARIABLES
 ==================================================================================================*/
+void* global_dma_mem_free = NULL;
+void* global_dma_mem_free_original = NULL;
 
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
 ==================================================================================================*/
+// stub function, TODO: remove this because will be replaced with macros
+static phys_addr_t custom_vtop(void *address);
+vtop_function sec_vtop = custom_vtop;
 
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
+static phys_addr_t custom_vtop(void *address)
+{
+    // stub function, TODO: remove this because will be replaced with macros
+    return (dma_addr_t)address;
+}
 
 static void test_contexts_pool_init_destroy(void)
 {
@@ -82,7 +93,7 @@ static void test_contexts_pool_init_destroy(void)
 
 #define NO_OF_CONTEXTS 10
 
-	ret = init_contexts_pool(&pool, NO_OF_CONTEXTS, THREAD_UNSAFE_POOL);
+	ret = init_contexts_pool(&pool, &global_dma_mem_free, NO_OF_CONTEXTS, THREAD_UNSAFE_POOL);
 
 	assert_equal_with_message(ret, 0,
 			  "ERROR on init_contexts_pool: ret = %d!", ret);
@@ -97,7 +108,7 @@ static void test_contexts_pool_get_free_contexts(void)
 #define NO_OF_CONTEXTS 10
 	sec_context_t* sec_ctxs[NO_OF_CONTEXTS];
 
-	ret = init_contexts_pool(&pool, NO_OF_CONTEXTS, THREAD_UNSAFE_POOL);
+	ret = init_contexts_pool(&pool, &global_dma_mem_free, NO_OF_CONTEXTS, THREAD_UNSAFE_POOL);
 
 	assert_equal_with_message(ret, 0,
 			  "ERROR on init_contexts_pool: ret = %d!", ret);
@@ -129,7 +140,7 @@ static void test_contexts_pool_free_contexts_with_no_packets_in_flight(void)
 #define NO_OF_CONTEXTS 10
 	sec_context_t* sec_ctxs[NO_OF_CONTEXTS];
 
-	ret = init_contexts_pool(&pool, NO_OF_CONTEXTS, THREAD_UNSAFE_POOL);
+	ret = init_contexts_pool(&pool, &global_dma_mem_free, NO_OF_CONTEXTS, THREAD_UNSAFE_POOL);
 
 	assert_equal_with_message(ret, 0,
 			  "ERROR on init_contexts_pool: ret = %d!", ret);
@@ -181,7 +192,7 @@ static void test_contexts_pool_free_contexts_with_packets_in_flight(void)
 	sec_context_t* sec_ctxs[NO_OF_CONTEXTS];
 	sec_context_t* sec_ctx = NULL;
 
-	ret = init_contexts_pool(&pool, NO_OF_CONTEXTS, THREAD_UNSAFE_POOL);
+	ret = init_contexts_pool(&pool, &global_dma_mem_free, NO_OF_CONTEXTS, THREAD_UNSAFE_POOL);
 
 	assert_equal_with_message(ret, 0,
 			  "ERROR on init_contexts_pool: ret = %d!", ret);
@@ -214,7 +225,17 @@ static void test_contexts_pool_free_contexts_with_packets_in_flight(void)
 	for (i = 0; i < NO_OF_CONTEXTS; i++)
 	{
 		ret = free_or_retire_context(&pool, sec_ctxs[i]);
-		if (i%2 == 0)
+        if(i == 0)
+        {
+			assert_equal_with_message(ret, SEC_LAST_PACKET_IN_FLIGHT,
+					"ERROR on free_or_retire_context: should have returned SEC_LAST_PACKET_IN_FLIGHT ret = (%d)", ret);
+			assert_equal_with_message(CONTEXT_GET_STATE(sec_ctxs[i]->state_packets_no), SEC_CONTEXT_RETIRING,
+					"ERROR on free_or_retire_context: invalid state of context!");
+			assert_equal_with_message(CONTEXT_GET_PACKETS_NO(sec_ctxs[i]->state_packets_no), i+1,
+					"ERROR on free_or_retire_context: invalid packets_no in context (%d)!", 
+                    CONTEXT_GET_PACKETS_NO(sec_ctxs[i]->state_packets_no));
+        }
+		else if (i%2 == 0)
 		{
 			assert_equal_with_message(ret, SEC_PACKETS_IN_FLIGHT,
 					"ERROR on free_or_retire_context: should have returned SEC_PACKETS_IN_FLIGHT ret = (%d)", ret);
@@ -302,6 +323,16 @@ int main(int argc, char *argv[])
      * it is recommended to run_single_test() for each test case.
      */
     //run_test_suite(host_api_tests(), create_text_reporter());
+    
+    // Allocate 'DMA-capable' memory for a context pool per each job ring,
+    // plus one more for a global pool.
+
+    global_dma_mem_free = malloc(sizeof(sec_crypto_info_t)* MAX_SEC_CONTEXTS_PER_POOL * (MAX_SEC_JOB_RINGS + 1)  );
+    assert(global_dma_mem_free != NULL);
+
+    // Remember start address of memory area (for free() )
+    // because it will be modified as the SEC context pool allocation uses memory from it.
+    global_dma_mem_free_original = global_dma_mem_free;
 
     /* create test suite */
     TestSuite * suite = contexts_pool_tests();
@@ -316,6 +347,8 @@ int main(int argc, char *argv[])
 
     destroy_test_suite(suite);
     (*reporter->destroy)(reporter);
+
+    free(global_dma_mem_free_original);
 
     return 0;
 } /* main() */
