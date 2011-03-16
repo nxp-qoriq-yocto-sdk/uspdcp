@@ -181,27 +181,6 @@
 /** Clear indicated bits in register */
 #define clrbits32(_addr, _v) out_be32((_addr), in_be32(_addr) & ~(_v))
 
-/** Determine whether some value is a power of two, where zero is
- * *not* considered a power of two. */
-static inline bool is_power_of_2(unsigned int n)
-{
-    return (n != 0 && ((n & (n - 1)) == 0));
-}
-
-/** Round up to nearest power of two  */
-static inline unsigned int roundup_pow_of_two(unsigned int n)
-{
-    n--;
-    n |= n >> 1;
-    n |= n >> 2;
-    n |= n >> 4;
-    n |= n >> 8;
-    n |= n >> 16;
-    n++;
-
-    return n;
-}
-
 /*==============================================================================
                                     ENUMS
 ==============================================================================*/
@@ -232,6 +211,27 @@ static inline void out_be32(volatile uint32_t *addr, uint32_t val) {
 /** Read 32bit values */
 static inline uint32_t in_be32(const volatile uint32_t *addr) {
 	return *addr;
+}
+
+/** Determine whether some value is a power of two, where zero is
+ * *not* considered a power of two. */
+static inline bool is_power_of_2(unsigned int n)
+{
+    return (n != 0 && ((n & (n - 1)) == 0));
+}
+
+/** Round up to nearest power of two  */
+static inline unsigned int roundup_pow_of_two(unsigned int n)
+{
+    n--;
+    n |= n >> 1;
+    n |= n >> 2;
+    n |= n >> 4;
+    n |= n >> 8;
+    n |= n >> 16;
+    n++;
+
+    return n;
 }
 /*============================================================================*/
 

@@ -146,6 +146,19 @@ int hw_reset_job_ring(sec_job_ring_t *job_ring);
  */
 int hw_shutdown_job_ring(sec_job_ring_t *job_ring);
 
+/** @brief Enable IRQ generation for a job ring/channel in SEC device.
+ *
+ * @note This function is used in NAPI and pure IRQ functioning modes.
+ *       In pure polling mode IRQ generation is NOT enabled at job ring level!
+ *
+ * Configuration is done at SEC engine controller level (on SEC 3.1).
+ * At job ring level the interrupts are always generated but can be
+ * masked out at controller level.
+ *
+ * @param [in] job_ring     The job ring
+ */
+void hw_enable_irq_on_job_ring(sec_job_ring_t *job_ring);
+
 /*============================================================================*/
 
 

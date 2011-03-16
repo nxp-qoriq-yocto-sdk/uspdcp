@@ -79,6 +79,8 @@ typedef enum sec_return_code_e
                                          This can happen if the packet RX rate is higher than SEC's capacity. */
     SEC_DRIVER_RELEASE_IN_PROGRESS,  /*< SEC driver shutdown is in progress and no more context
                                          creation/deletion, packets processing or polling is allowed.*/
+    SEC_DRIVER_ALREADY_INITALIZED,   /*< SEC driver is already initialized. */
+    SEC_DRIVER_NOT_INITALIZED,       /*< SEC driver is NOT initialized. */
     SEC_DRIVER_NO_FREE_CONTEXTS,     /*< There are no more free contexts. Considering increasing the
                                          maximum number of contexts: #SEC_MAX_PDCP_CONTEXTS.*/
 }sec_return_code_t;
@@ -267,7 +269,7 @@ typedef struct sec_config_s
                                                 manner as a value of 1.*/
 #endif
     uint8_t         work_mode;              /*< Choose between hardware poll vs interrupt notification when driver is initialized. 
-                                                Valid values are #SEC_POLLING_MODE and #SEC_INTERRUPT_MODE.*/
+                                                Valid values are #SEC_STARTUP_POLLING_MODE and #SEC_STARTUP_INTERRUPT_MODE.*/
 }sec_config_t;
 
 

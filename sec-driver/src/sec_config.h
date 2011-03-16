@@ -89,7 +89,7 @@ int sec_configure(int job_ring_number, sec_job_ring_t *job_rings);
  * @retval #SEC_SUCCESS                 for successful execution
  * @retval #SEC_INVALID_INPUT_PARAM     in case of invalid configuration found in DTS
  */
-int sec_config_uio_job_ring(sec_job_ring_t *job_ring);
+sec_return_code_t sec_config_uio_job_ring(sec_job_ring_t *job_ring);
 
 /*================================================================================================*/
 

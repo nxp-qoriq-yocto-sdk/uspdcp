@@ -60,6 +60,13 @@ extern "C" {
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
 ==================================================================================================*/
+/** Lists the states possible for the SEC user space driver. */
+typedef enum sec_driver_state_e
+{
+    SEC_DRIVER_STATE_IDLE,      /*< Driver not initialized */
+    SEC_DRIVER_STATE_STARTED,   /*< Driver initialized and can be used by UA */
+    SEC_DRIVER_STATE_RELEASE,   /*< Driver release is in progress */
+}sec_driver_state_t;
 
 /*==================================================================================================
                                       LOCAL CONSTANTS
@@ -68,11 +75,17 @@ extern "C" {
 /*==================================================================================================
                                       LOCAL VARIABLES
 ==================================================================================================*/
+/* The current state of SEC user space driver */
+volatile sec_driver_state_t g_driver_state = SEC_DRIVER_STATE_IDLE;
+
+/* The number of job rings used by SEC user space driver */
 static int g_job_rings_no = 0;
 
 /* Array of job ring handles provided to UA from sec_init() function. */
 static sec_job_ring_descriptor_t g_job_ring_handles[MAX_SEC_JOB_RINGS];
 
+/* The work mode configured for SEC user space driver at startup,
+ * when NAPI notification processing is ON */
 static int sec_work_mode = 0;
 
 /* Last JR assigned to a context by the SEC driver using a round robin algorithm.
@@ -90,12 +103,13 @@ static sec_contexts_pool_t g_ctx_pool;
                                      GLOBAL VARIABLES
 ==================================================================================================*/
 /** Start address for DMA-able memory area configured by UA */
-void* global_dma_mem_start = NULL;
+void* g_dma_mem_start = NULL;
 /** Current address for unused DMA-able memory area configured by UA */
-void* global_dma_mem_free = NULL;
+void* g_dma_mem_free = NULL;
 
 ptov_function sec_ptov = NULL;
 vtop_function sec_vtop = NULL;
+
 
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
@@ -107,16 +121,9 @@ vtop_function sec_vtop = NULL;
  * @retval 0 for success
  * @retval other value for error
  */
+#if SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE_POLL
 static int enable_irq();
-
-/** @brief Enable IRQ generation for all SEC's job rings.
- *
- * @param [in]  job_ring    The job ring to enable IRQs for.
- * @retval 0 for success
- * @retval other value for error
- */
-static int enable_irq_per_job_ring(sec_job_ring_t *job_ring);
-
+#endif
 
 /** @brief Poll the HW for already processed jobs in the JR
  * and notify the available jobs to UA.
@@ -133,19 +140,68 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
                                  int32_t limit,
                                  uint32_t *packets_no);
 
+/** @brief Poll the HW for already processed jobs in the JR
+ * and silently discard the available jobs.
+ *
+ * @param [in]  job_ring    The job ring to poll.
+ */
+static void hw_flush_job_ring(sec_job_ring_t *job_ring);
+
+/** @brief Flush job rings of any processed packets.
+ * The processed packets are silently dropped,
+ * WITHOUT beeing notified to UA.
+ */
+static void flush_job_rings();
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
+#if SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE_POLL
 static int enable_irq()
 {
-    // to be implemented
+    int i = 0;
+    sec_job_ring_t * job_ring = NULL;
+
+    for (i = 0; i < g_job_rings_no; i++)
+    {
+        job_ring = &g_job_rings[i];
+        hw_enable_irq_on_job_ring(job_ring);
+    }
     return 0;
 }
+#endif
 
-static int enable_irq_per_job_ring(sec_job_ring_t *job_ring)
+static void hw_flush_job_ring(sec_job_ring_t * job_ring)
 {
-    // to be implemented
-    return 0;
+    sec_context_t * sec_context;
+    sec_job_t *job;
+    int jobs_no_to_discard = 0;
+    int discarded_packets_no = 0;
+    int number_of_jobs_available = 0;
+
+    // compute the number of jobs available in the job ring based on the
+    // producer and consumer index values.
+    number_of_jobs_available = SEC_JOB_RING_DIFF(SEC_JOB_RING_SIZE, job_ring->pidx, job_ring->cidx);
+
+    // Discard all jobs
+    jobs_no_to_discard = number_of_jobs_available;
+
+    while(jobs_no_to_discard > discarded_packets_no)
+    {
+        // get the first un-notified job from the job ring
+        job = &job_ring->jobs[job_ring->cidx];
+        sec_context = job->sec_context;
+
+        // atomically decrement packet reference count in sec context
+
+        // TODO: atomic update seems not to be necessary here as there is no
+        // contention on accessing  state_packets_no when the driver is
+        // shutting down and job ring is flushed.
+        atomic_sub_load(&sec_context->state_packets_no, 1);
+        discarded_packets_no++;
+
+        // increment the consumer index for the current job ring
+        job_ring->cidx = SEC_CIRCULAR_COUNTER_POW_2(job_ring->cidx, SEC_JOB_RING_SIZE);
+    }
 }
 
 static uint32_t hw_poll_job_ring(sec_job_ring_t * job_ring,
@@ -210,6 +266,24 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t * job_ring,
     return SEC_SUCCESS;
 }
 
+static void flush_job_rings()
+{
+    sec_job_ring_t * job_ring = NULL;
+    int i = 0;
+
+    for (i = 0; i < g_job_rings_no; i++)
+    {
+        job_ring = &g_job_rings[i];
+
+        // Producer index is frozen. If consumer index is not equal
+        // with producer index, then we must sit and wait until all
+        // packets are processed by SEC on this job ring.
+        while(job_ring->pidx != job_ring->cidx)
+        {
+            hw_flush_job_ring(job_ring);
+        }
+    }
+}
 /*==================================================================================================
                                      GLOBAL FUNCTIONS
 ==================================================================================================*/
@@ -218,33 +292,36 @@ sec_return_code_t sec_init(sec_config_t *sec_config_data,
                            uint8_t job_rings_no,
                            sec_job_ring_descriptor_t **job_ring_descriptors)
 {
-    int i;
-    int ret;
+    int i = 0;
+    int ret = 0;
 
     // Validate input arguments
-    SEC_ASSERT(job_rings_no <= MAX_SEC_JOB_RINGS,
-               SEC_INVALID_INPUT_PARAM,
+    SEC_ASSERT(job_rings_no <= MAX_SEC_JOB_RINGS, SEC_INVALID_INPUT_PARAM,
                "Requested number of job rings(%d) is greater than maximum hw supported(%d)",
                job_rings_no, MAX_SEC_JOB_RINGS);
 
     SEC_ASSERT(job_ring_descriptors != NULL, SEC_INVALID_INPUT_PARAM, "job_ring_descriptors is NULL");
     SEC_ASSERT(sec_config_data != NULL, SEC_INVALID_INPUT_PARAM, "sec_config_data is NULL");
-    SEC_ASSERT(sec_config_data->memory_area != NULL, 
-               SEC_INVALID_INPUT_PARAM, 
+    SEC_ASSERT(sec_config_data->memory_area != NULL, SEC_INVALID_INPUT_PARAM,
                "sec_config_data->memory_area is NULL");
+
     // DMA memory area must be cacheline aligned
     SEC_ASSERT ((dma_addr_t)sec_config_data->memory_area % CACHE_LINE_SIZE == 0, 
                 SEC_INVALID_INPUT_PARAM,
                 "Configured memory is not cacheline aligned (to 64 bytes)");
 
+    SEC_ASSERT(g_driver_state == SEC_DRIVER_STATE_IDLE,
+               SEC_DRIVER_ALREADY_INITALIZED,
+               "Driver already initialized");
+
     g_job_rings_no = job_rings_no;
     memset(g_job_rings, 0, sizeof(g_job_rings));
-    SEC_INFO("Configuring %d SEC job rings", g_job_rings_no);
+    SEC_INFO("Configuring %d number of SEC job rings", g_job_rings_no);
 
     // Configure DMA-capable memory area assigned to the driver by UA
-    global_dma_mem_start = sec_config_data->memory_area;
-    global_dma_mem_free = global_dma_mem_start;
-    SEC_INFO("Using DMA memory area with start address = %p", global_dma_mem_start);
+    g_dma_mem_start = sec_config_data->memory_area;
+    g_dma_mem_free = g_dma_mem_start;
+    SEC_INFO("Using DMA memory area with start address = %p", g_dma_mem_start);
 
     // TODO replace with macros
     sec_ptov = sec_config_data->ptov;
@@ -261,23 +338,43 @@ sec_return_code_t sec_init(sec_config_t *sec_config_data,
         // No need for thread synchronizations mechanisms for this pool because
         // one of the assumptions for this API is that only one thread will
         // create/delete contexts for a certain JR (also known as the producer of the JR).
-        ret = init_contexts_pool(&(g_job_rings[i].ctx_pool), 
-                                 &global_dma_mem_free,
-                                 MAX_SEC_CONTEXTS_PER_POOL, 
+        ret = init_contexts_pool(&(g_job_rings[i].ctx_pool),
+                                 &g_dma_mem_free,
+                                 MAX_SEC_CONTEXTS_PER_POOL,
                                  THREAD_UNSAFE_POOL);
-        ASSERT(ret == 0);
+        if (ret != SEC_SUCCESS)
+        {
+            SEC_ERROR("Failed to initialize SEC context pool "
+                      "for job ring id %d. Starting sec_release()", g_job_rings[i].jr_id);
+            sec_release();
+            g_driver_state = SEC_DRIVER_STATE_IDLE;
+            return ret;
+        }
 
         // Configure each owned job ring with UIO data:
         // - UIO device file descriptor
         // - UIO mapping for SEC registers
-        sec_config_uio_job_ring(&g_job_rings[i]);
+        ret = sec_config_uio_job_ring(&g_job_rings[i]);
+        if (ret != SEC_SUCCESS)
+        {
+            SEC_ERROR("Failed to configure UIO settings "
+                      "for job ring id %d. Starting sec_release()",
+                      g_job_rings[i].jr_id);
+            sec_release();
+            g_driver_state = SEC_DRIVER_STATE_IDLE;
+            return ret;
+        }
 
         // Initialize job ring
-        ret = init_job_ring(&g_job_rings[i], &global_dma_mem_free);
-
-        SEC_ASSERT(ret == SEC_SUCCESS, ret, 
-                "Failed to initialize job ring with id %d ",
-                g_job_rings[i].jr_id);
+        ret = init_job_ring(&g_job_rings[i], &g_dma_mem_free, sec_config_data->work_mode);
+        if (ret != SEC_SUCCESS)
+        {
+            SEC_ERROR("Failed to initialize job ring with id %d. "
+                      "Starting sec_release()", g_job_rings[i].jr_id);
+            sec_release();
+            g_driver_state = SEC_DRIVER_STATE_IDLE;
+            return ret;
+        }
 
         g_job_ring_handles[i].job_ring_handle = (sec_job_ring_handle_t)&g_job_rings[i];
         g_job_ring_handles[i].job_ring_irq_fd = g_job_rings[i].uio_fd;
@@ -285,28 +382,41 @@ sec_return_code_t sec_init(sec_config_t *sec_config_data,
 
     // Initialize the global pool of contexts also.
     // We need thread synchronizations mechanisms for this pool.
-    ret = init_contexts_pool(&g_ctx_pool, 
-                             &global_dma_mem_free, 
-                             MAX_SEC_CONTEXTS_PER_POOL, 
+    ret = init_contexts_pool(&g_ctx_pool,
+                             &g_dma_mem_free,
+                             MAX_SEC_CONTEXTS_PER_POOL,
                              THREAD_SAFE_POOL);
-    ASSERT(ret == 0);
+    if (ret != SEC_SUCCESS)
+    {
+        SEC_ERROR("Failed to initialize global pool of SEC contexts. "
+                "Starting sec_release()");
+        sec_release();
+        g_driver_state = SEC_DRIVER_STATE_IDLE;
+        return ret;
+    }
 
     // Remember initial work mode
     sec_work_mode = sec_config_data->work_mode;
-    if (sec_work_mode == SEC_INTERRUPT_MODE )
-    {
-        enable_irq();
-    }
 
+    // Return handles to job rings
     *job_ring_descriptors =  &g_job_ring_handles[0];
+
+    // Update driver state
+    g_driver_state = SEC_DRIVER_STATE_STARTED;
 
     return SEC_SUCCESS;
 }
 
 uint32_t sec_release()
 {
-    /* Stub Implementation - START */
     int i;
+
+    // Update driver state
+    g_driver_state = SEC_DRIVER_STATE_RELEASE;
+
+    // If any packets in flight for any SEC context, poll and wait
+    // until all packets are received and silently discarded.
+    flush_job_rings();
 
     for (i = 0; i < g_job_rings_no; i++)
     {
@@ -320,9 +430,10 @@ uint32_t sec_release()
     // destroy the global context pool also
     destroy_contexts_pool(&g_ctx_pool);
 
-    return SEC_SUCCESS;
+    memset(g_job_ring_handles, 0, sizeof(g_job_ring_handles));
+    g_driver_state = SEC_DRIVER_STATE_IDLE;
 
-    /* Stub Implementation - END */
+    return SEC_SUCCESS;
 }
 
 uint32_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
@@ -341,6 +452,12 @@ uint32_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
     {
         return SEC_INVALID_INPUT_PARAM;
     }
+
+    SEC_ASSERT(g_driver_state == SEC_DRIVER_STATE_STARTED,
+               (g_driver_state == SEC_DRIVER_STATE_RELEASE) ? 
+               SEC_DRIVER_RELEASE_IN_PROGRESS : SEC_DRIVER_NOT_INITALIZED ,
+               "Driver release is in progress or driver not initialized");
+
     *sec_ctx_handle = NULL;
 
     if(job_ring == NULL)
@@ -409,6 +526,11 @@ uint32_t sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle)
     /* Stub Implementation - START */
 	sec_contexts_pool_t * pool = NULL;
 
+    SEC_ASSERT(g_driver_state == SEC_DRIVER_STATE_STARTED,
+               (g_driver_state == SEC_DRIVER_STATE_RELEASE) ? 
+               SEC_DRIVER_RELEASE_IN_PROGRESS : SEC_DRIVER_NOT_INITALIZED,
+               "Driver release is in progress or driver not initialized");
+
     sec_context_t * sec_context = (sec_context_t *)sec_ctx_handle;
     if (sec_context == NULL)
     {
@@ -428,7 +550,6 @@ uint32_t sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle)
 
 uint32_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
 {
-    /* Stub Implementation - START */
     sec_job_ring_t * job_ring = NULL;
     uint32_t notified_packets_no = 0;
     uint32_t notified_packets_no_per_jr = 0;
@@ -449,10 +570,16 @@ uint32_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
        implement its own algorithm.
        - A limit smaller or equal than weight is considered invalid.
     */
-    if (limit == 0 || weight == 0 || (limit <= weight) || (weight > SEC_JOB_RING_SIZE))
+    if (limit == 0 || weight == 0 || (limit <= weight) || (weight > SEC_JOB_RING_HW_SIZE))
     {
         return SEC_INVALID_INPUT_PARAM;
     }
+
+    SEC_ASSERT(g_driver_state == SEC_DRIVER_STATE_STARTED,
+               (g_driver_state == SEC_DRIVER_STATE_RELEASE) ? 
+               SEC_DRIVER_RELEASE_IN_PROGRESS : SEC_DRIVER_NOT_INITALIZED,
+               "Driver release is in progress or driver not initialized");
+
 
     /* Poll job rings
        If limit < 0 && weight > 0 -> poll JRs in round robin fashion until
@@ -461,7 +588,6 @@ uint32_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
                                      limit is reached.
      */
 
-    ASSERT (g_job_rings_no != 0);
     /* Exit from while if one of the following is true:
      * - the required number of notifications were raised to UA.
      * - there are no more done jobs on either of the available JRs.
@@ -497,6 +623,7 @@ uint32_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
     }
     *packets_no = notified_packets_no;
 
+#if SEC_NOTIFICATION_TYPE == SEC_NOTIFICATION_TYPE_NAPI
     if (limit < 0)// and no more ready packets in SEC
     {
         enable_irq();
@@ -505,7 +632,12 @@ uint32_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
     {
         enable_irq();
     }
+#endif
 
+#if SEC_NOTIFICATION_TYPE == SEC_NOTIFICATION_TYPE_IRQ
+    // Always enable IRQ generation when in pure IRQ mode
+    enable_irq();
+#endif
     return SEC_SUCCESS;
 
     /* Stub Implementation - END */
@@ -537,6 +669,11 @@ uint32_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit,
         return SEC_INVALID_INPUT_PARAM;
     }
 
+    SEC_ASSERT(g_driver_state == SEC_DRIVER_STATE_STARTED,
+               (g_driver_state == SEC_DRIVER_STATE_RELEASE) ? 
+               SEC_DRIVER_RELEASE_IN_PROGRESS : SEC_DRIVER_NOT_INITALIZED,
+               "Driver release is in progress or driver not initialized");
+
     *packets_no = 0;
 
     // run hw poll job ring
@@ -546,15 +683,22 @@ uint32_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit,
         return ret;
     }
 
+#if SEC_NOTIFICATION_TYPE == SEC_NOTIFICATION_TYPE_NAPI
     if (limit < 0)// and no more ready packets  in SEC
     {
-        enable_irq_per_job_ring(job_ring);
+        hw_enable_irq_on_job_ring(job_ring);
     }
     else if (*packets_no < limit)// and no more ready packets  in SEC
     {
-        enable_irq_per_job_ring(job_ring);
+        hw_enable_irq_on_job_ring(job_ring);
     }
+#endif
 
+#if SEC_NOTIFICATION_TYPE == SEC_NOTIFICATION_TYPE_IRQ
+    // Always enable IRQ generation when in pure IRQ mode
+    hw_enable_irq_on_job_ring(job_ring);
+
+#endif
     return SEC_SUCCESS;
     /* Stub Implementation - END */
 
@@ -571,6 +715,12 @@ uint32_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
 #if FSL_SEC_ENABLE_SCATTER_GATHER == ON
 #error "Scatter/Gather support is not implemented!"
 #endif
+
+    SEC_ASSERT(g_driver_state == SEC_DRIVER_STATE_STARTED,
+               (g_driver_state == SEC_DRIVER_STATE_RELEASE) ? 
+               SEC_DRIVER_RELEASE_IN_PROGRESS : SEC_DRIVER_NOT_INITALIZED,
+               "Driver release is in progress or driver not initialized");
+
     sec_context_t * sec_context = (sec_context_t *)sec_ctx_handle;
 
     if (sec_context == NULL ||

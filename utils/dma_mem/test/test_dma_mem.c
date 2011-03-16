@@ -57,6 +57,16 @@ int main(void)
 	// read the string from the buffer
 	printf("Wrote at address 0x%x the string: %s\n", (dma_addr_t)buffer, (char*)buffer);
 
+    if(strcmp(buffer, (char*)test_virt_addr) == 0)
+    {
+        printf("\nTest successfull\n");
+    }
+    else
+    {
+        printf("\nTest failed\n");
+        assert(0);
+    }
+
 	// free the buffer
 	dma_mem_free(buffer, BUFFER_SIZE);
 

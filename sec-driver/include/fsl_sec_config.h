@@ -70,15 +70,33 @@ extern "C"{
 /** Maximum length for #SEC_UIO_DEVICE_NAME. */
 #define SEC_UIO_MAX_DEVICE_NAME_LENGTH  30
 
-/** SEC is configured to work in polling mode */
-#define SEC_POLLING_MODE     0
-/** SEC is configured to work in interrupt mode */
-#define SEC_INTERRUPT_MODE   1
+
+/** SEC is configured to start work in polling mode, 
+ *  when configured for NAPI notification style. */
+#define SEC_STARTUP_POLLING_MODE     0
+/** SEC is configured to start work in interrupt mode,
+ *  when configured for NAPI notification style. */
+#define SEC_STARTUP_INTERRUPT_MODE   1
+
 
 /** Logging level for SEC user space driver: log only errors */
 #define SEC_DRIVER_LOG_ERROR 0
 /** Logging level for SEC user space driver: log both errors and info messages */
 #define SEC_DRIVER_LOG_INFO  1
+
+/** SEC driver will use NAPI model to receive notifications
+ * for processed packets from SEC engine hardware: 
+ * - IRQ for low traffic
+ * - polling for high traffic. */
+#define SEC_NOTIFICATION_TYPE_NAPI  0
+/** SEC driver will use ONLY interrupts to receive notifications
+ * for processed packets from SEC engine hardware. */
+#define SEC_NOTIFICATION_TYPE_IRQ   1
+/** SEC driver will use ONLY polling to receive notifications
+ * for processed packets from SEC engine hardware. */
+#define SEC_NOTIFICATION_TYPE_POLL  2
+
+
 
 /** Bit mask for Job Ring id 0 in DTS Job Ring mapping.
  * DTS Job Ring mapping distributes SEC's job rings among SEC user space driver and SEC kernel driver. */
@@ -103,6 +121,13 @@ extern "C"{
 /************************************************/
 /* SEC USER SPACE DRIVER related configuration. */
 /************************************************/
+
+/** Determines how SEC user space driver will receive notifications
+ * for processed packets from SEC engine.
+ * Valid values are: #SEC_NOTIFICATION_TYPE_POLL, #SEC_NOTIFICATION_TYPE_IRQ
+ * and #SEC_NOTIFICATION_TYPE_NAPI. */
+#define SEC_NOTIFICATION_TYPE   SEC_NOTIFICATION_TYPE_POLL
+
 
 /** Name of UIO device. Each user space SEC job ring will have a corresponding UIO device
  * with the name sec-channelX, where X is the job ring id.
@@ -219,13 +244,22 @@ extern "C"{
  * For SEC 4.4 the maximum size of the RING is hardware limited to 1024.
  * However the number of packets in flight in a time interval of 1ms can be calculated
  * from the traffic rate (Mbps) and packet size. 
- * Here it was considered a packet size of 40 bytes. */
-#define SEC_JOB_RING_SIZE  500
+ * Here it was considered a packet size of 40 bytes. 
+ *
+ * @note Round up to nearest power of 2 for optimized update
+ * of producer/consumer indexes of each job ring
+ */
+#define SEC_JOB_RING_SIZE  512
+#define SEC_JOB_RING_HW_SIZE    SEC_JOB_RING_SIZE
 #else
 /** Configure the size of the JOB RING.
  *  For SEC 3.1 the size of the FIFO (concept similar to JOB INPUT RING
  *  on SEC 4.4) is hardware fixed to 24. */
-#define SEC_JOB_RING_SIZE  /*24*/32
+#define SEC_JOB_RING_HW_SIZE  24
+/** The size of the job ring rounded up to nearest power of 2.
+ *  This is an optimization for updating producer/consumer indexes 
+ *  of a job ring with bitwise operations. */
+#define SEC_JOB_RING_SIZE  32
 #endif
 
 /** Maximum number of job rings supported by SEC hardware */

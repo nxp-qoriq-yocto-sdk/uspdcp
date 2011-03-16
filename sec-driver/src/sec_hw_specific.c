@@ -66,8 +66,6 @@ extern "C" {
 /*==================================================================================================
                                      GLOBAL VARIABLES
 ==================================================================================================*/
-/* Base address for SEC's register memory. */
-volatile void *register_base_addr = NULL;
 
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
@@ -86,22 +84,29 @@ int hw_reset_job_ring(sec_job_ring_t *job_ring)
     int ret = 0;
     uint32_t reg_val = 0;
 
+    
+    ASSERT(job_ring != NULL);
+    ASSERT(job_ring->register_base_addr != NULL);
+
     // First reset the job ring in hw
     ret = hw_shutdown_job_ring(job_ring);
     SEC_ASSERT(ret == 0, ret, "Failed resetting job ring in hardware");
 
-    // Set done writeback enable and done IRQ enable at job ring level
-    reg_val = SEC_REG_VAL_CCCR_LO_CDWE | SEC_REG_VAL_CCCR_LO_CDIE;
+    // Set done writeback enable at job ring level.
+    reg_val = SEC_REG_VAL_CCCR_LO_CDWE;
+
 #ifdef CONFIG_PHYS_64BIT
     // Set 36-bit addressing if enabled
     reg_val |= SEC_REG_VAL_CCCR_LO_EAE; 
 #endif
-    setbits32(register_base_addr + SEC_REG_CCCR_LO(job_ring), reg_val);
 
-    // Configure interrupt generation at controller level, in SEC hw
-    // TODO; if in pure polling mode do not enable IRQs at controller level.
-    reg_val = SEC_REG_SET_VAL_IER_DONE(job_ring->jr_id);
-    setbits32(register_base_addr + SEC_REG_IER , reg_val);
+#if SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE_POLL
+    // Enable interrupt generation at job ring level 
+    // ONLY if NOT in polling mode.
+    reg_val |= SEC_REG_VAL_CCCR_LO_CDIE;
+#endif
+
+    setbits32(job_ring->register_base_addr + SEC_REG_CCCR_LO(job_ring), reg_val);
 
     // TODO: integrity check required for PDCP processing ?
     return 0;
@@ -112,13 +117,14 @@ int hw_shutdown_job_ring(sec_job_ring_t *job_ring)
     unsigned int timeout = SEC_TIMEOUT;
     int usleep_interval = 10;
 
-    ASSERT(register_base_addr != NULL);
+    ASSERT(job_ring != NULL);
+    ASSERT(job_ring->register_base_addr != NULL);
 
     // Ask the SEC hw to reset this job ring
-    out_be32(register_base_addr + SEC_REG_CCCR(job_ring), SEC_REG_CCCR_VAL_RESET);
+    out_be32(job_ring->register_base_addr + SEC_REG_CCCR(job_ring), SEC_REG_CCCR_VAL_RESET);
 
     // Loop until the SEC engine has finished the job ring reset
-    while ((in_be32(register_base_addr + SEC_REG_CCCR(job_ring)) & SEC_REG_CCCR_VAL_RESET) && --timeout)
+    while ((in_be32(job_ring->register_base_addr + SEC_REG_CCCR(job_ring)) & SEC_REG_CCCR_VAL_RESET) && --timeout)
     {
         usleep(usleep_interval);
     }
@@ -128,8 +134,20 @@ int hw_shutdown_job_ring(sec_job_ring_t *job_ring)
         SEC_ERROR("Failed to reset hw job ring with id  %d\n", job_ring->jr_id);
         return -1;
     }
-
     return 0;
+}
+
+void hw_enable_irq_on_job_ring(sec_job_ring_t *job_ring)
+{
+    uint32_t reg_val = 0;
+
+    ASSERT(job_ring != NULL);
+    ASSERT(job_ring->register_base_addr != NULL);
+    
+    // Configure interrupt generation at controller level, in SEC hw
+    reg_val = SEC_REG_SET_VAL_IER_DONE(job_ring->jr_id);
+    setbits32(job_ring->register_base_addr + SEC_REG_IER , reg_val);
+
 }
 /*================================================================================================*/
 

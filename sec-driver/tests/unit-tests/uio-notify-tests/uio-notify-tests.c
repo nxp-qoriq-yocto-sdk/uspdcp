@@ -39,6 +39,8 @@ extern "C" {
 ==================================================================================================*/
 #include "fsl_sec.h"
 #include "cgreen.h"
+// for dma_mem library
+#include "compat.h"
 
 #include <stdio.h>
 #include <assert.h>
@@ -100,10 +102,15 @@ static void test_setup(void)
     sec_config_data.memory_area = malloc (SEC_DMA_MEMORY_SIZE);
     assert(sec_config_data.memory_area != NULL);
 
+    // map the physical memory
+    ret = dma_mem_setup();
+    assert_equal_with_message(ret, 0, "ERROR on dma_mem_setup: ret = %d", ret);
+
     // Fill SEC driver configuration data
-    sec_config_data.ptov = NULL;
-    sec_config_data.vtop = NULL;
-    sec_config_data.work_mode = SEC_POLLING_MODE;
+    sec_config_data.memory_area = (void*)__dma_virt;
+    sec_config_data.ptov = &dma_mem_ptov;
+    sec_config_data.vtop = &dma_mem_vtop;
+    sec_config_data.work_mode = SEC_STARTUP_POLLING_MODE;
 
     // Init sec driver
     ret = sec_init(&sec_config_data, JOB_RING_NUMBER, &job_ring_descriptors);
@@ -117,6 +124,10 @@ static void test_teardown()
     // release sec driver
     ret = sec_release();
 	assert_equal_with_message(ret, SEC_SUCCESS, "ERROR on sec_release: ret = %d", ret);
+
+	// unmap the physical memory
+	ret = dma_mem_release();
+	assert_equal_with_message(ret, 0, "ERROR on dma_mem_release: ret = %d", ret);
 }
 
 

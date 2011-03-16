@@ -880,7 +880,7 @@ static int setup_sec_environment(void)
     // Fill SEC driver configuration data
     sec_config_data.ptov = &dma_mem_ptov;
     sec_config_data.vtop = &dma_mem_vtop;
-    sec_config_data.work_mode = SEC_POLLING_MODE;
+    sec_config_data.work_mode = SEC_STARTUP_POLLING_MODE;
 #ifdef SEC_HW_VERSION_4_4
     sec_config_data.irq_coalescing_count = IRQ_COALESCING_COUNT;
     sec_config_data.irq_coalescing_timer = IRQ_COALESCING_TIMER;

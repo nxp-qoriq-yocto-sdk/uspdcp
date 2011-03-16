@@ -82,7 +82,7 @@ extern vtop_function sec_vtop;
 /*==================================================================================================
                                      GLOBAL FUNCTIONS
 ==================================================================================================*/
-int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem)
+int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mode)
 {
     int ret = 0;
     int i = 0;
@@ -95,6 +95,21 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem)
     // Reset job ring in SEC hw and configure job ring registers
     ret = hw_reset_job_ring(job_ring);
     SEC_ASSERT(ret == 0, ret, "Failed to reset hardware job ring with id %d", job_ring->jr_id);
+
+
+#if SEC_NOTIFICATION_TYPE == SEC_NOTIFICATION_TYPE_NAPI
+    // When SEC US driver works in NAPI mode, the UA can select
+    // if the driver starts with IRQs on or off.
+    if(startup_work_mode == SEC_STARTUP_INTERRUPT_MODE)
+    {
+        hw_enable_irq_on_job_ring(job_ring);
+    }
+#endif
+
+#if SEC_NOTIFICATION_TYPE == SEC_NOTIFICATION_TYPE_IRQ
+    // When SEC US driver works in pure interrupt mode, IRQ's are always enabled.
+    hw_enable_irq_on_job_ring(job_ring);
+#endif
 
     // Memory area must start from cacheline-aligned boundary.
     // Each job entry is itself aligned to cacheline.
@@ -118,10 +133,10 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem)
 
     }
 
-    // Initialize free slots to count SEC_JOB_RING_SIZE(=24 on SEC 3.1) jobs.
+    // Initialize free slots to count SEC_JOB_RING_HW_SIZE(=24 on SEC 3.1) jobs.
     // The total size of the job ring can be bigger as it is rounded up to the next
     // power of two. This helps to update producer/consumer index with bitwise operations.
-    job_ring->free_slots = -(SEC_JOB_RING_SIZE -1);
+    job_ring->free_slots = -(SEC_JOB_RING_HW_SIZE -1);
 
     return SEC_SUCCESS;
 }
@@ -131,10 +146,15 @@ int shutdown_job_ring(sec_job_ring_t * job_ring)
     int ret = 0;
 
     ASSERT(job_ring != NULL);
-    close(job_ring->uio_fd);
+    if(job_ring->uio_fd != 0)
+    {
+        close(job_ring->uio_fd);
+    }
 
     ret = hw_shutdown_job_ring(job_ring);
     SEC_ASSERT(ret == 0, ret, "Failed to shutdown hardware job ring with id %d", job_ring->jr_id);
+
+    memset(job_ring, 0, sizeof(sec_job_ring_t));
 
     return SEC_SUCCESS;
 }

@@ -389,7 +389,7 @@ int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
     return SEC_SUCCESS; 
 }
 
-int sec_config_uio_job_ring(sec_job_ring_t *job_ring)
+sec_return_code_t sec_config_uio_job_ring(sec_job_ring_t *job_ring)
 {
     bool uio_device_found = false;
     char uio_device_file_name[SEC_UIO_MAX_DEVICE_FILE_NAME_LENGTH];
@@ -420,16 +420,14 @@ int sec_config_uio_job_ring(sec_job_ring_t *job_ring)
     // in a separate 4K map-able memory area.
     // On SEC 3.1 we cannot separate register address ranges for each channel.
     // We will map only once the entire register address range for SEC device.
-    if (register_base_addr == NULL)
-    {
-        register_base_addr = uio_map_registers(job_ring->uio_fd, 
-                uio_device_id, 
-                SEC_UIO_MAP_ID);
+    ASSERT(job_ring->register_base_addr == NULL);
+    job_ring->register_base_addr = uio_map_registers(job_ring->uio_fd,
+                                                     uio_device_id,
+                                                     SEC_UIO_MAP_ID);
 
-        SEC_ASSERT(register_base_addr != NULL,
-                SEC_INVALID_INPUT_PARAM,
-                "Failed to map SEC registers");
-    }
+    SEC_ASSERT(job_ring->register_base_addr != NULL,
+               SEC_INVALID_INPUT_PARAM,
+               "Failed to map SEC registers");
 
     return SEC_SUCCESS; 
 }

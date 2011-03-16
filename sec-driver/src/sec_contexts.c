@@ -336,8 +336,10 @@ void destroy_contexts_pool(sec_contexts_pool_t * pool)
 	destroy_pool_list(&pool->in_use_list);
 
 	// free the memory allocated for the contexts
-	ASSERT(pool->sec_contexts != NULL);
-	free(pool->sec_contexts);
+	if(pool->sec_contexts != NULL)
+    {
+        free(pool->sec_contexts);
+    }
 
 	memset(pool, 0, sizeof(sec_contexts_pool_t));
 }

@@ -96,7 +96,10 @@ typedef struct sec_job_ring_s
     sec_descriptor_t *descriptors;      /*< Ring of jobs sent to SEC engine for processing */
     sec_job_t jobs[SEC_JOB_RING_SIZE];  /*< Ring of jobs. The same ring is used for
                                             input jobs and output jobs because SEC engine writes 
-                                            back output indication in input job. */
+                                            back output indication in input job.
+                                            Size of array is power of 2 to allow fast update of
+                                            producer/consumer indexes with bitwise operations. */
+
     int cidx;                           /*< Consumer index for job ring (jobs array) */
     int pidx;                           /*< Producer index for job ring (jobs array) */
     uint32_t uio_fd;                    /*< The file descriptor used for polling from user space
@@ -107,6 +110,9 @@ typedef struct sec_job_ring_s
                                             this job ring are mapped to an alternate 4k page.*/
     volatile uint32_t free_slots;       /*< Counts the free slots in a job ring. When it reaches value 0, 
                                             the job ring is full.*/
+    volatile void *register_base_addr;  /*< Base address for SEC's register memory for this job ring.
+                                            @note On SEC 3.1 all channels share the same register address space,
+                                                  so this member will have the exact same value for all og them. */
 }sec_job_ring_t;
 /*==============================================================================
                                  CONSTANTS
@@ -124,14 +130,17 @@ extern sec_job_ring_t g_job_rings[MAX_SEC_JOB_RINGS];
                             FUNCTION PROTOTYPES
 ==============================================================================*/
 /** @brief Initialize the software and hardware resources tied to a job ring.
- * @param [in,out] job_ring The job ring
- * @param [in,out] dma_mem  DMA-capable memory area from where to 
- *                          allocate SEC descriptors.
+ * @param [in,out] job_ring             The job ring
+ * @param [in,out] dma_mem              DMA-capable memory area from where to
+ *                                      allocate SEC descriptors.
+ * @param [in]     startup_work_mode    The work mode to configure a job ring at startup.
+ *                                      Used only when #SEC_NOTIFICATION_TYPE is set to
+ *                                      #SEC_NOTIFICATION_TYPE_NAPI.
  * @retval  SEC_SUCCESS for success
  * @retval  other for error
  *
  */
-int init_job_ring(sec_job_ring_t *job_ring, void **dma_mem);
+int init_job_ring(sec_job_ring_t *job_ring, void **dma_mem, int startup_work_mode);
 
 /** @brief Release the software and hardware resources tied to a job ring.
  * @param [in] job_ring The job ring
