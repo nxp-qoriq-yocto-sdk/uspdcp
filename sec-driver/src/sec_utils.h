@@ -185,7 +185,15 @@
 
 /** Expression that uses bitwise operations to evaluate if x == a AND y == b */
 #define COND_EXPR1_EQ_AND_EXPR2_EQ(x, a, y, b) \
-(((x) ^(a)) | ((y) ^ (b)))
+(!(((x) ^(a)) | ((y) ^ (b))))
+
+/** Return higher 32 bits of physical address */
+#define PHYS_ADDR_HI(phys_addr) \
+    ((phys_addr) >> 32)
+
+/** Return lower 32 bits of physical address */
+#define PHYS_ADDR_LO(phys_addr) \
+    ((phys_addr) & 0xFFFFFFFF)
 
 /*==============================================================================
                                     ENUMS

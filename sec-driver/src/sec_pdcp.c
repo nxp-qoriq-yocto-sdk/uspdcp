@@ -93,6 +93,13 @@ int sec_pdcp_context_set_crypto_info(sec_context_t *ctx,
     return SEC_SUCCESS;
 }
 
+int sec_pdcp_context_create_descriptor(sec_job_t *job, sec_descriptor_t *descriptor)
+{
+    ASSERT(job != NULL);
+    ASSERT(descriptor != NULL);
+
+    return SEC_SUCCESS;
+}
 /*================================================================================================*/
 
 #ifdef __cplusplus

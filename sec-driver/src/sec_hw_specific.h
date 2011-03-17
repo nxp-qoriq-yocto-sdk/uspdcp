@@ -57,7 +57,7 @@
 
 
 /*****************************************************************
- * IER offset
+ * IER(Interrupt Enable Register) offset
  *****************************************************************/
 
 /** Offset from the SEC register base address for IER register.
@@ -67,7 +67,7 @@
 #define SEC_REG_IER_LO          0x100C
 
 /*****************************************************************
- * IER values
+ * IER(Interrupt Enable Register) values
  *****************************************************************/
 
 /** Enable DONE interrupts for all 4 job rings */
@@ -78,20 +78,21 @@
 #define SEC_REG_SET_VAL_IER_ERR(job_ring_id) (2 << (job_ring_id)* 2)
 
 /*****************************************************************
- * CCR offset
+ * CCR(Channel Configuration Register) offset
  *****************************************************************/
 
-/** Offset to higher 32 bits of CCR, Channel Configuration Register */
-#define SEC_REG_CCCR_OFFSET_HI  0x0108
-/** Offset to lower 32 bits of CCR, Channel Configuration Register */
-#define SEC_REG_CCCR_OFFSET_LO  0x010C
 /** Offset to higher 32 bits of CCR for a job ring */
 #define SEC_REG_CCCR(jr)        (CHAN_BASE(jr) + SEC_REG_CCCR_OFFSET_HI)
 /** Offset to lower 32 bits of CCR for a job ring */
 #define SEC_REG_CCCR_LO(jr)     (CHAN_BASE(jr) + SEC_REG_CCCR_OFFSET_LO)
 
+/** Offset to higher 32 bits of CCR, Channel Configuration Register */
+#define SEC_REG_CCCR_OFFSET_HI  0x0108
+/** Offset to lower 32 bits of CCR, Channel Configuration Register */
+#define SEC_REG_CCCR_OFFSET_LO  0x010C
+
 /*****************************************************************
- * CCR values
+ * CCR(Channel Configuration Register) values
  *****************************************************************/
 
 /* Job ring reset */
@@ -103,6 +104,54 @@
 /* Enable done IRQ */
 #define SEC_REG_VAL_CCCR_LO_CDIE    0x2
 
+/*****************************************************************
+ * FFER(Fetch Fifo Enqueue Register) offset
+ *****************************************************************/
+
+/**  Offset to higher 32 bits of fetch fifo enqueue register
+ * (FFER) for a job ring */
+#define SEC_REG_FFER(jr)        (CHAN_BASE(jr) + SEC_REG_FFER_OFFSET_HI)
+/**  Offset to lower 32 bits of fetch fifo enqueue register
+ * (FFER) for a job ring */
+#define SEC_REG_FFER_LO(jr)     (CHAN_BASE(jr) + SEC_REG_FFER_OFFSET_LO)
+
+
+/**  Offset to higher 32 bits of fetch fifo enqueue register (FFER) */
+#define SEC_REG_FFER_OFFSET_HI  0x0148
+/**  Offset to lower 32 bits of fetch fifo enqueue register (FFER) */
+#define SEC_REG_FFER_OFFSET_LO  0x014C
+
+/*****************************************************************
+ * CSR(Channel Status Register) offset
+ *****************************************************************/
+
+/**  Offset to higher 32 bits of CSR register for a job ring */
+#define   SEC_REG_CSR(jr)       (CHAN_BASE(jr) + SEC_REG_CSR_OFFSET_HI)
+/**  Offset to lower 32 bits of CSR register for a job ring */
+#define   SEC_REG_CSR_LO(jr)    (CHAN_BASE(jr) + SEC_REG_CSR_OFFSET_LO)
+
+
+/**  Offset to higher 32 bits of CSR */
+#define SEC_REG_CSR_OFFSET_HI   0x0110
+/**  Offset to lower 32 bits of CSR */
+#define SEC_REG_CSR_OFFSET_LO   0x0114
+
+/*****************************************************************
+ * CSR(Channel Status Register) values
+ *****************************************************************/
+
+#define   SEC_REG_CSR_LO_DOF    0x8000 /* double FF write oflow error */
+#define   SEC_REG_CSR_LO_SOF    0x4000 /* single FF write oflow error */
+#define   SEC_REG_CSR_LO_MDTE   0x2000 /* master data transfer error */
+#define   SEC_REG_CSR_LO_SGDLZ  0x1000 /* s/g data len zero error */
+#define   SEC_REG_CSR_LO_FPZ    0x0800 /* fetch ptr zero error */
+#define   SEC_REG_CSR_LO_IDH    0x0400 /* illegal desc hdr error */
+#define   SEC_REG_CSR_LO_IEU    0x0200 /* invalid EU error */
+#define   SEC_REG_CSR_LO_EU     0x0100 /* EU error detected */
+#define   SEC_REG_CSR_LO_GB     0x0080 /* gather boundary error */
+#define   SEC_REG_CSR_LO_GRL    0x0040 /* gather return/length error */
+#define   SEC_REG_CSR_LO_SB     0x0020 /* scatter boundary error */
+#define   SEC_REG_CSR_LO_SRL    0x0010 /* scatter return/length error */
 
 /*==============================================================================
                                     ENUMS
@@ -157,6 +206,16 @@ int hw_shutdown_job_ring(sec_job_ring_t *job_ring);
  */
 void hw_enable_irq_on_job_ring(sec_job_ring_t *job_ring);
 
+/** @brief Enqueue descriptor into a job ring's FIFO.
+ * A descriptor points to an input packet to be processed as well as
+ * to an output packet where SEC will write processing result.
+ * The descriptor also points to the specific cryptographic operations
+ * that must be applied on the input packet.
+ *
+ * @param [in] job_ring     The job ring
+ * @param [in] descriptor   Physical address of descriptor.
+ */
+void hw_enqueue_packet_on_job_ring(sec_job_ring_t *job_ring, dma_addr_t descriptor);
 /*============================================================================*/
 
 

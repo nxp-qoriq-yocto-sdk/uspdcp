@@ -601,6 +601,10 @@ sec_return_code_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
         {
             job_ring = &g_job_rings[i];
 
+            uint32_t reg_val_hi = in_be32(job_ring->register_base_addr + SEC_REG_CSR(job_ring));
+            uint32_t reg_val_lo = in_be32(job_ring->register_base_addr + SEC_REG_CSR_LO(job_ring));
+            printf("job ring id %d: CSR hi = 0x%x. CSR lo = 0x%x\n", job_ring->jr_id, reg_val_hi, reg_val_lo);
+
             /* Compute the limit for this JR
                If there are less packets to notify then configured weight,
                then notify the smaller number of packets.
@@ -679,6 +683,10 @@ sec_return_code_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle,
         return SEC_INVALID_INPUT_PARAM;
     }
 
+    uint32_t reg_val_hi = in_be32(job_ring->register_base_addr + SEC_REG_CSR(job_ring));
+    uint32_t reg_val_lo = in_be32(job_ring->register_base_addr + SEC_REG_CSR_LO(job_ring));
+    printf("job ring id %d: CSR hi = 0x%x. CSR lo = 0x%x\n", job_ring->jr_id, reg_val_hi, reg_val_lo);
+
 
     *packets_no = 0;
 
@@ -716,7 +724,9 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
                                      sec_packet_t *out_packet,
                                      ua_context_handle_t ua_ctx_handle)
 {
-    /* Stub Implementation - START */
+    int ret = SEC_SUCCESS;
+    sec_job_t *job = NULL;
+    sec_job_ring_t *job_ring = NULL;
 
 #if FSL_SEC_ENABLE_SCATTER_GATHER == ON
 #error "Scatter/Gather support is not implemented!"
@@ -728,14 +738,12 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
                SEC_DRIVER_RELEASE_IN_PROGRESS : SEC_DRIVER_NOT_INITALIZED,
                "Driver release is in progress or driver not initialized");
 
+    // Validate input arguments
+    SEC_ASSERT(sec_ctx_handle != NULL, SEC_INVALID_INPUT_PARAM, "sec_ctx_handle is NULL");
+    SEC_ASSERT(in_packet != NULL, SEC_INVALID_INPUT_PARAM, "in_packet is NULL");
+    SEC_ASSERT(out_packet != NULL, SEC_INVALID_INPUT_PARAM, "out_packet is NULL");
+
     sec_context_t * sec_context = (sec_context_t *)sec_ctx_handle;
-
-    if (sec_context == NULL ||
-        CONTEXT_GET_STATE(sec_context->state_packets_no) == SEC_CONTEXT_UNUSED)
-    {
-        return SEC_INVALID_INPUT_PARAM;
-    }
-
 
     // Validate that context handle contains valid bit patterns
     SEC_ASSERT(COND_EXPR1_EQ_AND_EXPR2_EQ(sec_context->start_pattern,
@@ -744,21 +752,15 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
                                           CONTEXT_VALIDATION_PATTERN),
                SEC_INVALID_INPUT_PARAM,
                "sec_ctx_handle is invalid");
-    
-    if (CONTEXT_GET_STATE(sec_context->state_packets_no) == SEC_CONTEXT_RETIRING)
-    {
-        return SEC_CONTEXT_MARKED_FOR_DELETION;
-    }
 
-    sec_job_ring_t * job_ring = (sec_job_ring_t *)sec_context->jr_handle;
-    if(job_ring == NULL)
-    {
-        return SEC_INVALID_INPUT_PARAM;
-    }
-    if (in_packet == NULL || out_packet == NULL)
-    {
-        return SEC_INVALID_INPUT_PARAM;
-    }
+    SEC_ASSERT(!(CONTEXT_GET_STATE(sec_context->state_packets_no) == SEC_CONTEXT_RETIRING),
+               SEC_CONTEXT_MARKED_FOR_DELETION,
+               "SEC context is marked for deletion. "
+               "Wait until all in-fligh packets are processed.");
+    ASSERT(CONTEXT_GET_STATE(sec_context->state_packets_no) != SEC_CONTEXT_UNUSED);
+
+    job_ring = (sec_job_ring_t *)sec_context->jr_handle;
+    ASSERT(job_ring != NULL);
 
     // check if the Job Ring is full (job ring's free_slots counter is 0)
     if(job_ring->free_slots == 0)
@@ -766,27 +768,37 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
         return SEC_JR_IS_FULL;
     }
 
-    // add new job in job ring
-    job_ring->jobs[job_ring->pidx].in_packet.address = in_packet->address;
-    job_ring->jobs[job_ring->pidx].in_packet.offset = in_packet->offset;
-    job_ring->jobs[job_ring->pidx].in_packet.length = in_packet->length;
+    job_ring->free_slots++;
 
-    job_ring->jobs[job_ring->pidx].out_packet.address = out_packet->address;
-    job_ring->jobs[job_ring->pidx].out_packet.offset = out_packet->offset;
-    job_ring->jobs[job_ring->pidx].out_packet.length = out_packet->length;
+    // get first available job from job ring
+    job = &job_ring->jobs[job_ring->pidx];
 
-    job_ring->jobs[job_ring->pidx].sec_context = sec_context;
-    job_ring->jobs[job_ring->pidx].ua_handle = ua_ctx_handle;
+    // update job with crypto context and in/out packet data
+    job->in_packet.address = in_packet->address;
+    job->in_packet.offset = in_packet->offset;
+    job->in_packet.length = in_packet->length;
+
+    job->out_packet.address = out_packet->address;
+    job->out_packet.offset = out_packet->offset;
+    job->out_packet.length = out_packet->length;
+
+    job->sec_context = sec_context;
+    job->ua_handle = ua_ctx_handle;
+
+    // update descriptor with pointers to input/output data and pointers to crypto information
+    ASSERT(job->descr != NULL);
+    ret = sec_pdcp_context_create_descriptor(job, job->descr);
 
     // atomically increment packet reference count in sec context
     atomic_add_load(&sec_context->state_packets_no, 1);
 
     // increment the producer index for the current job ring
     job_ring->pidx = SEC_CIRCULAR_COUNTER_POW_2(job_ring->pidx, SEC_JOB_RING_SIZE);
-    job_ring->free_slots++;
+
+    // Enqueue this descriptor into the Fetch FIFO of this JR
+    hw_enqueue_packet_on_job_ring(job_ring, job->descr_phys_addr);
 
     return SEC_SUCCESS;
-    /* Stub Implementation - END */
 }
 
 uint32_t sec_get_last_error(void)

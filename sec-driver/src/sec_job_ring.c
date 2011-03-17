@@ -126,7 +126,8 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
 
     for(i = 0; i < SEC_JOB_RING_SIZE; i++)
     {
-        //job_ring->jobs[i].descr = &job_ring->descriptors[i];
+        // Remember virtual address for a job descriptor
+        job_ring->jobs[i].descr = &job_ring->descriptors[i];
         
         // Obtain and store the physical address for a job descriptor        
         job_ring->jobs[i].descr_phys_addr = sec_vtop(&job_ring->descriptors[i]);

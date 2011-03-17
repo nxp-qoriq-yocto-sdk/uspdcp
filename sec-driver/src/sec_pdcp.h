@@ -36,8 +36,9 @@
 /*==============================================================================
                                 INCLUDE FILES
 ==============================================================================*/
-#include "sec_contexts.h"
 #include "fsl_sec.h"
+#include "sec_contexts.h"
+#include "sec_job_ring.h"
 
 /*==============================================================================
                               DEFINES AND MACROS
@@ -68,12 +69,23 @@
  * @param [in,out] ctx          SEC context
  * @param [in]     crypto_info  PDCP crypto info
  *
- * @retval 0 for success
+ * @retval SEC_SUCCESS for success
  * @retval other for error
  */
 int sec_pdcp_context_set_crypto_info(sec_context_t *ctx,
                                      sec_pdcp_context_info_t *crypto_info);
 
+/** @brief Updates a SEC descriptor with pointers to input packet,
+ * output packet and crypto information.
+ *
+ * @param [in]      job          The job structure
+ * @param [in,out]  descriptor   SEC descriptor
+ *
+ * @retval SEC_SUCCESS for success
+ * @retval other for error
+ */
+int sec_pdcp_context_create_descriptor(sec_job_t *job,
+                                       sec_descriptor_t *descriztor);
 /*============================================================================*/
 
 
