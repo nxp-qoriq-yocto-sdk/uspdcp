@@ -67,6 +67,10 @@ extern "C"{
  * Last 29 bits in state_packets_no represent the packets_no. */
 #define CONTEXT_GET_PACKETS_NO(value)   ((value) & 0x1fffffff)
 #define CONTEXT_SET_PACKETS_NO(value, packets_no)   ((value) = ((value) & 0xe0000000) | (packets_no))
+
+/** Validation bit pattern. A valid sec_context_t item would contain
+ * this pattern at predefined position/s in the item itself. */
+#define CONTEXT_VALIDATION_PATTERN  0xF0A955CD
 /*==================================================================================================
                                              ENUMS
 ==================================================================================================*/
@@ -114,7 +118,7 @@ typedef struct sec_crypto_info_s
     uint32_t crypto_key;
     uint32_t auth_key;
 
-}__attribute__((aligned(CACHE_LINE_SIZE))) sec_crypto_info_t;
+}__CACHELINE_ALIGNED sec_crypto_info_t;
 
 /** The declaration of a SEC context structure. */
 typedef struct sec_context_s
@@ -129,20 +133,22 @@ typedef struct sec_context_s
 	 * structure thus having the same address with the context itself. So no need for
 	 * subtraction.
 	 * @note: The macro #GET_CONTEXT_FROM_LIST_NODE is implemented with this optimization!!!!
-	 * @note: Do not change the position of the node member in the structure.
-	 * */
+	 * @note: Do not change the position of the node member in the structure. */
 	list_node_t node;
+    /** Validation pattern at start of structure.
+     * @note The first member from sec_context_t structure MUST be the node element.
+     *       This allows for an optimized conversion from list_node_t to sec_context_t! */
+    uint32_t start_pattern;
     /** The handle of the JR to which this context is affined.
      *  This handle is needed in sec_process_packet() function to identify
-     *  the input JR in which the packet will be enqueued.  */
+     *  the input JR in which the packet will be enqueued. */
     sec_job_ring_handle_t *jr_handle;
     /* The pool this context belongs to.
      * This pointer is needed when delete_pdcp_context() is received from UA
      * to be able to identify the pool from which this context was acquired.
      * A context can be taken from:
      *  - the affined JR's pool
-     *  - global pool if the affined JR's pool is full
-     *  */
+     *  - global pool if the affined JR's pool is full */
     sec_contexts_pool_t *pool;
     /** The callback called for UA notifications. */
 	sec_out_cbk notify_packet_cbk;
@@ -167,7 +173,9 @@ typedef struct sec_context_s
     /** Cryptographic information that defines this SEC context.
      * The data from this structure is DMA-accesible by SEC device. */
     sec_crypto_info_t *crypto_info;
-}sec_context_t;
+    /** Validation pattern at end of structure. */
+    uint32_t end_pattern;
+}__CACHELINE_ALIGNED sec_context_t;
 
 
 /*==================================================================================================

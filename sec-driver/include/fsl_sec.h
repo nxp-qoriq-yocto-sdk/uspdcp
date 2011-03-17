@@ -330,7 +330,7 @@ sec_return_code_t sec_init(sec_config_t *sec_config_data,
  * @retval #SEC_JR_RESET_FAILED is returned in case the job ring reset fails
  * @retval >0 in case of error
  */
-uint32_t sec_release();
+sec_return_code_t sec_release();
 
 /** @brief Initializes a SEC PDCP context with the data provided.
  * 
@@ -360,9 +360,9 @@ uint32_t sec_release();
  * @retval #SEC_DRIVER_RELEASE_IN_PROGRESS is returned if SEC driver release is in progress
  * @retval >0 in case of error
  */
-uint32_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
-                                  sec_pdcp_context_info_t *sec_ctx_info, 
-                                  sec_context_handle_t *sec_ctx_handle);
+sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
+                                           sec_pdcp_context_info_t *sec_ctx_info,
+                                           sec_context_handle_t *sec_ctx_handle);
 
 /** @brief Deletes a SEC PDCP context previously created.
  *
@@ -385,7 +385,7 @@ uint32_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
  * @retval #SEC_INVALID_CONTEXT_HANDLE      is returned in case the SEC context handle is invalid
  * @retval >0 in case of error
  */
-uint32_t sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle);
+sec_return_code_t sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle);
 
 /** @brief Polls for available packets processed by SEC on all Job Rings initialized by the User Application.
  *
@@ -429,7 +429,7 @@ uint32_t sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle);
  * @retval #SEC_INVALID_INPUT_PARAM         is returned if limit == 0 or weight == 0 or packets_no == NULL
  *                                          or limit <= weight or weight > #SEC_JOB_RING_SIZE
  */
-uint32_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no);
+sec_return_code_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no);
 
 /** @brief Polls for available packets processed by SEC on a specific Job Ring initialized by the User Application.
  *
@@ -462,7 +462,9 @@ uint32_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no);
  *                                         Call sec_get_last_error() to obtain specific error code, as reported by SEC device.
  * @retval #SEC_DRIVER_RELEASE_IN_PROGRESS is returned if SEC driver release is in progress
  */
-uint32_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit, uint32_t *packets_no);
+sec_return_code_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle,
+                                    int32_t limit,
+                                    uint32_t *packets_no);
 
 /**
  * @brief Submit a packet for SEC processing on a specified context.
@@ -506,10 +508,10 @@ uint32_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit,
  *                                          Call sec_get_last_error() to obtain specific error code, as reported by SEC device.
  * @retval >0 in case of error
  */
-uint32_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
-                            sec_packet_t *in_packet,
-                            sec_packet_t *out_packet,
-                            ua_context_handle_t ua_ctx_handle);
+sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
+                                     sec_packet_t *in_packet,
+                                     sec_packet_t *out_packet,
+                                     ua_context_handle_t ua_ctx_handle);
 
 
 /** @brief Returns the last SEC user space driver error, if any.

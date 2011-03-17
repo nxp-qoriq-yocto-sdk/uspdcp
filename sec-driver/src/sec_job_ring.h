@@ -76,7 +76,7 @@ typedef struct sec_descriptor_s
     uint32_t hdr_lo;            /*< header low bits */
     struct sec_ptr ptr[7];      /*< ptr/len pair array */
 
-} __attribute__((aligned(CACHE_LINE_SIZE))) sec_descriptor_t;
+} __CACHELINE_ALIGNED sec_descriptor_t;
 
 /** SEC job */
 typedef struct sec_job_s
@@ -87,25 +87,28 @@ typedef struct sec_job_s
     sec_context_t *sec_context;         /*< SEC context this packet belongs to */
 //    sec_descriptor_t *descr;            /*< SEC descriptor sent to SEC engine(virtual address)*/
     dma_addr_t descr_phys_addr;         /*< SEC descriptor sent to SEC engine(physical address) */
-}sec_job_t;
+}__CACHELINE_ALIGNED sec_job_t;
 
 
 /** SEC Job Ring */
 typedef struct sec_job_ring_s
 {
-    sec_descriptor_t *descriptors;      /*< Ring of jobs sent to SEC engine for processing */
+    uint32_t cidx;                      /*< Consumer index for job ring (jobs array).
+                                            @note: cidx and pidx are accessed from different threads.
+                                                   Place the cidx and pidx inside the structure so that
+                                                   they lay on different cachelines, to avoid false 
+                                                   sharing between threads when the threads run on different cores! */
     sec_job_t jobs[SEC_JOB_RING_SIZE];  /*< Ring of jobs. The same ring is used for
                                             input jobs and output jobs because SEC engine writes 
                                             back output indication in input job.
                                             Size of array is power of 2 to allow fast update of
                                             producer/consumer indexes with bitwise operations. */
+    sec_descriptor_t *descriptors;      /*< Ring of descriptors sent to SEC engine for processing */
 
-    int cidx;                           /*< Consumer index for job ring (jobs array) */
-    int pidx;                           /*< Producer index for job ring (jobs array) */
+    uint32_t pidx;                      /*< Producer index for job ring (jobs array) */
     uint32_t uio_fd;                    /*< The file descriptor used for polling from user space
                                             for interrupts notifications */
     uint32_t jr_id;                     /*< Job ring id */
-	sec_contexts_pool_t ctx_pool;       /*< Pool of SEC contexts */
     uint32_t alternate_register_range;  /*< Can be #TRUE or #FALSE. Indicates if the registers for 
                                             this job ring are mapped to an alternate 4k page.*/
     volatile uint32_t free_slots;       /*< Counts the free slots in a job ring. When it reaches value 0, 
@@ -113,7 +116,8 @@ typedef struct sec_job_ring_s
     volatile void *register_base_addr;  /*< Base address for SEC's register memory for this job ring.
                                             @note On SEC 3.1 all channels share the same register address space,
                                                   so this member will have the exact same value for all og them. */
-}sec_job_ring_t;
+	sec_contexts_pool_t ctx_pool;       /*< Pool of SEC contexts */
+}__CACHELINE_ALIGNED sec_job_ring_t;
 /*==============================================================================
                                  CONSTANTS
 ==============================================================================*/

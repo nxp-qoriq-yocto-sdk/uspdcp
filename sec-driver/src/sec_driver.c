@@ -45,6 +45,7 @@ extern "C" {
 #include "sec_job_ring.h"
 #include "sec_atomic.h"
 #include "sec_hw_specific.h"
+#include "sec_pdcp.h"
 
 #include <stdio.h>
 
@@ -86,11 +87,11 @@ static sec_job_ring_descriptor_t g_job_ring_handles[MAX_SEC_JOB_RINGS];
 
 /* The work mode configured for SEC user space driver at startup,
  * when NAPI notification processing is ON */
-static int sec_work_mode = 0;
+static int g_sec_work_mode = 0;
 
 /* Last JR assigned to a context by the SEC driver using a round robin algorithm.
  * Not used if UA associates the contexts created to a certain JR.*/
-static int last_jr_assigned = 0;
+static unsigned int g_last_jr_assigned = 0;
 
 /* Global context pool */
 static sec_contexts_pool_t g_ctx_pool;
@@ -295,6 +296,11 @@ sec_return_code_t sec_init(sec_config_t *sec_config_data,
     int i = 0;
     int ret = 0;
 
+    // Validate driver state
+    SEC_ASSERT(g_driver_state == SEC_DRIVER_STATE_IDLE,
+               SEC_DRIVER_ALREADY_INITALIZED,
+               "Driver already initialized");
+
     // Validate input arguments
     SEC_ASSERT(job_rings_no <= MAX_SEC_JOB_RINGS, SEC_INVALID_INPUT_PARAM,
                "Requested number of job rings(%d) is greater than maximum hw supported(%d)",
@@ -310,9 +316,6 @@ sec_return_code_t sec_init(sec_config_t *sec_config_data,
                 SEC_INVALID_INPUT_PARAM,
                 "Configured memory is not cacheline aligned (to 64 bytes)");
 
-    SEC_ASSERT(g_driver_state == SEC_DRIVER_STATE_IDLE,
-               SEC_DRIVER_ALREADY_INITALIZED,
-               "Driver already initialized");
 
     g_job_rings_no = job_rings_no;
     memset(g_job_rings, 0, sizeof(g_job_rings));
@@ -396,7 +399,7 @@ sec_return_code_t sec_init(sec_config_t *sec_config_data,
     }
 
     // Remember initial work mode
-    sec_work_mode = sec_config_data->work_mode;
+    g_sec_work_mode = sec_config_data->work_mode;
 
     // Return handles to job rings
     *job_ring_descriptors =  &g_job_ring_handles[0];
@@ -407,9 +410,15 @@ sec_return_code_t sec_init(sec_config_t *sec_config_data,
     return SEC_SUCCESS;
 }
 
-uint32_t sec_release()
+sec_return_code_t sec_release()
 {
     int i;
+
+    // Validate driver state
+    SEC_ASSERT(g_driver_state == SEC_DRIVER_STATE_STARTED,
+               (g_driver_state == SEC_DRIVER_STATE_RELEASE) ? 
+               SEC_DRIVER_RELEASE_IN_PROGRESS : SEC_DRIVER_NOT_INITALIZED ,
+               "Driver release is in progress or driver not initialized");
 
     // Update driver state
     g_driver_state = SEC_DRIVER_STATE_RELEASE;
@@ -436,40 +445,40 @@ uint32_t sec_release()
     return SEC_SUCCESS;
 }
 
-uint32_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
-                                  sec_pdcp_context_info_t *sec_ctx_info, 
-                                  sec_context_handle_t *sec_ctx_handle)
+sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
+                                           sec_pdcp_context_info_t *sec_ctx_info,
+                                           sec_context_handle_t *sec_ctx_handle)
 {
-    /* Stub Implementation - START */
     sec_job_ring_t * job_ring =  (sec_job_ring_t *)job_ring_handle;
     sec_context_t * ctx = NULL;
+    int ret = 0;
 
-    if (sec_ctx_handle == NULL || sec_ctx_info == NULL)
-    {
-        return SEC_INVALID_INPUT_PARAM;
-    }
-    if (sec_ctx_info->notify_packet == NULL)
-    {
-        return SEC_INVALID_INPUT_PARAM;
-    }
-
+    // Validate driver state
     SEC_ASSERT(g_driver_state == SEC_DRIVER_STATE_STARTED,
                (g_driver_state == SEC_DRIVER_STATE_RELEASE) ? 
                SEC_DRIVER_RELEASE_IN_PROGRESS : SEC_DRIVER_NOT_INITALIZED ,
                "Driver release is in progress or driver not initialized");
 
-    *sec_ctx_handle = NULL;
+    // Validate input arguments
+    SEC_ASSERT(sec_ctx_info != NULL, SEC_INVALID_INPUT_PARAM, "sec_ctx_info is NULL");
+    SEC_ASSERT(sec_ctx_handle != NULL, SEC_INVALID_INPUT_PARAM, "sec_ctx_handle is NULL");
+    SEC_ASSERT(sec_ctx_info->notify_packet != NULL, 
+               SEC_INVALID_INPUT_PARAM, 
+               "sec_ctx_inf has NULL notify_packet function pointer");
 
+    // Either UA specifies a job ring to associate with this context,
+    // either the driver will choose a job ring in round robin fashion.
     if(job_ring == NULL)
     {
         /* Implement a round-robin assignment of JRs to this context */
-        last_jr_assigned = SEC_CIRCULAR_COUNTER(last_jr_assigned, g_job_rings_no);
-        ASSERT(last_jr_assigned >= 0 && last_jr_assigned < g_job_rings_no);
-        job_ring = &g_job_rings[last_jr_assigned];
+        g_last_jr_assigned = SEC_CIRCULAR_COUNTER(g_last_jr_assigned, g_job_rings_no);
+        job_ring = &g_job_rings[g_last_jr_assigned];
     }
 
-    // Try to get a free context from the JR's pool
-    // The advantage of the JR's pool is that it needs NO synchronization mechanisms.
+    // Try to get a free context from the JR's pool. Run garbage collector for this JR.
+    //
+    // The advantage of the JR's pool is that it needs NO synchronization mechanisms,
+    // because only one thread accesses it: the producer thread.
     // However, if the JR's pool is full even after running the garbage collector,
     // try to get a free context from the global pool. The disadvantage of the
     // global pool is that the access to it needs to be synchronized because it can
@@ -484,6 +493,7 @@ uint32_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
 			return SEC_DRIVER_NO_FREE_CONTEXTS;
 		}
     }
+
     ASSERT(ctx != NULL);
     ASSERT(ctx->pool != NULL);
 
@@ -491,51 +501,43 @@ uint32_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
     ctx->notify_packet_cbk = sec_ctx_info->notify_packet;
     // Set the JR handle.
     ctx->jr_handle = (sec_job_ring_handle_t)job_ring;
+    // Set the crypto info
+    ret = sec_pdcp_context_set_crypto_info(ctx, sec_ctx_info);
+    if(ret != SEC_SUCCESS)
+    {
+        SEC_ERROR("sec_ctx_info contains invalid data");
+        free_or_retire_context(ctx->pool, ctx);
+        return SEC_INVALID_INPUT_PARAM;
+    }
 
-	// provide to UA a SEC ctx handle
+    // provide to UA a SEC ctx handle
 	*sec_ctx_handle = (sec_context_handle_t)ctx;
 
     return SEC_SUCCESS;
-
-    /* Stub Implementation - END */
-
-
-    // 1. ret = get_free_context();
-
-    // No free contexts available in free list. 
-    // Maybe there are some retired contexts that can be recycled.
-    // Run context garbage collector routine.
-    //if (ret != 0)
-    //{
-    //    ret = collect_retired_contexts();
-    //}
-
-    //if (ret != 0 )
-    //{
-    //    return error, there are no free contexts
-    //}
-
-    // 2. Associate context with job ring
-    // 3. Update context with PDCP info from UA, create shared descriptor
-    // 4. return context handle to UA
-    // 5. Run context garbage collector routine
 }
 
-uint32_t sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle)
+sec_return_code_t sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle)
 {
-    /* Stub Implementation - START */
 	sec_contexts_pool_t * pool = NULL;
 
+    // Validate driver state
     SEC_ASSERT(g_driver_state == SEC_DRIVER_STATE_STARTED,
                (g_driver_state == SEC_DRIVER_STATE_RELEASE) ? 
                SEC_DRIVER_RELEASE_IN_PROGRESS : SEC_DRIVER_NOT_INITALIZED,
                "Driver release is in progress or driver not initialized");
 
+    // Validate input arguments
+    SEC_ASSERT(sec_ctx_handle != NULL, SEC_INVALID_INPUT_PARAM, "sec_ctx_handle is NULL");
+
     sec_context_t * sec_context = (sec_context_t *)sec_ctx_handle;
-    if (sec_context == NULL)
-    {
-        return SEC_INVALID_INPUT_PARAM;
-    }
+
+    // Validate that context handle contains valid bit patterns
+    SEC_ASSERT(COND_EXPR1_EQ_AND_EXPR2_EQ(sec_context->start_pattern,
+                                          CONTEXT_VALIDATION_PATTERN,
+                                          sec_context->end_pattern,
+                                          CONTEXT_VALIDATION_PATTERN),
+               SEC_INVALID_INPUT_PARAM,
+               "sec_ctx_handle is invalid");
 
     pool = sec_context->pool;
     ASSERT (pool != NULL);
@@ -544,11 +546,9 @@ uint32_t sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle)
     // in flight the context will be retired (not freed). The context
     // will be freed in the next garbage collector call.
     return free_or_retire_context(pool, sec_context);
-
-    /* Stub Implementation - END */
 }
 
-uint32_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
+sec_return_code_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
 {
     sec_job_ring_t * job_ring = NULL;
     uint32_t notified_packets_no = 0;
@@ -558,6 +558,13 @@ uint32_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
     int no_more_packets_on_jrs = 0;
     int jr_limit = 0; // limit computed per JR
 
+    // Validate driver state
+    SEC_ASSERT(g_driver_state == SEC_DRIVER_STATE_STARTED,
+               (g_driver_state == SEC_DRIVER_STATE_RELEASE) ? 
+               SEC_DRIVER_RELEASE_IN_PROGRESS : SEC_DRIVER_NOT_INITALIZED,
+               "Driver release is in progress or driver not initialized");
+
+    // Validate input arguments
     if (packets_no == NULL)
     {
         return SEC_INVALID_INPUT_PARAM;
@@ -574,12 +581,6 @@ uint32_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
     {
         return SEC_INVALID_INPUT_PARAM;
     }
-
-    SEC_ASSERT(g_driver_state == SEC_DRIVER_STATE_STARTED,
-               (g_driver_state == SEC_DRIVER_STATE_RELEASE) ? 
-               SEC_DRIVER_RELEASE_IN_PROGRESS : SEC_DRIVER_NOT_INITALIZED,
-               "Driver release is in progress or driver not initialized");
-
 
     /* Poll job rings
        If limit < 0 && weight > 0 -> poll JRs in round robin fashion until
@@ -653,12 +654,21 @@ uint32_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
     //      - other
 }
 
-uint32_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit, uint32_t *packets_no)
+sec_return_code_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, 
+                                    int32_t limit, 
+                                    uint32_t *packets_no)
 {
     /* Stub Implementation - START */
     int ret = SEC_SUCCESS;
     sec_job_ring_t * job_ring =  (sec_job_ring_t *)job_ring_handle;
 
+    // Validate driver state
+    SEC_ASSERT(g_driver_state == SEC_DRIVER_STATE_STARTED,
+               (g_driver_state == SEC_DRIVER_STATE_RELEASE) ? 
+               SEC_DRIVER_RELEASE_IN_PROGRESS : SEC_DRIVER_NOT_INITALIZED,
+               "Driver release is in progress or driver not initialized");
+
+    // Validate input arguments
     if(job_ring == NULL)
     {
         return SEC_INVALID_INPUT_PARAM;
@@ -669,10 +679,6 @@ uint32_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit,
         return SEC_INVALID_INPUT_PARAM;
     }
 
-    SEC_ASSERT(g_driver_state == SEC_DRIVER_STATE_STARTED,
-               (g_driver_state == SEC_DRIVER_STATE_RELEASE) ? 
-               SEC_DRIVER_RELEASE_IN_PROGRESS : SEC_DRIVER_NOT_INITALIZED,
-               "Driver release is in progress or driver not initialized");
 
     *packets_no = 0;
 
@@ -705,10 +711,10 @@ uint32_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle, int32_t limit,
     // 1. call hw_poll_job_ring() to check directly SEC's Job Ring for ready packets.
 }
 
-uint32_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
-                            sec_packet_t *in_packet,
-                            sec_packet_t *out_packet,
-                            ua_context_handle_t ua_ctx_handle)
+sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
+                                     sec_packet_t *in_packet,
+                                     sec_packet_t *out_packet,
+                                     ua_context_handle_t ua_ctx_handle)
 {
     /* Stub Implementation - START */
 
@@ -716,6 +722,7 @@ uint32_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
 #error "Scatter/Gather support is not implemented!"
 #endif
 
+    // Validate driver state
     SEC_ASSERT(g_driver_state == SEC_DRIVER_STATE_STARTED,
                (g_driver_state == SEC_DRIVER_STATE_RELEASE) ? 
                SEC_DRIVER_RELEASE_IN_PROGRESS : SEC_DRIVER_NOT_INITALIZED,
@@ -729,6 +736,14 @@ uint32_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
         return SEC_INVALID_INPUT_PARAM;
     }
 
+
+    // Validate that context handle contains valid bit patterns
+    SEC_ASSERT(COND_EXPR1_EQ_AND_EXPR2_EQ(sec_context->start_pattern,
+                                          CONTEXT_VALIDATION_PATTERN,
+                                          sec_context->end_pattern,
+                                          CONTEXT_VALIDATION_PATTERN),
+               SEC_INVALID_INPUT_PARAM,
+               "sec_ctx_handle is invalid");
     
     if (CONTEXT_GET_STATE(sec_context->state_packets_no) == SEC_CONTEXT_RETIRING)
     {

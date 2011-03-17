@@ -308,6 +308,10 @@ sec_return_code_t init_contexts_pool(sec_contexts_pool_t * pool,
 		CONTEXT_SET_STATE(ctx->state_packets_no, SEC_CONTEXT_UNUSED);
 		ctx->pool = pool;
 
+        // initialize validation patterns
+        ctx->start_pattern = CONTEXT_VALIDATION_PATTERN;
+        ctx->end_pattern = CONTEXT_VALIDATION_PATTERN;
+
         // For crypto information allocate DMA-capable memory 
         // from memory area configured by UA.
         ctx->crypto_info = *dma_mem;
@@ -373,7 +377,10 @@ sec_context_t* get_free_context(sec_contexts_pool_t * pool)
     // remove first element from the free list
 	node = pool->free_list.remove_first(&pool->free_list);
     ctx = GET_CONTEXT_FROM_LIST_NODE(node);
+
     ASSERT(CONTEXT_GET_STATE(ctx->state_packets_no) == SEC_CONTEXT_UNUSED);
+    ASSERT(CONTEXT_GET_PACKETS_NO(ctx->state_packets_no) == 0);
+
     CONTEXT_SET_STATE(ctx->state_packets_no, SEC_CONTEXT_USED);
 
 	// add the element to the tail of the in use list
@@ -407,7 +414,7 @@ sec_return_code_t free_or_retire_context(sec_contexts_pool_t * pool, sec_context
     atomic_add_load(&ctx->state_packets_no, new_state);
 
     // If packets in flight, do not release the context yet, move it to retiring.
-    // The context will be deleted when all packets in flight are notified to UA
+    // The context will be moved to free list when all packets in flight are notified to UA
     packets_no = CONTEXT_GET_PACKETS_NO(ctx->state_packets_no);
     if (packets_no != 0)
     {
