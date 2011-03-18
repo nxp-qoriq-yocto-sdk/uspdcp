@@ -128,8 +128,10 @@ typedef struct pdcp_context_s
 
     // Pool of input and output buffers used for processing the
     // packets associated to this context. (used an array for simplicity)
-    buffer_t input_buffers[MAX_PACKET_NUMBER_PER_CTX];
-    buffer_t output_buffers[MAX_PACKET_NUMBER_PER_CTX];
+
+// TODO: allocate buffers from DMA-mem pool
+//    buffer_t input_buffers[MAX_PACKET_NUMBER_PER_CTX];
+//    buffer_t output_buffers[MAX_PACKET_NUMBER_PER_CTX];
     int no_of_used_buffers; // index incremented by Producer Thread
     int no_of_buffers_processed; // index increment by Consumer Thread
     int no_of_buffers_to_process; // configurable random number of packets to be processed per context
@@ -389,16 +391,16 @@ static int release_pdcp_buffers(pdcp_context_t * pdcp_context,
     // Validate the order of the buffers release
     // The order in which the buffers are relased must be the same with the order
     // in which the buffers were submitted to SEC driver for processing.
-    assert((dma_addr_t)&pdcp_context->input_buffers[pdcp_context->no_of_buffers_processed].buffer[0] ==
-            in_packet->address);
-    assert(pdcp_context->input_buffers[pdcp_context->no_of_buffers_processed].offset ==
-                in_packet->offset);
+//    assert((dma_addr_t)&pdcp_context->input_buffers[pdcp_context->no_of_buffers_processed].buffer[0] ==
+//            in_packet->address);
+//    assert(pdcp_context->input_buffers[pdcp_context->no_of_buffers_processed].offset ==
+//                in_packet->offset);
     assert(PDCP_BUFFER_SIZE == in_packet->length);
 
-    assert((dma_addr_t)&pdcp_context->output_buffers[pdcp_context->no_of_buffers_processed].buffer[0] ==
-            out_packet->address);
-    assert(pdcp_context->output_buffers[pdcp_context->no_of_buffers_processed].offset ==
-                    out_packet->offset);
+//    assert((dma_addr_t)&pdcp_context->output_buffers[pdcp_context->no_of_buffers_processed].buffer[0] ==
+//            out_packet->address);
+//    assert(pdcp_context->output_buffers[pdcp_context->no_of_buffers_processed].offset ==
+//                    out_packet->offset);
     assert(PDCP_BUFFER_SIZE == out_packet->length);
 
     // mark the input buffer free
@@ -462,7 +464,8 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
     assert(pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].usage == PDCP_BUFFER_FREE);
     pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].usage = PDCP_BUFFER_USED;
     in_packet->address = (packet_addr_t)&pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].buffer[0];
-    in_packet->offset = pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].offset;
+//    in_packet->offset = pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].offset;
+    in_packet->offset = 15;
     in_packet->length = PDCP_BUFFER_SIZE;
     in_packet->scatter_gather = SEC_CONTIGUOUS_BUFFER;
 
@@ -498,14 +501,15 @@ static int pdcp_ready_packet_handler (sec_packet_t *in_packet,
     pdcp_context = (pdcp_context_t *)ua_ctx_handle;
 
     printf("thread #%d:consumer: sec_callback called for context_id = %d, "
-            "context usage = %d, no of buffers processed = %d, no of buffers to process = %d, "
-            "status = %d\n",
+//            "context usage = %d, no of buffers processed = %d, no of buffers to process = %d, "
+            "status = %d || in buf.offset = %d\n",
             (pdcp_context->thread_id + 1)%2,
             pdcp_context->id,
-            pdcp_context->usage,
-            pdcp_context->no_of_buffers_processed + 1,
-            pdcp_context->no_of_buffers_to_process,
-            status);
+  //          pdcp_context->usage,
+  //          pdcp_context->no_of_buffers_processed + 1,
+  //          pdcp_context->no_of_buffers_to_process,
+            status,
+            in_packet->offset);
 
     // Buffers processing.
     // In this test application we will release the input and output buffers
@@ -762,8 +766,11 @@ static void* pdcp_thread_routine(void* config)
         // for the newly created context, send to SEC a random number of packets for processing
         sec_packet_t in_packet;
         sec_packet_t out_packet;
+
+
         while (get_free_pdcp_buffer(pdcp_context, &in_packet, &out_packet) == 0)
         {
+//            in_packet.offset = total_no_of_contexts_created;
 
             // if SEC process packet returns that the producer JR is full, do some polling
             // on the consumer JR until the producer JR has free entries.

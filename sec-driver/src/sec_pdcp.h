@@ -85,7 +85,7 @@ int sec_pdcp_context_set_crypto_info(sec_context_t *ctx,
  * @retval other for error
  */
 int sec_pdcp_context_create_descriptor(sec_job_t *job,
-                                       sec_descriptor_t *descriztor);
+                                       sec_descriptor_t *descriptor);
 /*============================================================================*/
 
 

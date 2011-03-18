@@ -38,6 +38,7 @@ extern "C" {
                                         INCLUDE FILES
 ==================================================================================================*/
 #include "sec_pdcp.h"
+#include "sec_hw_specific.h"
 #include "sec_utils.h"
 
 /*==================================================================================================
@@ -97,6 +98,14 @@ int sec_pdcp_context_create_descriptor(sec_job_t *job, sec_descriptor_t *descrip
 {
     ASSERT(job != NULL);
     ASSERT(descriptor != NULL);
+
+//    90900010            // Header word 1
+//    0000bead            // Header word 2
+
+    descriptor->hdr = 0x90900010;
+    descriptor->hdr_lo = 0x0000bead;
+
+    hw_job_enable_writeback(descriptor);
 
     return SEC_SUCCESS;
 }

@@ -55,6 +55,30 @@
                     SEC_CH_REG_RANGE_START_ALTERNATE : SEC_CH_REG_RANGE_START_NORMAL) \
                     + (job_ring->jr_id * SEC_CH_REG_RANGE))
 
+/*****************************************************************
+ * ISR(Interrupt Status Register) offset
+ *****************************************************************/
+
+/** Offset to higher 32 bits of ISR register.*/
+#define SEC_REG_ISR         0x1010
+/** Offset to lower 32 bits of ISR register */
+#define SEC_REG_ISR_LO      0x1014
+
+/*****************************************************************
+ * ISR(Interrupt Status Register) values
+ *****************************************************************/
+
+/** Job ring errors mask */
+#define SEC_REG_ISR_CHERR   0xaa
+/** Job ring done mask */
+#define SEC_REG_ISR_CHDONE  0x55
+
+/** Mask to check if DONE interrupt was generated for a certain job ring */
+#define SEC_REG_GET_VAL_ISR_DONE(job_ring_id) (1 << (job_ring_id)* 2)
+/** Mask to check if Error interrupt was generated for a certain job ring */
+#define SEC_REG_GET_VAL_ISR_ERR(job_ring_id) (2 << (job_ring_id)* 2)
+
+
 
 /*****************************************************************
  * IER(Interrupt Enable Register) offset
@@ -62,9 +86,10 @@
 
 /** Offset from the SEC register base address for IER register.
  * Enables/disables done/error interrupts per channel, at controller level.*/
-#define SEC_REG_IER             0x1008
+#define SEC_REG_IER     0x1008
 /** Offset to lower 32 bits of IER register */
-#define SEC_REG_IER_LO          0x100C
+#define SEC_REG_IER_LO  0x100C
+
 
 /*****************************************************************
  * IER(Interrupt Enable Register) values
@@ -126,9 +151,9 @@
  *****************************************************************/
 
 /**  Offset to higher 32 bits of CSR register for a job ring */
-#define   SEC_REG_CSR(jr)       (CHAN_BASE(jr) + SEC_REG_CSR_OFFSET_HI)
+#define SEC_REG_CSR(jr)       (CHAN_BASE(jr) + SEC_REG_CSR_OFFSET_HI)
 /**  Offset to lower 32 bits of CSR register for a job ring */
-#define   SEC_REG_CSR_LO(jr)    (CHAN_BASE(jr) + SEC_REG_CSR_OFFSET_LO)
+#define SEC_REG_CSR_LO(jr)    (CHAN_BASE(jr) + SEC_REG_CSR_OFFSET_LO)
 
 
 /**  Offset to higher 32 bits of CSR */
@@ -140,19 +165,44 @@
  * CSR(Channel Status Register) values
  *****************************************************************/
 
-#define   SEC_REG_CSR_LO_DOF    0x8000 /* double FF write oflow error */
-#define   SEC_REG_CSR_LO_SOF    0x4000 /* single FF write oflow error */
-#define   SEC_REG_CSR_LO_MDTE   0x2000 /* master data transfer error */
-#define   SEC_REG_CSR_LO_SGDLZ  0x1000 /* s/g data len zero error */
-#define   SEC_REG_CSR_LO_FPZ    0x0800 /* fetch ptr zero error */
-#define   SEC_REG_CSR_LO_IDH    0x0400 /* illegal desc hdr error */
-#define   SEC_REG_CSR_LO_IEU    0x0200 /* invalid EU error */
-#define   SEC_REG_CSR_LO_EU     0x0100 /* EU error detected */
-#define   SEC_REG_CSR_LO_GB     0x0080 /* gather boundary error */
-#define   SEC_REG_CSR_LO_GRL    0x0040 /* gather return/length error */
-#define   SEC_REG_CSR_LO_SB     0x0020 /* scatter boundary error */
-#define   SEC_REG_CSR_LO_SRL    0x0010 /* scatter return/length error */
+#define SEC_REG_CSR_ERROR_MASK  0xFFFF /* Extract error field from CSR */
 
+#define SEC_REG_CSR_LO_DOF    0x8000 /* double FF write oflow error */
+#define SEC_REG_CSR_LO_SOF    0x4000 /* single FF write oflow error */
+#define SEC_REG_CSR_LO_MDTE   0x2000 /* master data transfer error */
+#define SEC_REG_CSR_LO_SGDLZ  0x1000 /* s/g data len zero error */
+#define SEC_REG_CSR_LO_FPZ    0x0800 /* fetch ptr zero error */
+#define SEC_REG_CSR_LO_IDH    0x0400 /* illegal desc hdr error */
+#define SEC_REG_CSR_LO_IEU    0x0200 /* invalid EU error */
+#define SEC_REG_CSR_LO_EU     0x0100 /* EU error detected */
+#define SEC_REG_CSR_LO_GB     0x0080 /* gather boundary error */
+#define SEC_REG_CSR_LO_GRL    0x0040 /* gather return/length error */
+#define SEC_REG_CSR_LO_SB     0x0020 /* scatter boundary error */
+#define SEC_REG_CSR_LO_SRL    0x0010 /* scatter return/length error */
+
+
+
+/*****************************************************************
+ * Descriptor format: Header Dword values
+ *****************************************************************/
+
+/** Written back when packet processing is done */
+#define SEC_DESC_HDR_DONE           0xff000000
+/** Request done notification (DN) per descriptor */
+#define SEC_DESC_HDR_DONE_NOTIFY    0x00000001
+
+
+/** Check if a descriptor has the DONE bits set.
+ * If yes, it means the packet tied to the descriptor 
+ * is processed by SEC engine already.*/
+#define hw_job_is_done(descriptor)   ((descriptor->hdr & SEC_DESC_HDR_DONE) == SEC_DESC_HDR_DONE)
+
+/** Enable done writeback in descriptor header dword after packet is processed by SEC engine */
+#define hw_job_enable_writeback(descriptor) (descriptor->hdr |= SEC_DESC_HDR_DONE_NOTIFY)
+
+/** Return 0 if no error generated on this job ring.
+ * Return non-zero if error. */
+#define hw_job_ring_error(jr) (in_be32(job_ring->register_base_addr + SEC_REG_CSR_LO(jr)) & SEC_REG_CSR_ERROR_MASK)
 /*==============================================================================
                                     ENUMS
 ==============================================================================*/
@@ -216,6 +266,7 @@ void hw_enable_irq_on_job_ring(sec_job_ring_t *job_ring);
  * @param [in] descriptor   Physical address of descriptor.
  */
 void hw_enqueue_packet_on_job_ring(sec_job_ring_t *job_ring, dma_addr_t descriptor);
+
 /*============================================================================*/
 
 

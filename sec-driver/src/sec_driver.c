@@ -131,7 +131,7 @@ static int enable_irq();
  *
  * @param [in]  job_ring    The job ring to poll.
  * @param [in]  limit       The maximum number of jobs to notify.
- *                          If set to -1, all available jobs are notified.
+ *                          If set to negative value, all available jobs are notified.
  * @param [out] packets_no  No of jobs notified to UA.
  *
  * @retval 0 for success
@@ -209,13 +209,16 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t * job_ring,
                                  int32_t limit,
                                  uint32_t *packets_no)
 {
-    /* Stub Implementation - START */
-    sec_context_t * sec_context;
-    sec_job_t *job;
-    int jobs_no_to_notify = 0; // the number of done jobs to notify to UA
+    sec_context_t *sec_context = NULL;
+    sec_job_t *job = NULL;
+    sec_job_t saved_job;
+
+    int32_t jobs_no_to_notify = 0; // the number of done jobs to notify to UA
     sec_status_t status = SEC_STATUS_SUCCESS;
-    int notified_packets_no = 0;
-    int number_of_jobs_available = 0;
+    int32_t notified_packets_no = 0;
+    int32_t number_of_jobs_available = 0;
+    uint32_t error_code = 0;
+    int ret = 0;
 
     // Compute the number of notifications that need to be raised to UA
     // If limit < 0 -> notify all done jobs
@@ -234,32 +237,71 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t * job_ring,
         // get the first un-notified job from the job ring
         job = &job_ring->jobs[job_ring->cidx];
 
-        sec_context = job->sec_context;
-        ASSERT (sec_context->notify_packet_cbk != NULL);
+    uint32_t reg_val_hi = in_be32(job_ring->register_base_addr + SEC_REG_CSR(job_ring));
+    uint32_t reg_val_lo = in_be32(job_ring->register_base_addr + SEC_REG_CSR_LO(job_ring));
+    printf("job ring id %d: CSR hi = 0x%x. CSR lo = 0x%x\n", job_ring->jr_id, reg_val_hi, reg_val_lo);
 
+
+        // check if  job is DONE
+        if(!hw_job_is_done(job->descr))
+        {
+            // check if job generated error
+            error_code = hw_job_ring_error(job_ring);
+            if (error_code)
+            {
+                SEC_ERROR("Packet at cidx %d generated error 0x%x on job ring with id %d", 
+                          job_ring->cidx,
+                          error_code,
+                          job_ring->jr_id);
+            }
+            else
+            {
+                // Packet is not processed yet, exit
+                //break;
+            }
+        }
+
+        // copy into a temporary job the fields from the job we need to raise callback
+        // this is done to free the slot before the callback is called, 
+        // which we cannot control in terms of how much processing it will do.
+        saved_job.in_packet = job->in_packet;
+        saved_job.out_packet = job->out_packet;
+        saved_job.ua_handle = job->ua_handle;
+        saved_job.sec_context = job->sec_context;
+
+        // increment the consumer index for the current job ring
+        job_ring->cidx = SEC_CIRCULAR_COUNTER_POW_2(job_ring->cidx, SEC_JOB_RING_SIZE);
+        job_ring->free_slots--;
+
+
+        // packet is processed by SEC engine, notify it to UA
+        sec_context = saved_job.sec_context;
         status = SEC_STATUS_SUCCESS;
 
         // if context is retiring, set a suggestive status for the packets notified to UA
         if (CONTEXT_GET_STATE(sec_context->state_packets_no) == SEC_CONTEXT_RETIRING)
         {
             status = (CONTEXT_GET_PACKETS_NO(sec_context->state_packets_no) > 1) ? 
-                SEC_STATUS_OVERDUE : SEC_STATUS_LAST_OVERDUE;
+                     SEC_STATUS_OVERDUE : SEC_STATUS_LAST_OVERDUE;
         }
         // call the calback
-        sec_context->notify_packet_cbk(&job->in_packet,
-                                       &job->out_packet,
-                                       job->ua_handle,
-                                       status,
-                                       0);
+        ret = sec_context->notify_packet_cbk(saved_job.in_packet,
+                                             saved_job.out_packet,
+                                             saved_job.ua_handle,
+                                             status,
+                                             0); // no error
 
         // atomically decrement packet reference count in sec context 
         // and read back state_packets_no.
         atomic_sub_load(&sec_context->state_packets_no, 1);
         notified_packets_no++;
 
-        // increment the consumer index for the current job ring
-        job_ring->cidx = SEC_CIRCULAR_COUNTER_POW_2(job_ring->cidx, SEC_JOB_RING_SIZE);
-        job_ring->free_slots--;
+        // UA requested to exit
+        if (ret == SEC_RETURN_STOP)
+        {
+            *packets_no = notified_packets_no;
+            return SEC_SUCCESS; 
+        }
     }
 
     *packets_no = notified_packets_no;
@@ -553,10 +595,11 @@ sec_return_code_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
     sec_job_ring_t * job_ring = NULL;
     uint32_t notified_packets_no = 0;
     uint32_t notified_packets_no_per_jr = 0;
-    int i = 0;
-    int ret = SEC_SUCCESS;
-    int no_more_packets_on_jrs = 0;
-    int jr_limit = 0; // limit computed per JR
+    int32_t packets_left_to_notify = 0;
+    int32_t i = 0;
+    int32_t ret = SEC_SUCCESS;
+    int32_t no_more_packets_on_jrs = 0;
+    int32_t jr_limit = 0; // limit computed per JR
 
     // Validate driver state
     SEC_ASSERT(g_driver_state == SEC_DRIVER_STATE_STARTED,
@@ -565,10 +608,7 @@ sec_return_code_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
                "Driver release is in progress or driver not initialized");
 
     // Validate input arguments
-    if (packets_no == NULL)
-    {
-        return SEC_INVALID_INPUT_PARAM;
-    }
+
     /* - A limit equal with zero is considered invalid because it makes no sense to call
        sec_poll and request for no notification.
        - A weight of zero is considered invalid because the weighted round robing algorithm
@@ -577,63 +617,71 @@ sec_return_code_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
        implement its own algorithm.
        - A limit smaller or equal than weight is considered invalid.
     */
-    if (limit == 0 || weight == 0 || (limit <= weight) || (weight > SEC_JOB_RING_HW_SIZE))
-    {
-        return SEC_INVALID_INPUT_PARAM;
-    }
+    SEC_ASSERT(!(limit == 0 || weight == 0 || (limit <= weight) || (weight > SEC_JOB_RING_HW_SIZE)),
+               SEC_INVALID_INPUT_PARAM,
+               "Invalid limit/weight parameter configuration");
 
     /* Poll job rings
-       If limit < 0 && weight > 0 -> poll JRs in round robin fashion until
-                                     no more notifications are available.
-       If limit > 0 && weight > 0 -> poll JRs in round robin fashion until
-                                     limit is reached.
+       If limit < 0 -> poll JRs in round robin fashion until no more notifications are available.
+       If limit > 0 -> poll JRs in round robin fashion until limit is reached.
      */
 
     /* Exit from while if one of the following is true:
      * - the required number of notifications were raised to UA.
      * - there are no more done jobs on either of the available JRs.
      * */
-    while ((notified_packets_no == limit) ||
-            no_more_packets_on_jrs == 0)
+    while ((notified_packets_no != limit) &&
+            no_more_packets_on_jrs != 0)
     {
         no_more_packets_on_jrs = 0;
         for (i = 0; i < g_job_rings_no; i++)
         {
             job_ring = &g_job_rings[i];
-
+/*
             uint32_t reg_val_hi = in_be32(job_ring->register_base_addr + SEC_REG_CSR(job_ring));
             uint32_t reg_val_lo = in_be32(job_ring->register_base_addr + SEC_REG_CSR_LO(job_ring));
             printf("job ring id %d: CSR hi = 0x%x. CSR lo = 0x%x\n", job_ring->jr_id, reg_val_hi, reg_val_lo);
-
+*/
             /* Compute the limit for this JR
-               If there are less packets to notify then configured weight,
+               If there are less packets to notify than configured weight,
                then notify the smaller number of packets.
             */
-            int packets_left_to_notify = limit - notified_packets_no;
+
+            // how many packets do we have until reaching the budget?
+            packets_left_to_notify = (limit > 0) ? (limit - notified_packets_no) : limit;
+            // calculate budget per job ring
             jr_limit = (packets_left_to_notify < weight) ? packets_left_to_notify  : weight ;
 
             /* Poll one JR */
             ret = hw_poll_job_ring((sec_job_ring_handle_t)job_ring, jr_limit, &notified_packets_no_per_jr);
-            if (ret != SEC_SUCCESS)
-            {
-                return ret;
-            }
-            /* Update total number of packets notified to UA */
-            notified_packets_no += notified_packets_no_per_jr;
+            SEC_ASSERT(ret == SEC_SUCCESS, ret, "Error polling SEC engine job ring");
 
             /* Update flag used to identify if there are no more notifications
              * in either of the available JRs.*/
             no_more_packets_on_jrs |= notified_packets_no_per_jr;
+
+            /* Update total number of packets notified to UA */
+            notified_packets_no += notified_packets_no_per_jr;
+            if (notified_packets_no == limit)
+            {
+                break;
+                // exit for loop with notified_packets_no == limit -> while loop will exit too
+            }
+
         }
     }
-    *packets_no = notified_packets_no;
+
+    if (packets_no != NULL)
+    {
+        *packets_no = notified_packets_no;
+    }
 
 #if SEC_NOTIFICATION_TYPE == SEC_NOTIFICATION_TYPE_NAPI
-    if (limit < 0)// and no more ready packets in SEC
+    if (limit < 0)
     {
         enable_irq();
     }
-    else if (notified_packets_no < limit)// and no more ready packets in SEC
+    else if (notified_packets_no < limit)
     {
         enable_irq();
     }
@@ -682,11 +730,11 @@ sec_return_code_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle,
     {
         return SEC_INVALID_INPUT_PARAM;
     }
-
+/*
     uint32_t reg_val_hi = in_be32(job_ring->register_base_addr + SEC_REG_CSR(job_ring));
     uint32_t reg_val_lo = in_be32(job_ring->register_base_addr + SEC_REG_CSR_LO(job_ring));
     printf("job ring id %d: CSR hi = 0x%x. CSR lo = 0x%x\n", job_ring->jr_id, reg_val_hi, reg_val_lo);
-
+*/
 
     *packets_no = 0;
 
@@ -774,13 +822,8 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
     job = &job_ring->jobs[job_ring->pidx];
 
     // update job with crypto context and in/out packet data
-    job->in_packet.address = in_packet->address;
-    job->in_packet.offset = in_packet->offset;
-    job->in_packet.length = in_packet->length;
-
-    job->out_packet.address = out_packet->address;
-    job->out_packet.offset = out_packet->offset;
-    job->out_packet.length = out_packet->length;
+    job->in_packet = in_packet;
+    job->out_packet = out_packet;
 
     job->sec_context = sec_context;
     job->ua_handle = ua_ctx_handle;
@@ -797,6 +840,10 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
 
     // Enqueue this descriptor into the Fetch FIFO of this JR
     hw_enqueue_packet_on_job_ring(job_ring, job->descr_phys_addr);
+
+    uint32_t reg_val_hi = in_be32(job_ring->register_base_addr + SEC_REG_CSR(job_ring));
+    uint32_t reg_val_lo = in_be32(job_ring->register_base_addr + SEC_REG_CSR_LO(job_ring));
+    printf("after added packet job ring id %d: CSR hi = 0x%x. CSR lo = 0x%x\n", job_ring->jr_id, reg_val_hi, reg_val_lo);
 
     return SEC_SUCCESS;
 }
