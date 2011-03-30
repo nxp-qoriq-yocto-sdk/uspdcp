@@ -202,7 +202,7 @@ static void hw_flush_job_ring(sec_job_ring_t * job_ring)
     }
 }
 
-static uint32_t hw_poll_job_ring(sec_job_ring_t * job_ring,
+static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
                                  int32_t limit,
                                  uint32_t *packets_no)
 {
@@ -325,9 +325,9 @@ static void flush_job_rings()
                                      GLOBAL FUNCTIONS
 ==================================================================================================*/
 
-sec_return_code_t sec_init(sec_config_t *sec_config_data,
+sec_return_code_t sec_init(const sec_config_t *sec_config_data,
                            uint8_t job_rings_no,
-                           sec_job_ring_descriptor_t **job_ring_descriptors)
+                           const sec_job_ring_descriptor_t **job_ring_descriptors)
 {
     int i = 0;
     int ret = 0;
@@ -482,7 +482,7 @@ sec_return_code_t sec_release()
 }
 
 sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
-                                           sec_pdcp_context_info_t *sec_ctx_info,
+                                           const sec_pdcp_context_info_t *sec_ctx_info,
                                            sec_context_handle_t *sec_ctx_handle)
 {
     sec_job_ring_t * job_ring =  (sec_job_ring_t *)job_ring_handle;
@@ -639,7 +639,7 @@ sec_return_code_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
             jr_limit = (packets_left_to_notify < weight) ? packets_left_to_notify  : weight ;
 
             // Poll one JR
-            ret = hw_poll_job_ring((sec_job_ring_handle_t)job_ring, jr_limit, &notified_packets_no_per_jr);
+            ret = hw_poll_job_ring(job_ring, jr_limit, &notified_packets_no_per_jr);
             SEC_ASSERT(ret == SEC_SUCCESS, ret, "Error polling SEC engine job ring with id %d", job_ring->jr_id);
 
             // Update flag used to identify if there are no more notifications
@@ -733,8 +733,8 @@ sec_return_code_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle,
 }
 
 sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
-                                     sec_packet_t *in_packet,
-                                     sec_packet_t *out_packet,
+                                     const sec_packet_t *in_packet,
+                                     const sec_packet_t *out_packet,
                                      ua_context_handle_t ua_ctx_handle)
 {
     int ret = SEC_SUCCESS;

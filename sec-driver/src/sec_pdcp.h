@@ -78,7 +78,7 @@ typedef struct sec_context_t sec_context_t;
  * @retval other for error
  */
 int sec_pdcp_context_set_crypto_info(sec_context_t *ctx,
-                                     sec_pdcp_context_info_t *crypto_pdb);
+                                     const sec_pdcp_context_info_t *crypto_pdb);
 
 /** @brief Updates a SEC descriptor for each packet with pointers to
  * input packet, output packet and crypto information.

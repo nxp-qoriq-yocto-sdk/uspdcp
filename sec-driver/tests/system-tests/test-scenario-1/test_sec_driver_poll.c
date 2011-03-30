@@ -273,8 +273,8 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
  *
  * ua_ctx_handle -> is the address of the UA PDCP context associated to the response notified.
  */
-static int pdcp_ready_packet_handler (sec_packet_t *in_packet,
-                                      sec_packet_t *out_packet,
+static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
+                                      const sec_packet_t *out_packet,
                                       ua_context_handle_t ua_ctx_handle,
                                       uint32_t status,
                                       uint32_t error_info);
@@ -309,7 +309,7 @@ static int delete_contexts(pdcp_context_t * pdcp_contexts,
 static sec_config_t sec_config_data;
 
 // job ring handles provided by SEC driver
-static sec_job_ring_descriptor_t *job_ring_descriptors = NULL;
+static const sec_job_ring_descriptor_t *job_ring_descriptors = NULL;
 
 // UA pool of PDCP contexts for UL and DL.
 // For simplicity, use an array of contexts and a mutex to synchronize access to it.
@@ -644,8 +644,8 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
     return 0;
 }
 
-static int pdcp_ready_packet_handler (sec_packet_t *in_packet,
-                                      sec_packet_t *out_packet,
+static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
+                                      const sec_packet_t *out_packet,
                                       ua_context_handle_t ua_ctx_handle,
                                       uint32_t status,
                                       uint32_t error_info)
@@ -749,7 +749,10 @@ static int pdcp_ready_packet_handler (sec_packet_t *in_packet,
     // In this test application we will release the input and output buffers
     // Check also if all the buffers were received for a retiring context
     // and if so mark it to be deleted
-    ret = release_pdcp_buffers(pdcp_context, in_packet, out_packet, status);
+    ret = release_pdcp_buffers(pdcp_context,
+                               (sec_packet_t*)in_packet,
+                               (sec_packet_t*)out_packet,
+                               status);
     assert(ret == 0);
 
     return SEC_RETURN_SUCCESS;

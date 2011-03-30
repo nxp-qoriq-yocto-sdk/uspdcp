@@ -135,7 +135,7 @@ struct sec_context_t
     /** The handle of the JR to which this context is affined.
      *  This handle is needed in sec_process_packet() function to identify
      *  the input JR in which the packet will be enqueued. */
-    sec_job_ring_handle_t *jr_handle;
+    sec_job_ring_handle_t jr_handle;
     /* The pool this context belongs to.
      * This pointer is needed when delete_pdcp_context() is received from UA
      * to be able to identify the pool from which this context was acquired.
@@ -166,7 +166,7 @@ struct sec_context_t
 
     /** Crypto info received from UA.
      * TODO: replace with union when other protocols besides PDCP will be supported!*/
-    sec_pdcp_context_info_t *pdcp_crypto_info;
+    const sec_pdcp_context_info_t *pdcp_crypto_info;
     /** Cryptographic information that defines this SEC context.
      * The <keys> member from this structure is DMA-accesible by SEC device. */
     sec_crypto_pdb_t crypto_desc_pdb;

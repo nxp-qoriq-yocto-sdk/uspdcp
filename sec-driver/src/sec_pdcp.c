@@ -566,7 +566,7 @@ int sec_pdcp_update_iv(uint32_t iv[],
 ==================================================================================================*/
 
 int sec_pdcp_context_set_crypto_info(sec_context_t *ctx,
-                                     sec_pdcp_context_info_t *crypto_info)
+                                     const sec_pdcp_context_info_t *crypto_info)
 {
     int ret = SEC_SUCCESS;
 

@@ -83,7 +83,7 @@ extern "C" {
 static sec_config_t sec_config_data;
 
 // job ring handles provided by SEC driver
-static sec_job_ring_descriptor_t *job_ring_descriptors = NULL;
+static const sec_job_ring_descriptor_t *job_ring_descriptors = NULL;
 
 // Job ring used for testing, in tests using a single job ring.
 static int job_ring_id;

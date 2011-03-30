@@ -163,14 +163,14 @@ typedef dma_addr_t  packet_addr_t;
 
 /** Opaque handle to a Job Ring provided by SEC user space driver
  *  to UA when sec_init() is called. */
-typedef void* sec_job_ring_handle_t;
+typedef const void* sec_job_ring_handle_t;
 
 /** Handle to a SEC PDCP Context */
-typedef void* sec_context_handle_t;
+typedef const void* sec_context_handle_t;
 
 /** UA opaque handle to a packet context.
  *  The handle is opaque from SEC driver's point of view. */
-typedef void* ua_context_handle_t;
+typedef const void* ua_context_handle_t;
 
 /** Structure used to describe an input or output packet accessed by SEC. */
 typedef struct sec_packet_s
@@ -237,8 +237,8 @@ typedef void* (*ptov_function)(phys_addr_t address);
  * @retval #SEC_RETURN_SUCCESS for successful execution
  * @retval #SEC_RETURN_STOP    The User Application must return this code when it desires to stop the polling process.
  */
-typedef int (*sec_out_cbk)(sec_packet_t        *in_packet,
-                           sec_packet_t        *out_packet,
+typedef int (*sec_out_cbk)(const sec_packet_t  *in_packet,
+                           const sec_packet_t  *out_packet,
                            ua_context_handle_t ua_ctx_handle,
                            sec_status_t        status,
                            uint32_t            error_info);
@@ -264,9 +264,9 @@ typedef struct sec_pdcp_context_info_s
     uint32_t    hfn_threshold;          /*< HFN threshold for this radio bearer. If HFN matches or exceeds threshold,
                                             sec_process_packet will return #SEC_HFN_THRESHOLD_REACHED. */
     uint8_t    *cipher_key;             /*< Ciphering key. */
-    uint8_t    cipher_key_len;         /*< Ciphering key length. */
+    uint8_t    cipher_key_len;          /*< Ciphering key length. */
     uint8_t    *integrity_key;          /*< Integrity key. */
-    uint8_t    integrity_key_len;      /*< Integrity key length. */
+    uint8_t    integrity_key_len;       /*< Integrity key length. */
     void        *custom;                /*< User Application custom data for this PDCP context. Usage to be defined. */
     sec_out_cbk notify_packet;          /*< Callback function to be called for all packets processed on this context. */
 } sec_pdcp_context_info_t;
@@ -339,9 +339,9 @@ typedef struct sec_config_s
  *                                          Call sec_get_last_error() to obtain specific error code, as reported by SEC device.
  * @retval >0 in case of error
  */
-sec_return_code_t sec_init(sec_config_t *sec_config_data,
+sec_return_code_t sec_init(const sec_config_t *sec_config_data,
                            uint8_t job_rings_no,
-                           sec_job_ring_descriptor_t **job_ring_descriptors);
+                           const sec_job_ring_descriptor_t **job_ring_descriptors);
 
 /**
  * @brief Release the resources used by the SEC user space driver.
@@ -390,7 +390,7 @@ sec_return_code_t sec_release();
  * @retval >0 in case of error
  */
 sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
-                                           sec_pdcp_context_info_t *sec_ctx_info,
+                                           const sec_pdcp_context_info_t *sec_ctx_info,
                                            sec_context_handle_t *sec_ctx_handle);
 
 /** @brief Deletes a SEC PDCP context previously created.
@@ -541,8 +541,8 @@ sec_return_code_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle,
  * @retval >0 in case of error
  */
 sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
-                                     sec_packet_t *in_packet,
-                                     sec_packet_t *out_packet,
+                                     const sec_packet_t *in_packet,
+                                     const sec_packet_t *out_packet,
                                      ua_context_handle_t ua_ctx_handle);
 
 

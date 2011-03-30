@@ -68,8 +68,8 @@ struct sec_job_t
     sec_context_t *sec_context;         /*< SEC context this packet belongs to */
     struct sec_descriptor_t *descr;     /*< SEC descriptor sent to SEC engine(virtual address)*/
     dma_addr_t descr_phys_addr;         /*< SEC descriptor sent to SEC engine(physical address) */
-    sec_packet_t *in_packet;             /*< Input packet */
-    sec_packet_t *out_packet;            /*< Output packet */
+    const sec_packet_t *in_packet;      /*< Input packet */
+    const sec_packet_t *out_packet;     /*< Output packet */
     ua_context_handle_t ua_handle;      /*< UA handle for the context this packet belongs to */
 }__CACHELINE_ALIGNED;
 
