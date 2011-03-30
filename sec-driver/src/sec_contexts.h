@@ -49,10 +49,13 @@ extern "C"{
 #include "fsl_sec.h"
 #include "sec_atomic.h"
 #include "sec_utils.h"
+#include "sec_pdcp.h"
+#include "sec_hw_specific.h"
 
 /*==================================================================================================
                                        DEFINES AND MACROS
 ==================================================================================================*/
+
 
 /** Constants used to configure a thread-safe/unsafe pool. */
 #define THREAD_SAFE_POOL    THREAD_SAFE_LIST
@@ -78,6 +81,10 @@ extern "C"{
 /*==================================================================================================
                                  STRUCTURES AND OTHER TYPEDEFS
 ==================================================================================================*/
+/** Function type used to update a SEC descriptor according to 
+ * the processing operations that must be done on a packet. */
+typedef int (*sec_update_descriptor)(sec_job_t *job, sec_descriptor_t *descriptor);
+
 /** Status of a SEC context.
  * @note: Can have at most 4 values in the range 0...3!
  * If required to add more values, increase size of state bitfield from
@@ -88,9 +95,6 @@ typedef enum sec_context_usage_e
     SEC_CONTEXT_USED,        /*< SEC context is used and is located in the in-use list. */
     SEC_CONTEXT_RETIRING,    /*< SEC context is unused and is located in the retire list. */
 }sec_context_usage_t;
-
-struct sec_contexts_pool_s;
-struct sec_context_s;
 
 /** The declaration of a context pool. */
 typedef struct sec_contexts_pool_s
@@ -104,24 +108,13 @@ typedef struct sec_contexts_pool_s
 
 	/* Total number of contexts available in all three lists. */
 	uint32_t no_of_contexts;
-	struct sec_context_s *sec_contexts;
+	struct sec_context_t *sec_contexts;
 
 }sec_contexts_pool_t;
 
-/** Cryptographic information accessed and used by SEC engine for
- * a SEC context.
- * TODO: STUB structure, needs to be properly defined.
- */
-typedef struct sec_crypto_info_s
-{
-    uint32_t hfn;
-    uint32_t crypto_key;
-    uint32_t auth_key;
-
-}__CACHELINE_ALIGNED sec_crypto_info_t;
 
 /** The declaration of a SEC context structure. */
-typedef struct sec_context_s
+struct sec_context_t
 {
 	/** A node in the list which holds this sec context.
 	 * @note: For the whole list concept to work the list_node_t must be defined
@@ -170,13 +163,20 @@ typedef struct sec_context_s
      *  For SEC 4.4 being 1024 and for SEC 3.1 being 24.
      * */
 	atomic_t state_packets_no;
+
+    /** Crypto info received from UA.
+     * TODO: replace with union when other protocols besides PDCP will be supported!*/
+    sec_pdcp_context_info_t *pdcp_crypto_info;
     /** Cryptographic information that defines this SEC context.
-     * The data from this structure is DMA-accesible by SEC device. */
-    sec_crypto_info_t *crypto_info;
+     * The <keys> member from this structure is DMA-accesible by SEC device. */
+    sec_crypto_pdb_t crypto_desc_pdb;
+    /** Function used to update a crypto descriptor for a packet
+     * belonging to this context. Does not apply to authentication descriptor!
+     */
+    sec_update_descriptor update_crypto_descriptor;
     /** Validation pattern at end of structure. */
     uint32_t end_pattern;
-}__CACHELINE_ALIGNED sec_context_t;
-
+}__CACHELINE_ALIGNED;
 
 /*==================================================================================================
                                            CONSTANTS

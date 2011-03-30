@@ -38,6 +38,7 @@ extern "C" {
                                         INCLUDE FILES
 ==================================================================================================*/
 #include "sec_hw_specific.h"
+#include "sec_job_ring.h"
 #include "sec_utils.h"
 
 /*==================================================================================================
@@ -95,7 +96,7 @@ int hw_reset_job_ring(sec_job_ring_t *job_ring)
     // Set done writeback enable at job ring level.
     reg_val = SEC_REG_VAL_CCCR_LO_CDWE;
 
-#ifdef CONFIG_PHYS_64BIT
+#if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
     // Set 36-bit addressing if enabled
     reg_val |= SEC_REG_VAL_CCCR_LO_EAE; 
 #endif
@@ -158,7 +159,7 @@ void hw_enqueue_packet_on_job_ring(sec_job_ring_t *job_ring, dma_addr_t descript
     // Write higher 32 bits. Only relevant when Extended address
     // is enabled(36 bit physical addresses).
     // @note address must be big endian
-#if defined(__powerpc64__) || defined(CONFIG_PHYS_64BIT)
+#if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
     out_be32(job_ring->register_base_addr + SEC_REG_FFER(job_ring),
              PHYS_ADDR_HI(descriptor));
 #endif

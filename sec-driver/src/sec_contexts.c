@@ -73,8 +73,6 @@ extern "C" {
 /*==================================================================================================
                                      GLOBAL VARIABLES
 ==================================================================================================*/
-// TODO remove this and replace it with macro
-extern vtop_function sec_vtop;
 
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
@@ -193,6 +191,10 @@ static void free_in_use_context(sec_contexts_pool_t * pool, sec_context_t * ctx)
 	CONTEXT_SET_STATE(ctx->state_packets_no, SEC_CONTEXT_UNUSED);
 	ctx->notify_packet_cbk = NULL;
 	ctx->jr_handle = NULL;
+    ctx->pdcp_crypto_info = NULL;
+    ctx->update_crypto_descriptor = NULL;
+    memset(ctx->crypto_desc_pdb.keys, 0, sizeof(sec_keys_t));
+    memset(&ctx->crypto_desc_pdb, 0, sizeof(sec_crypto_pdb_t));
 
 	// add context to free list
 	pool->free_list.add_tail(&pool->free_list, &ctx->node);
@@ -290,7 +292,7 @@ sec_return_code_t init_contexts_pool(sec_contexts_pool_t * pool,
 
 	// Allocate memory for this pool from heap
 	// The pool is allocated at startup so this should not impact the runtime performance.
-	pool->sec_contexts = malloc(number_of_contexts * sizeof(sec_context_t));
+	pool->sec_contexts = malloc(number_of_contexts * sizeof(struct sec_context_t));
 	if (pool->sec_contexts == NULL)
 	{
 		// failed to allocate memory
@@ -304,7 +306,7 @@ sec_return_code_t init_contexts_pool(sec_contexts_pool_t * pool,
 		ctx = &pool->sec_contexts[i];
 
 		// initialize the sec_context with valid values
-		memset(ctx, 0, sizeof(sec_context_t));
+		memset(ctx, 0, sizeof(struct sec_context_t));
 		CONTEXT_SET_STATE(ctx->state_packets_no, SEC_CONTEXT_UNUSED);
 		ctx->pool = pool;
 
@@ -314,10 +316,11 @@ sec_return_code_t init_contexts_pool(sec_contexts_pool_t * pool,
 
         // For crypto information allocate DMA-capable memory 
         // from memory area configured by UA.
-        ctx->crypto_info = *dma_mem;
+        ctx->crypto_desc_pdb.keys = *dma_mem;
+        memset(ctx->crypto_desc_pdb.keys, 0, sizeof(sec_keys_t));
 
         // Increment address for available DMA memory area
-        *dma_mem += sizeof(sec_crypto_info_t);
+        *dma_mem += sizeof(sec_keys_t);
 
 
 		// Add the context to the free list

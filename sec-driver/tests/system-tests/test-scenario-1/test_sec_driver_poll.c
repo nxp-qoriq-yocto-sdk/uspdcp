@@ -51,6 +51,26 @@ extern "C" {
 /*==================================================================================================
                                      LOCAL CONSTANTS
 ==================================================================================================*/
+// Ciphering
+//#define PDCP_TEST_SNOW_F8_ENC
+// Deciphering
+//#define PDCP_TEST_SNOW_F8_DEC
+
+// Authentication
+//#define PDCP_TEST_SNOW_F9_ENC
+// Authentication
+//#define PDCP_TEST_SNOW_F9_DEC
+
+// Ciphering
+#define PDCP_TEST_AES_CTR_ENC
+// Deciphering
+//#define PDCP_TEST_AES_CTR_DEC
+
+// Authentication
+//#define PDCP_TEST_AES_CMAC_ENC
+// Authentication
+//#define PDCP_TEST_AES_CMAC_DEC
+
 
 // Number of SEC JRs used by this test application
 // @note: Currently this test application supports only 2 JRs (not less, not more)
@@ -72,7 +92,9 @@ extern "C" {
 // The maximum number of packets processed per context
 // This test application will process a random number of packets per context ranging
 // from a minimum to a maximum value.
-#define MAX_PACKET_NUMBER_PER_CTX   10
+//#define MAX_PACKET_NUMBER_PER_CTX   10
+//TODO: increase back number of packets per context
+#define MAX_PACKET_NUMBER_PER_CTX   1
 #define MIN_PACKET_NUMBER_PER_CTX   1
 
 #ifdef SEC_HW_VERSION_4_4
@@ -85,6 +107,9 @@ extern "C" {
 #define JOB_RING_POLL_UNLIMITED -1
 #define JOB_RING_POLL_LIMIT      5
 
+// Alignment for input/output packets allocated from DMA-memory zone
+#define BUFFER_ALIGNEMENT 32
+#define BUFFER_SIZE       128
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
 ==================================================================================================*/
@@ -128,10 +153,8 @@ typedef struct pdcp_context_s
 
     // Pool of input and output buffers used for processing the
     // packets associated to this context. (used an array for simplicity)
-
-// TODO: allocate buffers from DMA-mem pool
-//    buffer_t input_buffers[MAX_PACKET_NUMBER_PER_CTX];
-//    buffer_t output_buffers[MAX_PACKET_NUMBER_PER_CTX];
+    buffer_t *input_buffers;
+    buffer_t *output_buffers;
     int no_of_used_buffers; // index incremented by Producer Thread
     int no_of_buffers_processed; // index increment by Consumer Thread
     int no_of_buffers_to_process; // configurable random number of packets to be processed per context
@@ -302,6 +325,104 @@ static int no_of_used_pdcp_dl_contexts = 0;
 static thread_config_t th_config[THREADS_NUMBER];
 static pthread_t threads[THREADS_NUMBER];
 
+#ifdef PDCP_TEST_SNOW_F8_ENC
+
+#define PDCP_HEADER_LENGTH 2
+static uint8_t snow_f8_enc_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
+                                    0x4E,0xA5,0xF1,0x45,0x10,0x10,0xD8,0x52};
+// PDCP header
+static uint8_t snow_f8_enc_pdcp_hdr[] = {0x8B, 0x26};
+
+// PDCP payload not encrypted
+static uint8_t snow_f8_enc_data_in[] = {0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,
+                                        0x57,0xA4,0x9D,0x42,0x14,0x07,0xE8};
+
+// PDCP payload encrypted
+static uint8_t snow_f8_enc_data_out[] = {0xBA,0x0F,0x31,0x30,0x03,0x34,0xC5,0x6B, // PDCP payload encrypted
+                                         0x52,0xA7,0x49,0x7C,0xBA,0xC0,0x46};
+
+// Radio bearer id
+static uint8_t snow_f8_enc_bearer = 0x3;
+
+// Start HFN
+static uint32_t snow_f8_enc_hfn = 0xFA556;
+#endif
+
+#ifdef PDCP_TEST_SNOW_F8_DEC
+
+#define PDCP_HEADER_LENGTH 2
+static uint8_t snow_f8_dec_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
+                                    0x4E,0xA5,0xF1,0x45,0x10,0x10,0xD8,0x52};
+// PDCP header
+static uint8_t snow_f8_dec_pdcp_hdr[] = {0x8B, 0x26};
+
+// PDCP payload not encrypted
+static uint8_t snow_f8_dec_data_out[] = {0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,
+                                         0x57,0xA4,0x9D,0x42,0x14,0x07,0xE8};
+
+// PDCP payload encrypted
+static uint8_t snow_f8_dec_data_in[] = { 0xBA,0x0F,0x31,0x30,0x03,0x34,0xC5,0x6B, // PDCP payload encrypted
+                                         0x52,0xA7,0x49,0x7C,0xBA,0xC0,0x46};
+// Radio bearer id
+static uint8_t snow_f8_dec_bearer = 0x3;
+
+// Start HFN
+static uint32_t snow_f8_dec_hfn = 0xFA556;
+#endif
+
+#ifdef PDCP_TEST_AES_CTR_ENC
+#define PDCP_HEADER_LENGTH 2
+static uint8_t aes_ctr_enc_key[] = {0xd3, 0xc5, 0xd5, 0x92, 0x32, 0x7f, 0xb1, 0x1c,
+                                    0x40, 0x35, 0xc6, 0x68, 0x0a, 0xf8, 0xc6, 0xd1};
+
+// PDCP header
+static uint8_t aes_ctr_enc_pdcp_hdr[] = {0x89, 0xB4};
+
+// PDCP payload not encrypted
+static uint8_t aes_ctr_enc_data_in[] = {0x98, 0x1b, 0xa6, 0x82, 0x4c, 0x1b, 0xfb, 0x1a,
+                                        0xb4, 0x85, 0x47, 0x20, 0x29, 0xb7, 0x1d, 0x80,
+                                        0x8c, 0xe3, 0x3e, 0x2c, 0xc3, 0xc0, 0xb5, 0xfc,
+                                        0x1f, 0x3d, 0xe8, 0xa6, 0xdc, 0x66, 0xb1, 0xf0};
+
+
+// PDCP payload encrypted
+static uint8_t aes_ctr_enc_data_out[] = {0xe9, 0xfe, 0xd8, 0xa6, 0x3d, 0x15, 0x53, 0x04,
+                                         0xd7, 0x1d, 0xf2, 0x0b, 0xf3, 0xe8, 0x22, 0x14,
+                                         0xb2, 0x0e, 0xd7, 0xda, 0xd2, 0xf2, 0x33, 0xdc,
+                                         0x3c, 0x22, 0xd7, 0xbd, 0xee, 0xed, 0x8e, 0x78};
+// Radio bearer id
+static uint8_t aes_ctr_enc_bearer = 0x15;
+// Start HFN
+static uint32_t aes_ctr_enc_hfn = 0x398A5;
+
+#endif
+
+#ifdef PDCP_TEST_AES_CTR_DEC
+#define PDCP_HEADER_LENGTH 2
+static uint8_t aes_ctr_dec_key[] = {0xd3, 0xc5, 0xd5, 0x92, 0x32, 0x7f, 0xb1, 0x1c,
+                                    0x40, 0x35, 0xc6, 0x68, 0x0a, 0xf8, 0xc6, 0xd1};
+
+// PDCP header
+static uint8_t aes_ctr_dec_pdcp_hdr[] = {0x89, 0xB4};
+
+// PDCP payload encrypted
+static uint8_t aes_ctr_dec_data_in[] = {0xe9, 0xfe, 0xd8, 0xa6, 0x3d, 0x15, 0x53, 0x04,
+                                        0xd7, 0x1d, 0xf2, 0x0b, 0xf3, 0xe8, 0x22, 0x14,
+                                        0xb2, 0x0e, 0xd7, 0xda, 0xd2, 0xf2, 0x33, 0xdc,
+                                        0x3c, 0x22, 0xd7, 0xbd, 0xee, 0xed, 0x8e, 0x78};
+
+
+// PDCP payload not encrypted
+static uint8_t aes_ctr_dec_data_out[] = {0x98, 0x1b, 0xa6, 0x82, 0x4c, 0x1b, 0xfb, 0x1a,
+                                         0xb4, 0x85, 0x47, 0x20, 0x29, 0xb7, 0x1d, 0x80,
+                                         0x8c, 0xe3, 0x3e, 0x2c, 0xc3, 0xc0, 0xb5, 0xfc,
+                                         0x1f, 0x3d, 0xe8, 0xa6, 0xdc, 0x66, 0xb1, 0xf0};
+// Radio bearer id
+static uint8_t aes_ctr_dec_bearer = 0x15;
+// Start HFN
+static uint32_t aes_ctr_dec_hfn = 0x398A5;
+
+#endif
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
@@ -341,6 +462,7 @@ static int get_free_pdcp_context(pdcp_context_t * pdcp_contexts,
     // The random number will range between MIN_PACKET_NUMBER_PER_CTX and MAX_PACKET_NUMBER_PER_CTX
     pdcp_contexts[i].no_of_buffers_to_process =
             MIN_PACKET_NUMBER_PER_CTX + rand() % (MAX_PACKET_NUMBER_PER_CTX - MIN_PACKET_NUMBER_PER_CTX + 1);
+
     assert(pdcp_contexts[i].no_of_buffers_to_process >= MIN_PACKET_NUMBER_PER_CTX &&
            pdcp_contexts[i].no_of_buffers_to_process <= MAX_PACKET_NUMBER_PER_CTX);
 
@@ -391,17 +513,17 @@ static int release_pdcp_buffers(pdcp_context_t * pdcp_context,
     // Validate the order of the buffers release
     // The order in which the buffers are relased must be the same with the order
     // in which the buffers were submitted to SEC driver for processing.
-//    assert((dma_addr_t)&pdcp_context->input_buffers[pdcp_context->no_of_buffers_processed].buffer[0] ==
+//    assert(&pdcp_context->input_buffers[pdcp_context->no_of_buffers_processed].buffer[0] ==
 //            in_packet->address);
-//    assert(pdcp_context->input_buffers[pdcp_context->no_of_buffers_processed].offset ==
-//                in_packet->offset);
-    assert(PDCP_BUFFER_SIZE == in_packet->length);
+    assert(pdcp_context->input_buffers[pdcp_context->no_of_buffers_processed].offset ==
+                in_packet->offset);
+//    assert(PDCP_BUFFER_SIZE == in_packet->length);
 
-//    assert((dma_addr_t)&pdcp_context->output_buffers[pdcp_context->no_of_buffers_processed].buffer[0] ==
+//    assert(&pdcp_context->output_buffers[pdcp_context->no_of_buffers_processed].buffer[0] ==
 //            out_packet->address);
-//    assert(pdcp_context->output_buffers[pdcp_context->no_of_buffers_processed].offset ==
-//                    out_packet->offset);
-    assert(PDCP_BUFFER_SIZE == out_packet->length);
+    assert(pdcp_context->output_buffers[pdcp_context->no_of_buffers_processed].offset ==
+                    out_packet->offset);
+//    assert(PDCP_BUFFER_SIZE == out_packet->length);
 
     // mark the input buffer free
     assert(pdcp_context->input_buffers[pdcp_context->no_of_buffers_processed].usage == PDCP_BUFFER_USED);
@@ -462,20 +584,61 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
     }
 
     assert(pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].usage == PDCP_BUFFER_FREE);
+
     pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].usage = PDCP_BUFFER_USED;
-    in_packet->address = (packet_addr_t)&pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].buffer[0];
-//    in_packet->offset = pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].offset;
-    in_packet->offset = 15;
-    in_packet->length = PDCP_BUFFER_SIZE;
+    in_packet->address = &(pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].buffer[0]);
+    in_packet->offset = pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].offset;
     in_packet->scatter_gather = SEC_CONTIGUOUS_BUFFER;
 
     assert(pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].usage == PDCP_BUFFER_FREE);
     pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].usage = PDCP_BUFFER_USED;
-    out_packet->address = (packet_addr_t)&pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].buffer[0];
+    out_packet->address = &(pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].buffer[0]);
     out_packet->offset = pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].offset;
-    out_packet->length = PDCP_BUFFER_SIZE;
     out_packet->scatter_gather = SEC_CONTIGUOUS_BUFFER;
 
+#ifdef PDCP_TEST_SNOW_F8_ENC
+    // copy PDCP header
+    memcpy(in_packet->address + in_packet->offset, snow_f8_enc_pdcp_hdr, sizeof(snow_f8_enc_pdcp_hdr));
+    // copy input data
+    memcpy(in_packet->address + in_packet->offset + PDCP_HEADER_LENGTH,
+           snow_f8_enc_data_in,
+           sizeof(snow_f8_enc_data_in));
+    in_packet->length = sizeof(snow_f8_enc_data_in) + PDCP_HEADER_LENGTH + in_packet->offset;
+    out_packet->length = sizeof(snow_f8_enc_data_in) + PDCP_HEADER_LENGTH + out_packet->offset;
+#endif
+
+#ifdef PDCP_TEST_SNOW_F8_DEC
+    // copy PDCP header
+    memcpy(in_packet->address + in_packet->offset, snow_f8_dec_pdcp_hdr, sizeof(snow_f8_dec_pdcp_hdr));
+    // copy input data
+    memcpy(in_packet->address + in_packet->offset + PDCP_HEADER_LENGTH,
+           snow_f8_dec_data_in,
+           sizeof(snow_f8_dec_data_in));
+    in_packet->length = sizeof(snow_f8_dec_data_in) + PDCP_HEADER_LENGTH + in_packet->offset;
+    out_packet->length = sizeof(snow_f8_dec_data_in) + PDCP_HEADER_LENGTH + out_packet->offset;
+#endif
+
+#ifdef PDCP_TEST_AES_CTR_ENC
+    // copy PDCP header
+    memcpy(in_packet->address + in_packet->offset, aes_ctr_enc_pdcp_hdr, sizeof(aes_ctr_enc_pdcp_hdr));
+    // copy input data
+    memcpy(in_packet->address + in_packet->offset + PDCP_HEADER_LENGTH,
+           aes_ctr_enc_data_in,
+           sizeof(aes_ctr_enc_data_in));
+    in_packet->length = sizeof(aes_ctr_enc_data_in) + PDCP_HEADER_LENGTH + in_packet->offset;
+    out_packet->length = sizeof(aes_ctr_enc_data_in) + PDCP_HEADER_LENGTH + out_packet->offset;
+#endif
+
+#ifdef PDCP_TEST_AES_CTR_DEC
+    // copy PDCP header
+    memcpy(in_packet->address + in_packet->offset, aes_ctr_dec_pdcp_hdr, sizeof(aes_ctr_dec_pdcp_hdr));
+    // copy input data
+    memcpy(in_packet->address + in_packet->offset + PDCP_HEADER_LENGTH,
+           aes_ctr_dec_data_in,
+           sizeof(aes_ctr_dec_data_in));
+    in_packet->length = sizeof(aes_ctr_dec_data_in) + PDCP_HEADER_LENGTH + in_packet->offset;
+    out_packet->length = sizeof(aes_ctr_dec_data_in) + PDCP_HEADER_LENGTH + out_packet->offset;
+#endif
     pdcp_context->no_of_used_buffers++;
 
     return 0;
@@ -489,6 +652,7 @@ static int pdcp_ready_packet_handler (sec_packet_t *in_packet,
 {
     int ret;
     pdcp_context_t *pdcp_context = NULL;
+    int test_failed = 0;
 
     // validate input params
     assert(ua_ctx_handle != NULL);
@@ -500,16 +664,86 @@ static int pdcp_ready_packet_handler (sec_packet_t *in_packet,
 
     pdcp_context = (pdcp_context_t *)ua_ctx_handle;
 
-    printf("thread #%d:consumer: sec_callback called for context_id = %d, "
-//            "context usage = %d, no of buffers processed = %d, no of buffers to process = %d, "
-            "status = %d || in buf.offset = %d\n",
+    printf("\nthread #%d:consumer: sec_callback called for context_id = %d, "
+            "no of buffers processed = %d, no of buffers to process = %d, "
+            "status = %d\n",
             (pdcp_context->thread_id + 1)%2,
             pdcp_context->id,
-  //          pdcp_context->usage,
-  //          pdcp_context->no_of_buffers_processed + 1,
-  //          pdcp_context->no_of_buffers_to_process,
-            status,
-            in_packet->offset);
+            pdcp_context->no_of_buffers_processed + 1,
+            pdcp_context->no_of_buffers_to_process,
+            status);
+
+
+#ifdef PDCP_TEST_SNOW_F8_ENC
+    assert(out_packet->length == sizeof(snow_f8_enc_data_out) + PDCP_HEADER_LENGTH);
+    assert(in_packet->length == sizeof(snow_f8_enc_data_in) + PDCP_HEADER_LENGTH);
+    test_failed = (0 != memcmp(out_packet->address + out_packet->offset,
+                               snow_f8_enc_pdcp_hdr,
+                               PDCP_HEADER_LENGTH) ||
+                   0 != memcmp(out_packet->address + out_packet->offset + PDCP_HEADER_LENGTH,
+                               snow_f8_enc_data_out,
+                               sizeof(snow_f8_enc_data_out)));
+#endif
+
+#ifdef PDCP_TEST_SNOW_F8_DEC
+    assert(out_packet->length == sizeof(snow_f8_dec_data_out) + PDCP_HEADER_LENGTH);
+    assert(in_packet->length == sizeof(snow_f8_dec_data_in) + PDCP_HEADER_LENGTH);
+    test_failed = (0 != memcmp(out_packet->address + out_packet->offset,
+                               snow_f8_dec_pdcp_hdr,
+                               PDCP_HEADER_LENGTH) ||
+                   0 != memcmp(out_packet->address + out_packet->offset + PDCP_HEADER_LENGTH,
+                               snow_f8_dec_data_out,
+                               sizeof(snow_f8_dec_data_out)));
+#endif
+
+#ifdef PDCP_TEST_AES_CTR_ENC
+    assert(out_packet->length == sizeof(aes_ctr_enc_data_out) + PDCP_HEADER_LENGTH);
+    assert(in_packet->length == sizeof(aes_ctr_enc_data_in) + PDCP_HEADER_LENGTH);
+    test_failed = (0 != memcmp(out_packet->address + out_packet->offset,
+                               aes_ctr_enc_pdcp_hdr,
+                               PDCP_HEADER_LENGTH) ||
+                   0 != memcmp(out_packet->address + out_packet->offset + PDCP_HEADER_LENGTH,
+                               aes_ctr_enc_data_out,
+                               sizeof(aes_ctr_enc_data_out)));
+#endif
+#ifdef PDCP_TEST_AES_CTR_DEC
+    assert(out_packet->length == sizeof(aes_ctr_dec_data_out) + PDCP_HEADER_LENGTH);
+    assert(in_packet->length == sizeof(aes_ctr_dec_data_in) + PDCP_HEADER_LENGTH);
+    test_failed = (0 != memcmp(out_packet->address + out_packet->offset,
+                               aes_ctr_dec_pdcp_hdr,
+                               PDCP_HEADER_LENGTH) ||
+                   0 != memcmp(out_packet->address + out_packet->offset + PDCP_HEADER_LENGTH,
+                               aes_ctr_dec_data_out,
+                               sizeof(aes_ctr_dec_data_out)));
+#endif
+    // TODO: remove this
+    if(test_failed)
+    {
+        printf("\nthread #%d:consumer: out packet INCORRECT!!!."
+               " out pkt= ",
+               (pdcp_context->thread_id + 1)%2);
+        int i;
+        for(i = 0; i <  out_packet->length; i++)
+        {
+            printf("%02x ", out_packet->address[i]);
+        }
+        printf("\n");
+        /*
+           printf("\nreference data: ");
+
+           for(i = 0; i <  job->out_packet->length; i++)
+           {
+           printf("%02x ", snow_f8_enc_data_out[i]);
+           }
+           printf("\n");
+           */
+        assert(0);
+
+    }
+    else
+    {
+        //printf("\nthread #%d:consumer: packet CORRECT!!! out pkt = . ", (pdcp_context->thread_id + 1)%2);
+    }
 
     // Buffers processing.
     // In this test application we will release the input and output buffers
@@ -748,6 +982,50 @@ static void* pdcp_thread_routine(void* config)
 
         printf("thread #%d:producer: create pdcp context %d\n", th_config_local->tid, pdcp_context->id);
         pdcp_context->pdcp_ctx_cfg_data.notify_packet = &pdcp_ready_packet_handler;
+#ifdef PDCP_TEST_SNOW_F8_ENC
+        pdcp_context->pdcp_ctx_cfg_data.sn_size = SEC_PDCP_SN_SIZE_12;
+        pdcp_context->pdcp_ctx_cfg_data.bearer = snow_f8_enc_bearer;
+        pdcp_context->pdcp_ctx_cfg_data.user_plane = PDCP_DATA_PLANE;
+        pdcp_context->pdcp_ctx_cfg_data.packet_direction = PDCP_DOWNLINK;
+        pdcp_context->pdcp_ctx_cfg_data.algorithm = SEC_ALG_SNOW;
+        pdcp_context->pdcp_ctx_cfg_data.hfn = snow_f8_enc_hfn;
+        pdcp_context->pdcp_ctx_cfg_data.cipher_key = snow_f8_enc_key;
+        pdcp_context->pdcp_ctx_cfg_data.cipher_key_len = sizeof(snow_f8_enc_key);
+#endif
+
+#ifdef PDCP_TEST_SNOW_F8_DEC
+        pdcp_context->pdcp_ctx_cfg_data.sn_size = SEC_PDCP_SN_SIZE_12;
+        pdcp_context->pdcp_ctx_cfg_data.bearer = snow_f8_dec_bearer;
+        pdcp_context->pdcp_ctx_cfg_data.user_plane = PDCP_DATA_PLANE;
+        pdcp_context->pdcp_ctx_cfg_data.packet_direction = PDCP_UPLINK;
+        pdcp_context->pdcp_ctx_cfg_data.algorithm = SEC_ALG_SNOW;
+        pdcp_context->pdcp_ctx_cfg_data.hfn = snow_f8_dec_hfn;
+        pdcp_context->pdcp_ctx_cfg_data.cipher_key = snow_f8_dec_key;
+        pdcp_context->pdcp_ctx_cfg_data.cipher_key_len = sizeof(snow_f8_dec_key);
+#endif
+
+#ifdef PDCP_TEST_AES_CTR_ENC
+        pdcp_context->pdcp_ctx_cfg_data.sn_size = SEC_PDCP_SN_SIZE_12;
+        pdcp_context->pdcp_ctx_cfg_data.bearer = aes_ctr_enc_bearer;
+        pdcp_context->pdcp_ctx_cfg_data.user_plane = PDCP_DATA_PLANE;
+        pdcp_context->pdcp_ctx_cfg_data.packet_direction = PDCP_DOWNLINK;
+        pdcp_context->pdcp_ctx_cfg_data.algorithm = SEC_ALG_AES;
+        pdcp_context->pdcp_ctx_cfg_data.hfn = aes_ctr_enc_hfn;
+        pdcp_context->pdcp_ctx_cfg_data.cipher_key = aes_ctr_enc_key;
+        pdcp_context->pdcp_ctx_cfg_data.cipher_key_len = sizeof(aes_ctr_enc_key);
+#endif
+#ifdef PDCP_TEST_AES_CTR_DEC
+        pdcp_context->pdcp_ctx_cfg_data.sn_size = SEC_PDCP_SN_SIZE_12;
+        pdcp_context->pdcp_ctx_cfg_data.bearer = aes_ctr_dec_bearer;
+        pdcp_context->pdcp_ctx_cfg_data.user_plane = PDCP_DATA_PLANE;
+        pdcp_context->pdcp_ctx_cfg_data.packet_direction = PDCP_UPLINK;
+        pdcp_context->pdcp_ctx_cfg_data.algorithm = SEC_ALG_AES;
+        pdcp_context->pdcp_ctx_cfg_data.hfn = aes_ctr_dec_hfn;
+        pdcp_context->pdcp_ctx_cfg_data.cipher_key = aes_ctr_dec_key;
+        pdcp_context->pdcp_ctx_cfg_data.cipher_key_len = sizeof(aes_ctr_dec_key);
+#endif
+        // TODO: set auth key for control plane SNOW/AES;
+
         pdcp_context->thread_id = th_config_local->tid;
 
         // create a SEC context in SEC driver
@@ -770,8 +1048,6 @@ static void* pdcp_thread_routine(void* config)
 
         while (get_free_pdcp_buffer(pdcp_context, &in_packet, &out_packet) == 0)
         {
-//            in_packet.offset = total_no_of_contexts_created;
-
             // if SEC process packet returns that the producer JR is full, do some polling
             // on the consumer JR until the producer JR has free entries.
             while (sec_process_packet(pdcp_context->sec_ctx,
@@ -861,15 +1137,6 @@ static int setup_sec_environment(void)
 
     memset (pdcp_dl_contexts, 0, sizeof(pdcp_context_t) * MAX_PDCP_CONTEXT_NUMBER);
     memset (pdcp_ul_contexts, 0, sizeof(pdcp_context_t) * MAX_PDCP_CONTEXT_NUMBER);
-    for (i = 0; i < MAX_PDCP_CONTEXT_NUMBER; i++)
-    {
-        pdcp_dl_contexts[i].id = i;
-        pdcp_ul_contexts[i].id = i + MAX_PDCP_CONTEXT_NUMBER;
-    }
-
-    //////////////////////////////////////////////////////////////////////////////
-    // 1. Initialize SEC user space driver requesting #JOB_RING_NUMBER Job Rings
-    //////////////////////////////////////////////////////////////////////////////
 
     // map the physical memory
     ret = dma_mem_setup();
@@ -880,6 +1147,44 @@ static int setup_sec_environment(void)
     }
 	printf("dma_mem_setup: mapped virtual mem 0x%x to physical mem 0x%x\n", __dma_virt, DMA_MEM_PHYS);
 
+    for (i = 0; i < MAX_PDCP_CONTEXT_NUMBER; i++)
+    {
+        pdcp_dl_contexts[i].id = i;
+        // allocate input buffers from memory zone DMA-accessible to SEC engine
+        pdcp_dl_contexts[i].input_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT,
+                                                             sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
+        // allocate output buffers from memory zone DMA-accessible to SEC engine
+        pdcp_dl_contexts[i].output_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT,
+                                                              sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
+        // validate that the address of the freshly allocated buffer falls in the second memory are.
+        assert (pdcp_dl_contexts[i].input_buffers != NULL);
+        assert (pdcp_dl_contexts[i].output_buffers != NULL);
+        assert((dma_addr_t)pdcp_dl_contexts[i].input_buffers >= DMA_MEM_SEC_DRIVER);
+        assert((dma_addr_t)pdcp_dl_contexts[i].output_buffers >= DMA_MEM_SEC_DRIVER);
+
+        memset(pdcp_dl_contexts[i].input_buffers, 0, sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
+        memset(pdcp_dl_contexts[i].output_buffers, 0, sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
+
+        pdcp_ul_contexts[i].id = i + MAX_PDCP_CONTEXT_NUMBER;
+        // allocate input buffers from memory zone DMA-accessible to SEC engine
+        pdcp_ul_contexts[i].input_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT,
+                                                             sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
+        // validate that the address of the freshly allocated buffer falls in the second memory are.
+        pdcp_ul_contexts[i].output_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT, 
+                                                              sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
+        // validate that the address of the freshly allocated buffer falls in the second memory are.
+        assert (pdcp_ul_contexts[i].input_buffers != NULL);
+        assert (pdcp_ul_contexts[i].output_buffers != NULL);
+        assert((dma_addr_t)pdcp_ul_contexts[i].input_buffers >= DMA_MEM_SEC_DRIVER);
+        assert((dma_addr_t)pdcp_ul_contexts[i].output_buffers >= DMA_MEM_SEC_DRIVER);
+
+        memset(pdcp_ul_contexts[i].input_buffers, 0, sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
+        memset(pdcp_ul_contexts[i].output_buffers, 0, sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
+    }
+
+    //////////////////////////////////////////////////////////////////////////////
+    // 1. Initialize SEC user space driver requesting #JOB_RING_NUMBER Job Rings
+    //////////////////////////////////////////////////////////////////////////////
 
     sec_config_data.memory_area = (void*)__dma_virt;
     assert(sec_config_data.memory_area != NULL);
@@ -912,7 +1217,7 @@ static int setup_sec_environment(void)
 
 static int cleanup_sec_environment(void)
 {
-    int ret = 0;
+    int ret = 0, i;
 
     // release SEC driver
     ret = sec_release();
@@ -923,6 +1228,16 @@ static int cleanup_sec_environment(void)
     }
     printf("thread main: released SEC user space driver\n");
 
+    for (i = 0; i < MAX_PDCP_CONTEXT_NUMBER; i++)
+    {
+        dma_mem_free(pdcp_dl_contexts[i].input_buffers,  BUFFER_SIZE * MAX_PACKET_NUMBER_PER_CTX);
+        dma_mem_free(pdcp_dl_contexts[i].output_buffers,  BUFFER_SIZE * MAX_PACKET_NUMBER_PER_CTX);
+
+        dma_mem_free(pdcp_ul_contexts[i].input_buffers,  BUFFER_SIZE * MAX_PACKET_NUMBER_PER_CTX);
+        dma_mem_free(pdcp_ul_contexts[i].output_buffers,  BUFFER_SIZE * MAX_PACKET_NUMBER_PER_CTX);
+
+
+    }
 	// unmap the physical memory
 	ret = dma_mem_release();
 	if (ret != 0)

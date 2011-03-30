@@ -37,8 +37,6 @@
                                 INCLUDE FILES
 ==============================================================================*/
 #include "fsl_sec.h"
-#include "sec_contexts.h"
-#include "sec_job_ring.h"
 
 /*==============================================================================
                               DEFINES AND MACROS
@@ -51,6 +49,12 @@
 /*==============================================================================
                          STRUCTURES AND OTHER TYPEDEFS
 ==============================================================================*/
+/** Forward structure declaration */
+typedef struct sec_job_t sec_job_t;
+/** Forward structure declaration */
+typedef struct sec_descriptor_t sec_descriptor_t;
+/** Forward structure declaration */
+typedef struct sec_context_t sec_context_t;
 
 /*==============================================================================
                                  CONSTANTS
@@ -65,26 +69,29 @@
 ==============================================================================*/
 
 /** @brief Updates a SEC context with PDCP specific cryptographic data
+ * for a certain SEC context.
  *
  * @param [in,out] ctx          SEC context
- * @param [in]     crypto_info  PDCP crypto info
+ * @param [in]     crypto_pdb   PDCP crypto descriptor and PDB
  *
  * @retval SEC_SUCCESS for success
  * @retval other for error
  */
 int sec_pdcp_context_set_crypto_info(sec_context_t *ctx,
-                                     sec_pdcp_context_info_t *crypto_info);
+                                     sec_pdcp_context_info_t *crypto_pdb);
 
-/** @brief Updates a SEC descriptor with pointers to input packet,
- * output packet and crypto information.
+/** @brief Updates a SEC descriptor for each packet with pointers to
+ * input packet, output packet and crypto information.
  *
- * @param [in]      job          The job structure
- * @param [in,out]  descriptor   SEC descriptor
+ * @param [in]     ctx          SEC context
+ * @param [in,out] job          The job structure
+ * @param [in,out] descriptor   SEC descriptor
  *
  * @retval SEC_SUCCESS for success
  * @retval other for error
  */
-int sec_pdcp_context_create_descriptor(sec_job_t *job,
+int sec_pdcp_context_update_descriptor(sec_context_t *ctx,
+                                       sec_job_t *job,
                                        sec_descriptor_t *descriptor);
 /*============================================================================*/
 

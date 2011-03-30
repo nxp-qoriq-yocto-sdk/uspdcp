@@ -42,7 +42,7 @@
 
 #ifdef LOCAL_DMA_ADDR_TYPE
 
-#if defined(__powerpc64__) || defined(CONFIG_PHYS_64BIT)
+#if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
 /** Physical address on 36 bits or more. MUST be kept in synch with same define from kernel! */
 typedef uint64_t dma_addr_t;
 #else

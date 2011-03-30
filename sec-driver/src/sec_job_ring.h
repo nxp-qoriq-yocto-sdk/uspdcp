@@ -38,6 +38,7 @@
 ==============================================================================*/
 #include "fsl_sec.h"
 #include "sec_contexts.h"
+#include "sec_hw_specific.h"
 
 /*==============================================================================
                               DEFINES AND MACROS
@@ -46,6 +47,8 @@
 /** Update circular counter */
 #define SEC_CIRCULAR_COUNTER(x, max)   ((x) + 1) * ((x) != (max - 1))
 
+/** Update circular counter when maximum value of counter is a power of 2.
+ * Use bitwise operations to roll over. */
 #define SEC_CIRCULAR_COUNTER_POW_2(x, max)   (((x) + 1) & (max - 1))
 
 /** The number of jobs in a JOB RING */
@@ -58,52 +61,33 @@
 /*==============================================================================
                          STRUCTURES AND OTHER TYPEDEFS
 ==============================================================================*/
-/** Job descriptor pointer entry */
-struct sec_ptr {
-    uint16_t len;       /*< length */
-    uint8_t j_extent;   /*< jump to sg link table and/or extent */
-    uint8_t eptr;       /*< extended address */
-    uint32_t ptr;       /*< address */
-};
-
-
-/** A descriptor that instructs SEC engine how to process a packet.
- * On SEC 3.1 a descriptor consists of 8 double-words: 
- * one header dword and seven pointer dwords. */
-typedef struct sec_descriptor_s
-{
-    uint32_t hdr;               /*< header high bits */
-    uint32_t hdr_lo;            /*< header low bits */
-    struct sec_ptr ptr[7];      /*< ptr/len pair array */
-
-} __CACHELINE_ALIGNED sec_descriptor_t;
 
 /** SEC job */
-typedef struct sec_job_s
+struct sec_job_t
 {
     sec_context_t *sec_context;         /*< SEC context this packet belongs to */
-    sec_descriptor_t *descr;            /*< SEC descriptor sent to SEC engine(virtual address)*/
+    struct sec_descriptor_t *descr;     /*< SEC descriptor sent to SEC engine(virtual address)*/
     dma_addr_t descr_phys_addr;         /*< SEC descriptor sent to SEC engine(physical address) */
     sec_packet_t *in_packet;             /*< Input packet */
     sec_packet_t *out_packet;            /*< Output packet */
     ua_context_handle_t ua_handle;      /*< UA handle for the context this packet belongs to */
-}__CACHELINE_ALIGNED sec_job_t;
+}__CACHELINE_ALIGNED;
 
 
 /** SEC Job Ring */
-typedef struct sec_job_ring_s
+struct sec_job_ring_t
 {
     uint32_t cidx;                      /*< Consumer index for job ring (jobs array).
                                             @note: cidx and pidx are accessed from different threads.
-                                                   Place the cidx and pidx inside the structure so that
-                                                   they lay on different cachelines, to avoid false 
-                                                   sharing between threads when the threads run on different cores! */
-    sec_job_t jobs[SEC_JOB_RING_SIZE];  /*< Ring of jobs. The same ring is used for
-                                            input jobs and output jobs because SEC engine writes 
-                                            back output indication in input job.
-                                            Size of array is power of 2 to allow fast update of
-                                            producer/consumer indexes with bitwise operations. */
-    sec_descriptor_t *descriptors;      /*< Ring of descriptors sent to SEC engine for processing */
+                                            Place the cidx and pidx inside the structure so that
+                                            they lay on different cachelines, to avoid false 
+                                            sharing between threads when the threads run on different cores! */
+    struct sec_job_t jobs[SEC_JOB_RING_SIZE];  /*< Ring of jobs. The same ring is used for
+                                                   input jobs and output jobs because SEC engine writes 
+                                                   back output indication in input job.
+                                                   Size of array is power of 2 to allow fast update of
+                                                   producer/consumer indexes with bitwise operations. */
+    struct sec_descriptor_t *descriptors;      /*< Ring of descriptors sent to SEC engine for processing */
 
     uint32_t pidx;                      /*< Producer index for job ring (jobs array) */
     uint32_t uio_fd;                    /*< The file descriptor used for polling from user space
@@ -117,7 +101,7 @@ typedef struct sec_job_ring_s
                                             @note On SEC 3.1 all channels share the same register address space,
                                                   so this member will have the exact same value for all og them. */
 	sec_contexts_pool_t ctx_pool;       /*< Pool of SEC contexts */
-}__CACHELINE_ALIGNED sec_job_ring_t;
+}__CACHELINE_ALIGNED;
 /*==============================================================================
                                  CONSTANTS
 ==============================================================================*/
@@ -127,7 +111,7 @@ typedef struct sec_job_ring_s
                          GLOBAL VARIABLE DECLARATIONS
 ==============================================================================*/
 /* Job rings used for communication with SEC HW */
-extern sec_job_ring_t g_job_rings[MAX_SEC_JOB_RINGS];
+extern struct sec_job_ring_t g_job_rings[MAX_SEC_JOB_RINGS];
 
 
 /*==============================================================================
@@ -144,7 +128,7 @@ extern sec_job_ring_t g_job_rings[MAX_SEC_JOB_RINGS];
  * @retval  other for error
  *
  */
-int init_job_ring(sec_job_ring_t *job_ring, void **dma_mem, int startup_work_mode);
+int init_job_ring(struct sec_job_ring_t *job_ring, void **dma_mem, int startup_work_mode);
 
 /** @brief Release the software and hardware resources tied to a job ring.
  * @param [in] job_ring The job ring
@@ -152,7 +136,7 @@ int init_job_ring(sec_job_ring_t *job_ring, void **dma_mem, int startup_work_mod
  * @retval  SEC_SUCCESS for success
  * @retval  other for error
  */
-int shutdown_job_ring(sec_job_ring_t *job_ring);
+int shutdown_job_ring(struct sec_job_ring_t *job_ring);
 
 /*============================================================================*/
 

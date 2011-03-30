@@ -122,7 +122,8 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
     ASSERT(job_ring->descriptors == NULL);
 
     job_ring->descriptors = *dma_mem;
-    *dma_mem += SEC_JOB_RING_SIZE * sizeof(sec_descriptor_t);
+    memset(job_ring->descriptors, 0, SEC_JOB_RING_SIZE * sizeof(struct sec_descriptor_t));
+    *dma_mem += SEC_JOB_RING_SIZE * sizeof(struct sec_descriptor_t);
 
     for(i = 0; i < SEC_JOB_RING_SIZE; i++)
     {

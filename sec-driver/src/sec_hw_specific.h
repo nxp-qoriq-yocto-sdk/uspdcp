@@ -36,11 +36,26 @@
 /*==============================================================================
                                 INCLUDE FILES
 ==============================================================================*/
-#include "sec_job_ring.h"
+#include "fsl_sec.h"
+#include "sec_utils.h"
 
 /*==============================================================================
                               DEFINES AND MACROS
 ==============================================================================*/
+
+/** Maximum length in bytes for IV(Initialization Vector) */
+#define SEC_IV_MAX_LENGTH  24
+
+/** Maximum length in bytes for cryptographic key */
+#define SEC_CRYPTO_KEY_MAX_LENGTH  32
+
+/** Maximum length in bytes for authentication key */
+#define SEC_AUTH_KEY_MAX_LENGTH    32
+
+
+/*****************************************************************
+ * SEC REGISTER CONFIGURATIONS
+ *****************************************************************/
 
 /** Memory range assigned for registers of a job ring */
 #define SEC_CH_REG_RANGE                    0x100
@@ -191,6 +206,35 @@
 /** Request done notification (DN) per descriptor */
 #define SEC_DESC_HDR_DONE_NOTIFY    0x00000001
 
+/** Determines the processing type. Outbound means encrypting packets */
+#define SEC_DESC_HDR_DIR_OUTBOUND   0x00000000
+/** Determines the processing type. Inbound means decrypting packets */
+#define SEC_DESC_HDR_DIR_INBOUND    0x00000002
+
+/*****************************************************************
+ * SNOW descriptor configuration
+ *****************************************************************/
+
+/**  Select STEU execution unit, the one implementing SNOW 3G */
+#define SEC_DESC_HDR_EU_SEL0_STEU   0x90000000
+/** Mode data used to program STEU execution unit for F8 processing */
+#define SEC_DESC_HDR_MODE0_STEU_F8  0x00900000
+/** Select SNOW 3G descriptor type = common_nonsnoop */
+#define SEC_DESC_HDR_DESC_TYPE_STEU 0x00000010
+
+/*****************************************************************
+ * AES descriptor configuration
+ *****************************************************************/
+
+/**  Select STEU execution unit, the one implementing AES */
+#define SEC_DESC_HDR_EU_SEL0_AESU   0x60000000
+/** Mode data used to program AESU execution unit for AES CTR processing */
+#define SEC_DESC_HDR_MODE0_AESU_CTR 0x00600000
+
+
+/*****************************************************************
+ * Macros manipulating descriptor header
+ *****************************************************************/
 
 /** Check if a descriptor has the DONE bits set.
  * If yes, it means the packet tied to the descriptor 
@@ -198,7 +242,7 @@
 #define hw_job_is_done(descriptor)   ((descriptor->hdr & SEC_DESC_HDR_DONE) == SEC_DESC_HDR_DONE)
 
 /** Enable done writeback in descriptor header dword after packet is processed by SEC engine */
-#define hw_job_enable_writeback(descriptor) (descriptor->hdr |= SEC_DESC_HDR_DONE_NOTIFY)
+#define hw_job_enable_writeback(descriptor_hdr) ((descriptor_hdr) |= SEC_DESC_HDR_DONE_NOTIFY)
 
 /** Return 0 if no error generated on this job ring.
  * Return non-zero if error. */
@@ -210,7 +254,66 @@
 /*==============================================================================
                          STRUCTURES AND OTHER TYPEDEFS
 ==============================================================================*/
+/** Forward structure declaration */
+typedef struct sec_job_ring_t sec_job_ring_t;
 
+/** SEC Descriptor pointer entry */
+struct sec_ptr {
+    uint16_t len;       /*< length */
+    uint8_t j_extent;   /*< jump to sg link table and/or extent */
+    uint8_t eptr;       /*< extended address */
+    uint32_t ptr;       /*< address */
+};
+
+/** A descriptor that instructs SEC engine how to process a packet.
+ * On SEC 3.1 a descriptor consists of 8 double-words: 
+ * one header dword and seven pointer dwords. */
+struct sec_descriptor_t
+{
+    volatile uint32_t hdr;      /*< header high bits */
+    uint32_t hdr_lo;            /*< header low bits */
+    struct sec_ptr ptr[7];      /*< ptr/len pair array */
+    /*< Initialization Vector. Need to have it here because it 
+     * is updated with info from each packet!!! */
+    uint32_t __CACHELINE_ALIGNED iv[SEC_IV_MAX_LENGTH];
+
+} __CACHELINE_ALIGNED;
+
+/** Cryptographic and authentication keys that need be accessed
+ * and used by SEC engine via DMA for a each packet belonging 
+ * to a SEC context. */
+typedef struct sec_keys_s
+{
+    uint32_t __CACHELINE_ALIGNED crypto_key[SEC_CRYPTO_KEY_MAX_LENGTH]; /*< Encryption/decryption key */
+    uint32_t __CACHELINE_ALIGNED auth_key[SEC_AUTH_KEY_MAX_LENGTH];     /*< Authentication key */
+}sec_keys_t;
+
+/** Cryptographic data belonging to a SEC context.
+ * Can be considered a joint venture between:
+ * - a 'shared descriptor' (the descriptor header word)
+ * - a PDB(protocol data block) */
+typedef struct sec_crypto_pdb_s
+{
+    uint32_t crypto_hdr;    /*< Higher 32 bits of Descriptor Header dword, used for encrypt/decrypt operations.
+                                Lower 32 bits are reserved and unused. */
+    uint32_t auth_hdr;      /*< Higher 32 bits of Descriptor Header dword, used for authentication operations.
+                                Lower 32 bits are reserved and unused. */
+    // TODO: use same IV for F9 when packet is passed second time through SEC...?
+    uint32_t iv_template[SEC_IV_MAX_LENGTH];    /*< Template for Initialization Vector. 
+                                                    HFN is stored and maintained here. */
+    sec_keys_t  *keys;      /*< Pointer to structure holding the crypto and authentication keys for this context.
+                                Crypto and authentication keys NEED BE DMA ACCESSIBLE for SEC engine!*/
+    uint32_t hfn_threshold; /*< Threshold for HFN configured by User Application. 
+                                Bitshifted left to skip SN bits from first word of IV. */
+    uint32_t hfn_mask;      /*< Mask applied on IV to extract HFN */
+    uint32_t sn_mask;       /*< Mask applied on PDCP header to extract SN */
+    uint8_t sns;            /*< SN Short. Is set to 1 if short sequence number is used:
+                                - 5 bit for c-plane and 7 bit for d-plane.
+                                Is set to 0 if long SN is used:
+                                - 12 bit for d-plane */
+    uint8_t crypto_key_len; /*< Length of crypto key */
+    uint8_t auth_key_len;   /*< Length of authentication key */
+}sec_crypto_pdb_t;
 /*==============================================================================
                                  CONSTANTS
 ==============================================================================*/

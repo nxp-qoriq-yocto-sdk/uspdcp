@@ -49,6 +49,19 @@ extern "C"{
 /*==================================================================================================
                                        DEFINES AND MACROS
 ==================================================================================================*/
+/** Indicates a data plane PDCP context.
+ * Value assigned to user_plane member from ::sec_pdcp_context_info_t */
+#define PDCP_DATA_PLANE     1
+/** Indicates a control plane PDCP context.
+ * Value assigned to user_plane member from ::sec_pdcp_context_info_t */
+#define PDCP_CONTROL_PLANE  0
+
+/** Indicates an uplink PDCP context.
+ * Value assigned to packet_direction from ::sec_pdcp_context_info_t */
+#define PDCP_UPLINK     0
+/** Indicates a downlink PDCP context.
+ * Value assigned to packet_direction from ::sec_pdcp_context_info_t */
+#define PDCP_DOWNLINK   1
 
 /*==================================================================================================
                                              ENUMS
@@ -83,6 +96,8 @@ typedef enum sec_return_code_e
     SEC_DRIVER_NOT_INITALIZED,       /*< SEC driver is NOT initialized. */
     SEC_DRIVER_NO_FREE_CONTEXTS,     /*< There are no more free contexts. Considering increasing the
                                          maximum number of contexts: #SEC_MAX_PDCP_CONTEXTS.*/
+    SEC_HFN_THRESHOLD_REACHED,       /*< Returned from sec_process_packet when HFN reached the threshold configured for a context.
+                                         This is an indication that keys must be renegotiated at earliest convenience. */
 }sec_return_code_t;
 
 /** Status codes indicating SEC processing result for each packet, 
@@ -105,7 +120,7 @@ typedef enum sec_status_e
  */
 typedef enum sec_ua_return_e
 {
-    SEC_RETURN_SUCCESS,         /*< User Application processed response notification with success. */
+    SEC_RETURN_SUCCESS = 0,     /*< User Application processed response notification with success. */
     SEC_RETURN_STOP,            /*< User Application wants to return from the polling API without
                                     processing any other SEC responses. */
 }sec_ua_return_t;
@@ -116,11 +131,19 @@ typedef enum packet_type_e
     SEC_CONTIGUOUS_BUFFER = 0,
     SEC_SCATTER_GATHER_BUFFER
 }packet_type_t;
+
+/** Cryptographic algorithms */
+typedef enum sec_crypto_alg_e
+{
+    SEC_ALG_SNOW = 0,       /*< Use SNOW algorithm for ciphering/deciphering and integrity protection */
+    SEC_ALG_AES,            /*< Use AES algorithm for ciphering/deciphering and integrity protection */
+
+}sec_crypto_alg_t;
 /*==================================================================================================
                                  STRUCTURES AND OTHER TYPEDEFS
 ==================================================================================================*/
 
-#if defined(__powerpc64__) || defined(CONFIG_PHYS_64BIT)
+#if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
 /** Physical address on 36 bits or more. MUST be kept in synch with same define from kernel! */
 typedef uint64_t dma_addr_t;
 #else
@@ -152,7 +175,7 @@ typedef void* ua_context_handle_t;
 /** Structure used to describe an input or output packet accessed by SEC. */
 typedef struct sec_packet_s
 {
-    packet_addr_t   address;        /*< The physical address (not virtual address) of the input buffer. */
+    uint8_t         *address;       /*< The virtual address of the buffer. */
     uint32_t        offset;         /*< Offset within packet from where SEC will access (read or write) data. */
     uint32_t        length;         /*< Packet length. */
     packet_type_t   scatter_gather; /*< A value of #SEC_SCATTER_GATHER_BUFFER indicates the packet is
@@ -227,18 +250,23 @@ typedef int (*sec_out_cbk)(sec_packet_t        *in_packet,
  *  belonging to this PDCP context. */
 typedef struct sec_pdcp_context_info_s 
 {
-    uint8_t     sn_size;                /*< Sequence number can be represented on 5, 7 or 12 bits. 
-                                            Select one from: SEC_PDCP_SN_SIZE_5, SEC_PDCP_SN_SIZE_7, SEC_PDCP_SN_SIZE_12. */
+    uint8_t     sn_size;                /*< Sequence number can be represented on 5, 7 or 12 bits.
+                                            Select one from: #SEC_PDCP_SN_SIZE_5, #SEC_PDCP_SN_SIZE_7, #SEC_PDCP_SN_SIZE_12.
+                                            The value #SEC_PDCP_SN_SIZE_5 is valid only for control plane contexts! */
     uint8_t     bearer:5;               /*< Radio bearer id. */
-    uint8_t     user_plane:1;           /*< Control plane versus Data plane indication TODO: confirm this!!! */
-    uint8_t     packet_direction:1;     /*< Direction can be uplink(0) or downlink(1). */
-    uint8_t     protocol_direction:1;   /*< Encryption/Description indication TODO: confirm this!!! */ 
-    uint8_t     algorithm;              /*< Cryptographic algorithm used: SNOW/AES. TODO: confirm this!!! */
+    uint8_t     user_plane:1;           /*< Control plane versus Data plane indication.
+                                            Possible values: #PDCP_DATA_PLANE, #PDCP_CONTROL_PLANE. */
+    uint8_t     packet_direction:1;     /*< Direction can be uplink(#PDCP_UPLINK) or downlink(#PDCP_DOWNLINK). */
+    uint8_t     protocol_direction:1;   /*< Encryption/Description indication TODO: confirm this!!! */
+    uint8_t     algorithm;              /*< Cryptographic algorithm used: SNOW/AES.
+                                            Can have values from ::sec_crypto_alg_t enum. */
     uint32_t    hfn;                    /*< HFN for this radio bearer. Represents the most significant bits from sequence number. */
+    uint32_t    hfn_threshold;          /*< HFN threshold for this radio bearer. If HFN matches or exceeds threshold,
+                                            sec_process_packet will return #SEC_HFN_THRESHOLD_REACHED. */
     uint8_t    *cipher_key;             /*< Ciphering key. */
-    uint32_t    cipher_key_len;         /*< Ciphering key length. */
+    uint8_t    cipher_key_len;         /*< Ciphering key length. */
     uint8_t    *integrity_key;          /*< Integrity key. */
-    uint32_t    integrity_key_len;      /*< Integrity key length. */
+    uint8_t    integrity_key_len;      /*< Integrity key length. */
     void        *custom;                /*< User Application custom data for this PDCP context. Usage to be defined. */
     sec_out_cbk notify_packet;          /*< Callback function to be called for all packets processed on this context. */
 } sec_pdcp_context_info_t;
@@ -352,7 +380,8 @@ sec_return_code_t sec_release();
  * @param [in]  job_ring_handle    The Job Ring this PDCP context will be affined to.
  *                                 If set to NULL, the SEC user space driver will affine PDCP context
  *                                 to one from the available Job Rings, in a round robin fashion.
- * @param [in]  sec_ctx_info       PDCP context info filled by the caller.
+ * @param [in]  sec_ctx_info       PDCP context info filled by the caller. User application will not touch
+ *                                 this data until the SEC context is deleted with sec_delete_pdcp_context().
  * @param [out] sec_ctx_handle     PDCP context handle returned by SEC user space driver.
  * 
  * @retval #SEC_SUCCESS for successful execution
@@ -507,6 +536,8 @@ sec_return_code_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle,
  * @retval #SEC_CONTEXT_MARKED_FOR_DELETION is returned if the SEC context was marked for deletion.
  * @retval #SEC_PROCESSING_ERROR            indicates a fatal execution error that requires a SEC user space driver shutdown.
  *                                          Call sec_get_last_error() to obtain specific error code, as reported by SEC device.
+ * @retval #SEC_HFN_THRESHOLD_REACHED       indicates HFN reached the threshold configured for the SEC context. Keys must be
+ *                                          renegotiated at earliest convenience.
  * @retval >0 in case of error
  */
 sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
