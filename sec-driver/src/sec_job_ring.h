@@ -54,6 +54,14 @@
 /** The number of jobs in a JOB RING */
 #define SEC_JOB_RING_DIFF(ring_max_size, pi, ci) (((pi) < (ci)) ? \
                     ((ring_max_size) + (pi) - (ci)) : ((pi) - (ci)))
+
+/** Test if job ring is full. Used job ring capacity to be 32 = a power of 2.
+ * A job ring is full when there are 24 entries, which is the maximum
+ * capacity of SEC's hardware FIFO. */
+#define SEC_JOB_RING_IS_FULL(jr, ring_max_size, ring_threshold) \
+                    (((jr)->pidx + 1 + ((ring_max_size) - (ring_threshold))) % (ring_max_size))  == \
+                    ((jr)->cidx)
+
 /*==============================================================================
                                     ENUMS
 ==============================================================================*/
@@ -77,7 +85,7 @@ struct sec_job_t
 /** SEC Job Ring */
 struct sec_job_ring_t
 {
-    uint32_t cidx;                      /*< Consumer index for job ring (jobs array).
+    volatile uint32_t cidx;                 /*< Consumer index for job ring (jobs array).
                                             @note: cidx and pidx are accessed from different threads.
                                             Place the cidx and pidx inside the structure so that
                                             they lay on different cachelines, to avoid false 
@@ -89,14 +97,12 @@ struct sec_job_ring_t
                                                    producer/consumer indexes with bitwise operations. */
     struct sec_descriptor_t *descriptors;      /*< Ring of descriptors sent to SEC engine for processing */
 
-    uint32_t pidx;                      /*< Producer index for job ring (jobs array) */
+    volatile uint32_t pidx;             /*< Producer index for job ring (jobs array) */
     uint32_t uio_fd;                    /*< The file descriptor used for polling from user space
                                             for interrupts notifications */
     uint32_t jr_id;                     /*< Job ring id */
     uint32_t alternate_register_range;  /*< Can be #TRUE or #FALSE. Indicates if the registers for 
                                             this job ring are mapped to an alternate 4k page.*/
-    volatile uint32_t free_slots;       /*< Counts the free slots in a job ring. When it reaches value 0, 
-                                            the job ring is full.*/
     volatile void *register_base_addr;  /*< Base address for SEC's register memory for this job ring.
                                             @note On SEC 3.1 all channels share the same register address space,
                                                   so this member will have the exact same value for all og them. */

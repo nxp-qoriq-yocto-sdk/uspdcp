@@ -274,7 +274,6 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
 
         // increment the consumer index for the current job ring
         job_ring->cidx = SEC_CIRCULAR_COUNTER_POW_2(job_ring->cidx, SEC_JOB_RING_SIZE);
-        job_ring->free_slots--;
 
 
         // packet is processed by SEC engine, notify it to UA
@@ -780,13 +779,11 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
     job_ring = (sec_job_ring_t *)sec_context->jr_handle;
     ASSERT(job_ring != NULL);
 
-    // check if the Job Ring is full (job ring's free_slots counter is 0)
-    if(job_ring->free_slots == 0)
+    // check if the Job Ring is full
+    if(SEC_JOB_RING_IS_FULL(job_ring, SEC_JOB_RING_SIZE, SEC_JOB_RING_HW_SIZE))
     {
         return SEC_JR_IS_FULL;
     }
-
-    job_ring->free_slots++;
 
     // get first available job from job ring
     job = &job_ring->jobs[job_ring->pidx];

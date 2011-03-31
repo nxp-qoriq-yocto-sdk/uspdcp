@@ -134,11 +134,6 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
 
     }
 
-    // Initialize free slots to count SEC_JOB_RING_HW_SIZE(=24 on SEC 3.1) jobs.
-    // The total size of the job ring can be bigger as it is rounded up to the next
-    // power of two. This helps to update producer/consumer index with bitwise operations.
-    job_ring->free_slots = -(SEC_JOB_RING_HW_SIZE -1);
-
     return SEC_SUCCESS;
 }
 
