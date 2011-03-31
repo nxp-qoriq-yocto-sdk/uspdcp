@@ -108,8 +108,6 @@ static void test_setup(void)
 
     // Fill SEC driver configuration data
     sec_config_data.memory_area = (void*)__dma_virt;
-    sec_config_data.ptov = &dma_mem_ptov;
-    sec_config_data.vtop = &dma_mem_vtop;
     sec_config_data.work_mode = SEC_STARTUP_POLLING_MODE;
 
     // Init sec driver

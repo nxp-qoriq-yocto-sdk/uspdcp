@@ -41,6 +41,8 @@ extern "C" {
 #include "sec_utils.h"
 #include "sec_hw_specific.h"
 
+// For definition of sec_vtop and sec_ptov macros
+#include "alu_mem_management.h"
 
 /*==================================================================================================
                                      LOCAL DEFINES
@@ -67,9 +69,6 @@ extern "C" {
 ==================================================================================================*/
 /* Job rings used for communication with SEC HW */
 sec_job_ring_t g_job_rings[MAX_SEC_JOB_RINGS];
-
-extern ptov_function sec_ptov;
-extern vtop_function sec_vtop;
 
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES

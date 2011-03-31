@@ -118,6 +118,12 @@
 #define atomic_lock_release(ptr, ...) \
     __sync_lock_release (ptr , ##__VA_ARGS__)
 
+// TODO: remove this once ALU's memory management mechanism is used:
+// ptov + vtop functions provided by ALU.
+// This is required in the mean time because it conflicts with same
+// function defined in compat.h from dma_mem library.
+#define REMOTE_ATOMIC_TYPE
+
 /*==============================================================================
                                     ENUMS
 ==============================================================================*/

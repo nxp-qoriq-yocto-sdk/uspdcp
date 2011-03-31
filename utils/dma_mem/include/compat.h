@@ -112,7 +112,9 @@ do { \
 	printf("panic: %s", x); \
 	abort(); \
 } while(0)
+#ifndef container_of
 #define container_of(p, t, f) (t *)((void *)p - offsetof(t, f))
+#endif
 static inline u8 readb(volatile u8 *p)
 {
 	return *p;
@@ -194,6 +196,9 @@ static inline void hexdump(const void *ptr, size_t sz)
 	__hexdump(start, end, p, sz, c);
 }
 
+// REMOTE_IN_OUT_BE32 will be defined if in_be32 and out_be32
+// are already defined by an external lib
+#ifndef REMOTE_IN_OUT_BE32
 /* I/O operations */
 static inline u32 in_be32(volatile void *__p)
 {
@@ -205,6 +210,7 @@ static inline void out_be32(volatile void *__p, u32 val)
 	volatile u32 *p = __p;
 	*p = val;
 }
+#endif
 #define hwsync() \
 	do { \
 		__asm__ __volatile__ ("sync" : : : "memory"); \
@@ -299,8 +305,11 @@ typedef uint32_t	irqreturn_t; /* as per hwi.h */
 #define irq_can_set_affinity(x)	0
 #define irq_set_affinity(x,y)	0
 
+// REMOTE_ATOMIC_TYPE will be defined if atomic_t type is already defined by an external lib
+#ifndef REMOTE_ATOMIC_TYPE
 /* Atomic stuff */
 typedef unsigned long atomic_t;
+#endif
 /* NB: __atomic_*() functions copied and twiddled from lwe_atomic.h */
 static inline int
 __atomic_read(unsigned long *ptr)

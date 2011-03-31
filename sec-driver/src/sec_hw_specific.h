@@ -247,6 +247,75 @@
 /** Return 0 if no error generated on this job ring.
  * Return non-zero if error. */
 #define hw_job_ring_error(jr) (in_be32(job_ring->register_base_addr + SEC_REG_CSR_LO(jr)) & SEC_REG_CSR_ERROR_MASK)
+
+/*****************************************************************
+ * Macros manipulating SEC registers for a job ring/channel
+ *****************************************************************/
+
+/** @brief Enable IRQ generation for a job ring/channel in SEC device.
+ *
+ * @note This function is used in NAPI and pure IRQ functioning modes.
+ *       In pure polling mode IRQ generation is NOT enabled at job ring level!
+ *
+ * Configuration is done at SEC engine controller level (on SEC 3.1).
+ * At job ring level the interrupts are always generated but can be
+ * masked out at controller level.
+ *
+ * @param [in] job_ring     The job ring
+ */
+#define hw_enable_irq_on_job_ring(job_ring) \
+{\
+    uint32_t reg_val = 0; \
+\
+    reg_val = SEC_REG_SET_VAL_IER_DONE((job_ring)->jr_id); \
+    /* Configure interrupt generation at controller level, in SEC hw */ \
+    setbits32((job_ring)->register_base_addr + SEC_REG_IER , reg_val); \
+}
+
+/** @brief Enqueue descriptor into a job ring's FIFO.
+ * A descriptor points to an input packet to be processed as well as
+ * to an output packet where SEC will write processing result.
+ * The descriptor also points to the specific cryptographic operations
+ * that must be applied on the input packet.
+ *
+ * @param [in] job_ring     The job ring
+ * @param [in] descriptor   Physical address of descriptor.
+ */
+#if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
+
+#define hw_enqueue_packet_on_job_ring(job_ring, descriptor) \
+{\
+    /* Write higher 32 bits. Only relevant when Extended address\
+       is enabled(36 bit physical addresses).\
+       @note address must be big endian\
+    */\
+    out_be32(job_ring->register_base_addr + SEC_REG_FFER(job_ring),\
+             PHYS_ADDR_HI(descriptor));\
+    /* Write lower 32 bits. This is the trigger to insert the descriptor\
+       into the channel's FETCH FIFO.\
+       @note: This is why higher 32 bits MUST ALWAYS be written prior to\
+       the lower 32 bits, when 36 physical addressing is ON!\
+       @note address must be big endian\
+    */\
+    out_be32(job_ring->register_base_addr + SEC_REG_FFER_LO(job_ring),\
+             PHYS_ADDR_LO(descriptor));\
+}
+
+#else //#if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
+
+#define hw_enqueue_packet_on_job_ring(job_ring, descriptor) \
+{\
+    /* Write lower 32 bits. This is the trigger to insert the descriptor\
+       into the channel's FETCH FIFO.\
+       @note: This is why higher 32 bits MUST ALWAYS be written prior to\
+       the lower 32 bits, when 36 physical addressing is ON!\
+       @note address must be big endian\
+    */\
+    out_be32(job_ring->register_base_addr + SEC_REG_FFER_LO(job_ring),\
+             PHYS_ADDR_LO(descriptor));\
+}
+
+#endif
 /*==============================================================================
                                     ENUMS
 ==============================================================================*/
@@ -346,29 +415,6 @@ int hw_reset_job_ring(sec_job_ring_t *job_ring);
  */
 int hw_shutdown_job_ring(sec_job_ring_t *job_ring);
 
-/** @brief Enable IRQ generation for a job ring/channel in SEC device.
- *
- * @note This function is used in NAPI and pure IRQ functioning modes.
- *       In pure polling mode IRQ generation is NOT enabled at job ring level!
- *
- * Configuration is done at SEC engine controller level (on SEC 3.1).
- * At job ring level the interrupts are always generated but can be
- * masked out at controller level.
- *
- * @param [in] job_ring     The job ring
- */
-void hw_enable_irq_on_job_ring(sec_job_ring_t *job_ring);
-
-/** @brief Enqueue descriptor into a job ring's FIFO.
- * A descriptor points to an input packet to be processed as well as
- * to an output packet where SEC will write processing result.
- * The descriptor also points to the specific cryptographic operations
- * that must be applied on the input packet.
- *
- * @param [in] job_ring     The job ring
- * @param [in] descriptor   Physical address of descriptor.
- */
-void hw_enqueue_packet_on_job_ring(sec_job_ring_t *job_ring, dma_addr_t descriptor);
 
 /*============================================================================*/
 

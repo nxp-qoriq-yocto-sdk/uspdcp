@@ -58,6 +58,8 @@ extern "C" {
  *  There is one additional global pool besides the per-job-ring pools. */
 #define MAX_SEC_CONTEXTS_PER_POOL   (SEC_MAX_PDCP_CONTEXTS / (g_job_rings_no))
 
+/** Max length of a string describing a ::sec_status_t value or a ::sec_return_code_t value */
+#define MAX_STRING_REPRESENTATION_LENGTH    50
 
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
@@ -97,6 +99,17 @@ static unsigned int g_last_jr_assigned = 0;
 /* Global context pool */
 static sec_contexts_pool_t g_ctx_pool;
 
+/** String representation for values from  ::sec_status_t */
+static const char g_status_string[][MAX_STRING_REPRESENTATION_LENGTH] =
+{
+    {"Not defined"},
+};
+
+/** String representation for values from  ::sec_return_code_t */
+static const char g_return_code_string[][MAX_STRING_REPRESENTATION_LENGTH] =
+{
+    {"Not defined"},
+};
 /*==================================================================================================
                                      GLOBAL CONSTANTS
 ==================================================================================================*/
@@ -108,10 +121,6 @@ static sec_contexts_pool_t g_ctx_pool;
 void* g_dma_mem_start = NULL;
 /** Current address for unused DMA-able memory area configured by UA */
 void* g_dma_mem_free = NULL;
-
-ptov_function sec_ptov = NULL;
-vtop_function sec_vtop = NULL;
-
 
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
@@ -361,10 +370,6 @@ sec_return_code_t sec_init(const sec_config_t *sec_config_data,
     g_dma_mem_start = sec_config_data->memory_area;
     g_dma_mem_free = g_dma_mem_start;
     SEC_INFO("Using DMA memory area with start address = %p", g_dma_mem_start);
-
-    // TODO replace with macros
-    sec_ptov = sec_config_data->ptov;
-    sec_vtop = sec_config_data->vtop;
     
     // Read configuration data from DTS (Device Tree Specification).
     ret = sec_configure(g_job_rings_no, g_job_rings);
@@ -823,6 +828,18 @@ uint32_t sec_get_last_error(void)
 {
     // stub function
     return 0;
+}
+
+const char* sec_get_status_message(sec_status_t status)
+{
+    // TODO: to be implemented
+    return g_status_string[0];
+}
+
+const char* sec_get_error_message(sec_return_code_t error)
+{
+    // TODO: to be implemented
+    return g_return_code_string[0];
 }
 
 /*================================================================================================*/

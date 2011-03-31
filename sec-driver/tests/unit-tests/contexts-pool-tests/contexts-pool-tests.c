@@ -47,6 +47,11 @@ extern "C" {
                                      LOCAL DEFINES
 ==================================================================================================*/
 #define MAX_SEC_CONTEXTS_PER_POOL   (SEC_MAX_PDCP_CONTEXTS / (MAX_SEC_JOB_RINGS))
+#define sec_vtop(virt_address) \
+{\
+    /* stub macro*/ \
+    return (dma_addr_t)(virt_address); \
+}
 
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
@@ -73,18 +78,10 @@ void* global_dma_mem_free_original = NULL;
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
 ==================================================================================================*/
-// stub function, TODO: remove this because will be replaced with macros
-static phys_addr_t custom_vtop(void *address);
-vtop_function sec_vtop = custom_vtop;
 
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
-static phys_addr_t custom_vtop(void *address)
-{
-    // stub function, TODO: remove this because will be replaced with macros
-    return (dma_addr_t)address;
-}
 
 static void test_contexts_pool_init_destroy(void)
 {

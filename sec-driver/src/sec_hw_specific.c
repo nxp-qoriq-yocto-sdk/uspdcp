@@ -85,8 +85,6 @@ int hw_reset_job_ring(sec_job_ring_t *job_ring)
     int ret = 0;
     uint32_t reg_val = 0;
 
-    
-    ASSERT(job_ring != NULL);
     ASSERT(job_ring->register_base_addr != NULL);
 
     // First reset the job ring in hw
@@ -118,7 +116,6 @@ int hw_shutdown_job_ring(sec_job_ring_t *job_ring)
     unsigned int timeout = SEC_TIMEOUT;
     int usleep_interval = 10;
 
-    ASSERT(job_ring != NULL);
     ASSERT(job_ring->register_base_addr != NULL);
 
     // Ask the SEC hw to reset this job ring
@@ -136,41 +133,6 @@ int hw_shutdown_job_ring(sec_job_ring_t *job_ring)
         return -1;
     }
     return 0;
-}
-
-void hw_enable_irq_on_job_ring(sec_job_ring_t *job_ring)
-{
-    uint32_t reg_val = 0;
-
-    ASSERT(job_ring != NULL);
-    ASSERT(job_ring->register_base_addr != NULL);
-    
-    // Configure interrupt generation at controller level, in SEC hw
-    reg_val = SEC_REG_SET_VAL_IER_DONE(job_ring->jr_id);
-    setbits32(job_ring->register_base_addr + SEC_REG_IER , reg_val);
-
-}
-
-void hw_enqueue_packet_on_job_ring(sec_job_ring_t *job_ring, dma_addr_t descriptor)
-{
-    ASSERT(job_ring != NULL);
-    ASSERT(job_ring->register_base_addr != NULL);
-
-    // Write higher 32 bits. Only relevant when Extended address
-    // is enabled(36 bit physical addresses).
-    // @note address must be big endian
-#if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
-    out_be32(job_ring->register_base_addr + SEC_REG_FFER(job_ring),
-             PHYS_ADDR_HI(descriptor));
-#endif
-
-    // Write lower 32 bits. This is the trigger to insert the descriptor
-    // into the channel's FETCH FIFO.
-    // @note: This is why higher 32 bits MUST ALWAYS be written prior to
-    // the lower 32 bits, when 36 physical addressing is ON!
-    // @note address must be big endian
-    out_be32(job_ring->register_base_addr + SEC_REG_FFER_LO(job_ring),
-             PHYS_ADDR_LO(descriptor));
 }
 /*================================================================================================*/
 

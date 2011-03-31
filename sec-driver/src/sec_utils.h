@@ -195,6 +195,13 @@
 #define PHYS_ADDR_LO(phys_addr) \
     ((phys_addr) & 0xFFFFFFFF)
 
+
+// TODO: remove this once ALU's memory management mechanism is used:
+// ptov + vtop functions provided by ALU.
+// This is required in the mean time because it conflicts with same
+// function defined in compat.h from dma_mem library.
+#define REMOTE_IN_OUT_BE32
+
 /*==============================================================================
                                     ENUMS
 ==============================================================================*/

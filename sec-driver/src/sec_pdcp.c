@@ -43,6 +43,9 @@ extern "C" {
 #include "sec_hw_specific.h"
 #include "sec_utils.h"
 
+// For definition of sec_vtop and sec_ptov macros
+#include "alu_mem_management.h"
+
 /*==================================================================================================
                                      LOCAL DEFINES
 ==================================================================================================*/
@@ -151,8 +154,6 @@ extern "C" {
 /*==================================================================================================
                                      GLOBAL VARIABLES
 ==================================================================================================*/
-extern ptov_function sec_ptov;
-extern vtop_function sec_vtop;
 
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
@@ -587,6 +588,7 @@ int sec_pdcp_context_update_descriptor(sec_context_t *ctx, sec_job_t *job, sec_d
     // Call function pointer to update descriptor for: 
     // SNOW F8/F9 or AES CTR/CMAC
     ret = ctx->update_crypto_descriptor(job, descriptor);
+    SEC_INFO("Update crypto descriptor return code = %d", ret);
 
     return ret;
 }

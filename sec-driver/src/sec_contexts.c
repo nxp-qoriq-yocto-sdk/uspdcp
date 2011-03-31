@@ -179,6 +179,7 @@ static void retire_context(sec_contexts_pool_t * pool, sec_context_t * ctx)
 
 static void free_in_use_context(sec_contexts_pool_t * pool, sec_context_t * ctx)
 {
+    sec_keys_t *save_keys = NULL;
 	ASSERT(ctx != NULL);
 	ASSERT(pool != NULL);
 
@@ -194,7 +195,9 @@ static void free_in_use_context(sec_contexts_pool_t * pool, sec_context_t * ctx)
     ctx->pdcp_crypto_info = NULL;
     ctx->update_crypto_descriptor = NULL;
     memset(ctx->crypto_desc_pdb.keys, 0, sizeof(sec_keys_t));
+    save_keys = ctx->crypto_desc_pdb.keys;
     memset(&ctx->crypto_desc_pdb, 0, sizeof(sec_crypto_pdb_t));
+    ctx->crypto_desc_pdb.keys = save_keys;
 
 	// add context to free list
 	pool->free_list.add_tail(&pool->free_list, &ctx->node);

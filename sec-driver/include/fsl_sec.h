@@ -198,25 +198,6 @@ typedef struct sec_job_ring_descriptor_s
 }sec_job_ring_descriptor_t;
 
 
-/** @brief      Translates the virtual address to physical address.
- *
- * @param [in] address  The virtual address which has to be mapped.
- *
- * @retval      Physical address which the passed virtual address maps to
- *              A value of -1 is returned if the passed virtual address
- *              doesn't map to any physical address.
- */
-typedef phys_addr_t (*vtop_function)(void *address);
-
-/** @brief      Translates the physical address to virtual address.
- *
- * @param [in]  address The physical address which has to be mapped.
- *
- * @retval      Virtual address to which the passed physical address maps onto.
- *              NULL is returned if the passed physical address doesn't map to any virtual address.
- */
-typedef void* (*ptov_function)(phys_addr_t address);
-
 /** @brief Function called by SEC user space driver to notify every processed packet.
  *
  * Callback provided by the User Application when a SEC PDCP context is created.
@@ -276,10 +257,9 @@ typedef struct sec_pdcp_context_info_s
 typedef struct sec_config_s
 {
     void            *memory_area;
-    ptov_function   ptov;
-    vtop_function   vtop;
-#ifdef SEC_HW_VERSION_4_4
     uint32_t        irq_coalescing_timer;   /*< Interrupt Coalescing Timer Threshold.
+                                                @note Applicable to SEC 4.4 only!
+
                                                 While interrupt coalescing is enabled (ICEN=1), this value determines the
                                                 maximum amount of time after processing a Descriptor before raising an interrupt.
                                                 The threshold value is represented in units equal to 64 CAAM interface
@@ -288,6 +268,8 @@ typedef struct sec_config_s
                                                 coalescing is disabled.*/
 
     uint8_t         irq_coalescing_count;   /*< Interrupt Coalescing Descriptor Count Threshold.
+                                                @note Applicable to SEC 4.4 only!
+
                                                 While interrupt coalescing is enabled (ICEN=1), this value determines
                                                 how many Descriptors are completed before raising an interrupt.
                                                 Valid values for this field are from 0 to 255.
@@ -295,7 +277,6 @@ typedef struct sec_config_s
                                                 coalescing since the threshold value is reached each time that a
                                                 Job Descriptor is completed. A value of 0 is treated in the same
                                                 manner as a value of 1.*/
-#endif
     uint8_t         work_mode;              /*< Choose between hardware poll vs interrupt notification when driver is initialized. 
                                                 Valid values are #SEC_STARTUP_POLLING_MODE and #SEC_STARTUP_INTERRUPT_MODE.*/
 }sec_config_t;
@@ -434,7 +415,7 @@ sec_return_code_t sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle);
  * What this means is: if all ready packets are delivered to UA and no more ready packets 
  * are awaiting to be retrieved from SEC device then this function will enable SEC interrupt generation
  * on all job rings before it returns. In other words, IRQs are enabled if:
- * - (packets_no < limit) OR (limit < 0)
+ * -> (packets_no < limit) OR (limit < 0)
  * SEC interrupts for user space dedicated Job Rings are ALWAYS disabled in interrupt handler from SEC kernel driver.
  *
  * @note The sec_poll() API cannot be called from within a sec_out_cbk function!
@@ -475,7 +456,7 @@ sec_return_code_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
  * What this means is: if all ready packets are delivered to UA and no more ready packets
  * are awaiting to be retrieved from this SEC's job ring then this function will enable SEC interrupt generation
  * on this job ring before it returns. In other words, IRQs are enabled if:
- * - (packets_no < limit) OR (limit < 0)
+ * -> (packets_no < limit) OR (limit < 0)
  * SEC interrupts per job ring are disabled in interrupt handler from SEC kernel driver.
  * 
  * @note The sec_poll_job_ring() API cannot be called from within a sec_out_cbk function!
@@ -486,6 +467,7 @@ sec_return_code_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
  *                                  Note that fewer packets may be notified if enough processed packets are not available.
  *                                  If limit has a negative value, then all ready packets will be notified.
  * @param [out] packets_no          Number of packets notified to the User Application during this function call.
+ *                                  Can be NULL if User Application does not need this information.
  *
  * @retval #SEC_SUCCESS                    for successful execution.
  * @retval #SEC_PROCESSING_ERROR           indicates a fatal execution error that requires a SEC user space driver shutdown.

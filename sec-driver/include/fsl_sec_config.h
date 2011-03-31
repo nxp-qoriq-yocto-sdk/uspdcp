@@ -148,6 +148,11 @@ extern "C"{
 
 #ifdef SEC_HW_VERSION_4_4
 
+////////////////////////////////////////////////////////////////////////////////////////////////
+// SEC 4.4
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 /** Size of cryptographic context that is used directly in communicating with SEC device.
  *  SEC device works only with physical addresses. This is the maximum size for a SEC
  *  descriptor on SEC 4.4 device, 64 words.
@@ -169,6 +174,12 @@ extern "C"{
 #define SEC_DMA_MEM_JOB_RING_SIZE       (SEC_DMA_MEM_INPUT_RING_SIZE) + (SEC_DMA_MEM_OUTPUT_RING_SIZE)
 
 #else //#ifdef SEC_HW_VERSION_4_4
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+// SEC 3.1
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 /** On SEC 3.1 device there is no concept of shared descriptor.
  *  There are only job descriptors used for every packet submitted to SEC device.
  */
@@ -240,6 +251,12 @@ extern "C"{
 /***************************************/
 
 #ifdef SEC_HW_VERSION_4_4
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+// SEC 4.4
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 /** Configure the size of the JOB RING.
  * For SEC 4.4 the maximum size of the RING is hardware limited to 1024.
  * However the number of packets in flight in a time interval of 1ms can be calculated
@@ -252,6 +269,11 @@ extern "C"{
 #define SEC_JOB_RING_SIZE  512
 #define SEC_JOB_RING_HW_SIZE    SEC_JOB_RING_SIZE
 #else
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+// SEC 3.1
+////////////////////////////////////////////////////////////////////////////////////////////////
+
 /** Configure the size of the JOB RING.
  *  For SEC 3.1 the size of the FIFO (concept similar to JOB INPUT RING
  *  on SEC 4.4) is hardware fixed to 24. */

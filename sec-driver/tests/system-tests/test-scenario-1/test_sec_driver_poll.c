@@ -716,7 +716,6 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
                                aes_ctr_dec_data_out,
                                sizeof(aes_ctr_dec_data_out)));
 #endif
-    // TODO: remove this
     if(test_failed)
     {
         printf("\nthread #%d:consumer: out packet INCORRECT!!!."
@@ -1053,6 +1052,7 @@ static void* pdcp_thread_routine(void* config)
         {
             // if SEC process packet returns that the producer JR is full, do some polling
             // on the consumer JR until the producer JR has free entries.
+            // TODO: test if sec_process_packet returns SEC_HFN_THRESHOLD_REACHED
             while (sec_process_packet(pdcp_context->sec_ctx,
                                      &in_packet,
                                      &out_packet,
@@ -1193,8 +1193,6 @@ static int setup_sec_environment(void)
     assert(sec_config_data.memory_area != NULL);
 
     // Fill SEC driver configuration data
-    sec_config_data.ptov = &dma_mem_ptov;
-    sec_config_data.vtop = &dma_mem_vtop;
     sec_config_data.work_mode = SEC_STARTUP_POLLING_MODE;
 #ifdef SEC_HW_VERSION_4_4
     sec_config_data.irq_coalescing_count = IRQ_COALESCING_COUNT;
