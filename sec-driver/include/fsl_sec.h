@@ -544,7 +544,19 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
  */
 uint32_t sec_get_last_error(void);
 
+
+/** @brief Return string representation for a status code.
+ *
+ * @param [in] status   The status code.
+ * @retval string representation
+ */
 const char* sec_get_status_message(sec_status_t status);
+
+/** @brief Return string representation for an error code.
+ *
+ * @param [in] error   The error code.
+ * @retval string representation
+ */
 const char* sec_get_error_message(sec_return_code_t error);
 
 /*================================================================================================*/
