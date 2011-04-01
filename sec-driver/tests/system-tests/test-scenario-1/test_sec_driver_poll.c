@@ -51,6 +51,11 @@ extern "C" {
 /*==================================================================================================
                                      LOCAL CONSTANTS
 ==================================================================================================*/
+
+/* IMPORTANT: Select one and only one algorithm at a time, from below */
+
+
+
 // Ciphering
 //#define PDCP_TEST_SNOW_F8_ENC
 // Deciphering
