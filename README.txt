@@ -2,10 +2,8 @@ This Readme file contains instructions showing how to compile and install SEC us
 
 1. Extract SEC user space driver package in a directory <us-drivers>. Example:
    
-    mkdir us-drivers
+    tar -xzvf <sec_us_driver.tgz>
     cd us-drivers
-    cp <sec_us_driver_v1.tgz> .
-    tar -xzvf <sec_us_driver_v1.tgz>
 
 2. Modify <us-drivers>/Makefile.config file with specific configuration options like:
 
@@ -14,14 +12,31 @@ This Readme file contains instructions showing how to compile and install SEC us
 
    -> SEC device version (now only SEC 3.1 is supported; SEC driver will be later ported for SEC 4.4)  
 
-3. How to compile and deploy user space sec driver:
+3. How to compile and deploy kernel space sec driver (rough instructions):
+
+   -> Install sources:
+
+    cd kernel-drivers
+    [kernel-drivers]$ cp dts/p2020rdb.dts <p2020-sdk>/linux-2.6/arch/powerpc/boot/dts/
+    [kernel-drivers]$ cp talitos/* <p2020-sdk>/linux-2.6/drivers/crypto
+    [kernel-drivers]$ cp misc/fsl_shmem.c <p2020-sdk>/linux-2.6/drivers/misc
+    [kernel-drivers]$ cd <p2020-sdk>/linux-2.6/
+    [linux-2.6]$ patch -p1 < patches/fsl_shmem.patch
+   
+   -> Compile and deploy. Recompile only kernel:
+
+   cd <p2020-sdk>/ltib
+   [ltib]$ ./ltib -m scbuild -p kernel
+   [ltib]$ ./ltib --deploy
+
+4. How to compile and deploy user space sec driver:
 
    -> Compile:
 
       Go to folder <us-drivers> and run the following command: 
       [us-drivers]$ make
 
-      The library for sec user space driver is generated in folder: 
+      The library for sec user space driver as well as helper libraries are generated in folder: 
       <us-drivers>/lib-powerpc.
 
       The executables for test applications are generated in folder: 
@@ -60,7 +75,7 @@ This Readme file contains instructions showing how to compile and install SEC us
 
       [us-drivers]$ make debug
 
-4. How to run system tests for sec driver:
+5. How to run system tests for sec driver:
 
    -> Copy system tests from install folder to P2020RDB Linux. More options are available:
    A. Copy the binaries with scp or nfs.
