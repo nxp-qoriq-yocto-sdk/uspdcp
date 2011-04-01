@@ -59,7 +59,7 @@
  * A job ring is full when there are 24 entries, which is the maximum
  * capacity of SEC's hardware FIFO. */
 #define SEC_JOB_RING_IS_FULL(jr, ring_max_size, ring_threshold) \
-                    (((jr)->pidx + 1 + ((ring_max_size) - (ring_threshold))) % (ring_max_size))  == \
+                    (((jr)->pidx + 1 + ((ring_max_size) - (ring_threshold))) & (ring_max_size - 1))  == \
                     ((jr)->cidx)
 
 /*==============================================================================

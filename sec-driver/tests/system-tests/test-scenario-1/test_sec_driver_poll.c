@@ -494,8 +494,8 @@ static void release_pdcp_context(int * no_of_used_pdcp_contexts, pdcp_context_t 
     pdcp_context->job_ring = NULL;
     pdcp_context->sec_ctx = NULL;
 
-    memset(pdcp_context->input_buffers, 0, sizeof(pdcp_context->input_buffers));
-    memset(pdcp_context->output_buffers, 0, sizeof(pdcp_context->output_buffers));
+    memset(pdcp_context->input_buffers, 0, sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
+    memset(pdcp_context->output_buffers, 0, sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
     pdcp_context->no_of_buffers_to_process = 0;
     pdcp_context->no_of_buffers_processed = 0;
     pdcp_context->no_of_used_buffers = 0;
