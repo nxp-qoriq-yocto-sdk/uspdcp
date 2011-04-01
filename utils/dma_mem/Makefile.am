@@ -30,7 +30,10 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 lib_LIBRARIES = dma_mem
-dist_DATA = src/create_dev.sh
+dist_DATA = create_dev.sh
+
+create_dev.sh_install := $(INSTALL_BIN)
+create_dev.sh_install_flags := $(INSTALL_BIN_FLAGS)
 
 AM_CFLAGS := -I$(TOP_LEVEL)/utils/dma_mem/include/
 
