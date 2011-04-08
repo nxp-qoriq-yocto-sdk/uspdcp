@@ -61,15 +61,12 @@ extern "C"{
 #define THREAD_SAFE_POOL    THREAD_SAFE_LIST
 #define THREAD_UNSAFE_POOL  THREAD_UNSAFE_LIST
 
-/** Get state bitfield from state_packets_no member in ::sec_context_t structure.
- * First 3 bits in state_packets_no represent the state. */
-#define CONTEXT_GET_STATE(value)        ((value) >> 29)
-#define CONTEXT_SET_STATE(value, state) ((value) = ((value) & 0x1fffffff) | ((state) << 29))
-
-/** Get packets_no bitfield from state_packets_no member in ::sec_context_t structure.
- * Last 29 bits in state_packets_no represent the packets_no. */
-#define CONTEXT_GET_PACKETS_NO(value)   ((value) & 0x1fffffff)
-#define CONTEXT_SET_PACKETS_NO(value, packets_no)   ((value) = ((value) & 0xe0000000) | (packets_no))
+/** Get number of in flight packets yet to be processed for this context. */
+#define CONTEXT_GET_PACKETS_NO(ctx) ((ctx)->pi - (ctx)->ci)
+/** Increment producer index for this context */
+#define CONTEXT_ADD_PACKET(ctx)     ((ctx)->pi++)
+/** Increment consumer index for this context */
+#define CONTEXT_CONSUME_PACKET(ctx) ((ctx)->ci++)
 
 /** Validation bit pattern. A valid sec_context_t item would contain
  * this pattern at predefined position/s in the item itself. */
@@ -85,10 +82,7 @@ extern "C"{
  * the processing operations that must be done on a packet. */
 typedef int (*sec_update_descriptor)(sec_job_t *job, sec_descriptor_t *descriptor);
 
-/** Status of a SEC context.
- * @note: Can have at most 4 values in the range 0...3!
- * If required to add more values, increase size of state bitfield from
- * state_packets_no member in ::sec_context_t structure! */
+/** Status of a SEC context. */
 typedef enum sec_context_usage_e
 {
     SEC_CONTEXT_UNUSED = 0,  /*< SEC context is unused and is located in the free list. */
@@ -99,16 +93,16 @@ typedef enum sec_context_usage_e
 /** The declaration of a context pool. */
 typedef struct sec_contexts_pool_s
 {
-	/* The list of free contexts */
-	list_t free_list;
-	/* The list of retired contexts */
-	list_t retire_list;
-	/* The list of in use contexts */
-	list_t in_use_list;
+    /* The list of free contexts */
+    list_t free_list;
+    /* The list of retired contexts */
+    list_t retire_list;
+    /* The list of in use contexts */
+    list_t in_use_list;
 
-	/* Total number of contexts available in all three lists. */
-	uint32_t no_of_contexts;
-	struct sec_context_t *sec_contexts;
+    /* Total number of contexts available in all three lists. */
+    uint32_t no_of_contexts;
+    struct sec_context_t *sec_contexts;
 
 }sec_contexts_pool_t;
 
@@ -116,18 +110,26 @@ typedef struct sec_contexts_pool_s
 /** The declaration of a SEC context structure. */
 struct sec_context_t
 {
-	/** A node in the list which holds this sec context.
-	 * @note: For the whole list concept to work the list_node_t must be defined
-	 * statically in the sec_context_t structure. This is needed because the address
-	 * of a sec_context is computed by subtracting the offset of the node member in
-	 * the sec_context_t structure from the address of the node.
-	 *
-	 * To optimize this, the node is placed right at the beginning of the sec_context_t
-	 * structure thus having the same address with the context itself. So no need for
-	 * subtraction.
-	 * @note: The macro #GET_CONTEXT_FROM_LIST_NODE is implemented with this optimization!!!!
-	 * @note: Do not change the position of the node member in the structure. */
-	list_node_t node;
+    /** A node in the list which holds this sec context.
+     *
+     * !!!!!!!!!!!!!!!!!!!!!!!!!!!!IMPORTANT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+     * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+     *
+     * @note: Do not change the position of the node member in the structure.
+     *
+     * @note: For the whole list concept to work the list_node_t must be defined
+     * statically in the sec_context_t structure. This is needed because the address
+     * of a sec_context is computed by subtracting the offset of the node member in
+     * the sec_context_t structure from the address of the node.
+     *
+     * To optimize this, the node is placed right at the beginning of the sec_context_t
+     * structure thus having the same address with the context itself. So no need for
+     * subtraction.
+     * @note: The macro #GET_CONTEXT_FROM_LIST_NODE is implemented with this optimization!!!! 
+     */
+    list_node_t node;
+    /** Producer index for packets submited on this context */
+    volatile uint32_t pi;
     /** Validation pattern at start of structure.
      * @note The first member from sec_context_t structure MUST be the node element.
      *       This allows for an optimized conversion from list_node_t to sec_context_t! */
@@ -144,26 +146,14 @@ struct sec_context_t
      *  - global pool if the affined JR's pool is full */
     sec_contexts_pool_t *pool;
     /** The callback called for UA notifications. */
-	sec_out_cbk notify_packet_cbk;
-    /** Bitfield representing:
-     *      state:3 bits | packet_no:29 bits
-     *
-     * @note Writes to this field MUST be done using the primitives defined
-     * in sec_atomic.h when executed in a concurrent access context!
-     *
-     * State:
-     *  The status of the sec context. Can have values from ::sec_context_usage_t enum.
-     *  This status is needed in the sec_poll function, to decide which packet status
+    sec_out_cbk notify_packet_cbk;
+     /**  The state of the sec context. Can have values from ::sec_context_usage_t enum.
+     *  This state is needed in the sec_poll function, to decide which packet status
      *  to provide to UA when the notification callback is called.
-     *  This field may seem redundant (because of the three lists) but it is not.
-     *
-     * Packets_no:
-     *  Number of packets in flight for this context.
-     *  The maximum value this counter can have is the maximum size of a JR.
-     *  For SEC 4.4 being 1024 and for SEC 3.1 being 24.
-     * */
-	atomic_t state_packets_no;
-
+     *  This field may seem redundant (because of the three lists) but it is not. */
+    volatile sec_context_usage_t state;
+    /** Consumer index for packets processed on this context */
+    volatile uint32_t ci;
     /** Crypto info received from UA.
      * TODO: replace with union when other protocols besides PDCP will be supported!*/
     const sec_pdcp_context_info_t *pdcp_crypto_info;

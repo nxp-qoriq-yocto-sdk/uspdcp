@@ -44,12 +44,10 @@
                               DEFINES AND MACROS
 ==============================================================================*/
 
-/** Update circular counter */
-#define SEC_CIRCULAR_COUNTER(x, max)   ((x) + 1) * ((x) != (max - 1))
 
 /** Update circular counter when maximum value of counter is a power of 2.
  * Use bitwise operations to roll over. */
-#define SEC_CIRCULAR_COUNTER_POW_2(x, max)   (((x) + 1) & (max - 1))
+#define SEC_CIRCULAR_COUNTER(x, max)   (((x) + 1) & (max - 1))
 
 /** The number of jobs in a JOB RING */
 #define SEC_JOB_RING_DIFF(ring_max_size, pi, ci) (((pi) < (ci)) ? \

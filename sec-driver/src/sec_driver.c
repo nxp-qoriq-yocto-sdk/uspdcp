@@ -198,16 +198,12 @@ static void hw_flush_job_ring(sec_job_ring_t * job_ring)
         job = &job_ring->jobs[job_ring->cidx];
         sec_context = job->sec_context;
 
-        // atomically decrement packet reference count in sec context
-
-        // TODO: atomic update seems not to be necessary here as there is no
-        // contention on accessing  state_packets_no when the driver is
-        // shutting down and job ring is flushed.
-        atomic_sub_load(&sec_context->state_packets_no, 1);
+        // consume processed packet for this sec context
+        CONTEXT_CONSUME_PACKET(sec_context);
         discarded_packets_no++;
 
         // increment the consumer index for the current job ring
-        job_ring->cidx = SEC_CIRCULAR_COUNTER_POW_2(job_ring->cidx, SEC_JOB_RING_SIZE);
+        job_ring->cidx = SEC_CIRCULAR_COUNTER(job_ring->cidx, SEC_JOB_RING_SIZE);
     }
 }
 
@@ -273,7 +269,7 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
         saved_job.sec_context = job->sec_context;
 
         // increment the consumer index for the current job ring
-        job_ring->cidx = SEC_CIRCULAR_COUNTER_POW_2(job_ring->cidx, SEC_JOB_RING_SIZE);
+        job_ring->cidx = SEC_CIRCULAR_COUNTER(job_ring->cidx, SEC_JOB_RING_SIZE);
 
 
         // packet is processed by SEC engine, notify it to UA
@@ -281,9 +277,11 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
         status = SEC_STATUS_SUCCESS;
 
         // if context is retiring, set a suggestive status for the packets notified to UA
-        if (CONTEXT_GET_STATE(sec_context->state_packets_no) == SEC_CONTEXT_RETIRING)
+        if (sec_context->state == SEC_CONTEXT_RETIRING)
         {
-            status = (CONTEXT_GET_PACKETS_NO(sec_context->state_packets_no) > 1) ? 
+            // at this point, PI per context is frozen, context is retiring,
+            // no more packets can be submitted for it.
+            status = (CONTEXT_GET_PACKETS_NO(sec_context) > 1) ?
                      SEC_STATUS_OVERDUE : SEC_STATUS_LAST_OVERDUE;
         }
         // call the calback
@@ -293,9 +291,8 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
                                              status,
                                              0); // no error
 
-        // atomically decrement packet reference count in sec context 
-        // and read back state_packets_no.
-        atomic_sub_load(&sec_context->state_packets_no, 1);
+        // consume processed packet for this sec context
+        CONTEXT_CONSUME_PACKET(sec_context);
         notified_packets_no++;
 
         // UA requested to exit
@@ -770,11 +767,11 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
                SEC_INVALID_INPUT_PARAM,
                "sec_ctx_handle is invalid");
 
-    SEC_ASSERT(!(CONTEXT_GET_STATE(sec_context->state_packets_no) == SEC_CONTEXT_RETIRING),
+    SEC_ASSERT(!(sec_context->state == SEC_CONTEXT_RETIRING),
                SEC_CONTEXT_MARKED_FOR_DELETION,
                "SEC context is marked for deletion. "
                "Wait until all in-fligh packets are processed.");
-    ASSERT(CONTEXT_GET_STATE(sec_context->state_packets_no) != SEC_CONTEXT_UNUSED);
+    ASSERT(sec_context->state != SEC_CONTEXT_UNUSED);
 
     job_ring = (sec_job_ring_t *)sec_context->jr_handle;
     ASSERT(job_ring != NULL);
@@ -805,11 +802,11 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
     SEC_ASSERT(ret == SEC_SUCCESS || ret == SEC_HFN_THRESHOLD_REACHED,
                ret, "sec_pdcp_context_update_descriptor returned error code %d", ret);
 
-    // atomically increment packet reference count in sec context
-    atomic_add_load(&sec_context->state_packets_no, 1);
+    // keep count of submitted packets for this sec context 
+    CONTEXT_ADD_PACKET(sec_context);
 
     // increment the producer index for the current job ring
-    job_ring->pidx = SEC_CIRCULAR_COUNTER_POW_2(job_ring->pidx, SEC_JOB_RING_SIZE);
+    job_ring->pidx = SEC_CIRCULAR_COUNTER(job_ring->pidx, SEC_JOB_RING_SIZE);
 
 
     // Enqueue this descriptor into the Fetch FIFO of this JR
