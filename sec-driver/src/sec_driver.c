@@ -267,6 +267,7 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
         saved_job.out_packet = job->out_packet;
         saved_job.ua_handle = job->ua_handle;
         saved_job.sec_context = job->sec_context;
+        saved_job.job_status = job->job_status;
 
         // increment the consumer index for the current job ring
         job_ring->cidx = SEC_CIRCULAR_COUNTER(job_ring->cidx, SEC_JOB_RING_SIZE);
@@ -274,7 +275,7 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
 
         // packet is processed by SEC engine, notify it to UA
         sec_context = saved_job.sec_context;
-        status = SEC_STATUS_SUCCESS;
+        status = saved_job.job_status;
 
         // if context is retiring, set a suggestive status for the packets notified to UA
         if (sec_context->state == SEC_CONTEXT_RETIRING)
@@ -799,8 +800,8 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
     // the return code will be SEC_HFN_THRESHOLD_REACHED. 
     // We MUST return it from sec_process_packet() as well!!!
     ret = sec_pdcp_context_update_descriptor(sec_context, job, job->descr);
-    SEC_ASSERT(ret == SEC_SUCCESS || ret == SEC_HFN_THRESHOLD_REACHED,
-               ret, "sec_pdcp_context_update_descriptor returned error code %d", ret);
+    SEC_ASSERT(ret == SEC_SUCCESS, ret,
+               "sec_pdcp_context_update_descriptor returned error code %d", ret);
 
     // keep count of submitted packets for this sec context 
     CONTEXT_ADD_PACKET(sec_context);

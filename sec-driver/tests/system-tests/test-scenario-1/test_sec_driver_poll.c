@@ -52,30 +52,43 @@ extern "C" {
                                      LOCAL CONSTANTS
 ==================================================================================================*/
 
-/* IMPORTANT: Select one and only one algorithm at a time, from below */
+#define PDCP_TEST_SNOW_F8_ENC   0
+#define PDCP_TEST_SNOW_F8_DEC   1
+#define PDCP_TEST_SNOW_F9_ENC   2
+#define PDCP_TEST_SNOW_F9_DEC   3
+#define PDCP_TEST_AES_CTR_ENC   4
+#define PDCP_TEST_AES_CTR_DEC   5
+#define PDCP_TEST_AES_CMAC_ENC  6
+#define PDCP_TEST_AES_CMAC_DEC  7
 
-
+//////////////////////////////////////////////////////////////////////////
+// !!!!!!!!!!!!!!!!!       IMPORTANT !!!!!!!!!!!!!!!!
+//Select one and only one algorithm at a time, from below
+//////////////////////////////////////////////////////////////////////////
 
 // Ciphering
-//#define PDCP_TEST_SNOW_F8_ENC
+//#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F8_ENC
 // Deciphering
-//#define PDCP_TEST_SNOW_F8_DEC
+#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F8_DEC
 
 // Authentication
-//#define PDCP_TEST_SNOW_F9_ENC
+//#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F9_ENC
 // Authentication
-//#define PDCP_TEST_SNOW_F9_DEC
+//#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F9_DEC
 
 // Ciphering
-#define PDCP_TEST_AES_CTR_ENC
+//#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CTR_ENC
 // Deciphering
-//#define PDCP_TEST_AES_CTR_DEC
+//#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CTR_DEC
 
 // Authentication
-//#define PDCP_TEST_AES_CMAC_ENC
+//#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CMAC_ENC
 // Authentication
-//#define PDCP_TEST_AES_CMAC_DEC
+//#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CMAC_DEC
 
+
+// Length of PDCP header
+#define PDCP_HEADER_LENGTH 2
 
 // Number of SEC JRs used by this test application
 // @note: Currently this test application supports only 2 JRs (not less, not more)
@@ -330,9 +343,10 @@ static int no_of_used_pdcp_dl_contexts = 0;
 static thread_config_t th_config[THREADS_NUMBER];
 static pthread_t threads[THREADS_NUMBER];
 
-#ifdef PDCP_TEST_SNOW_F8_ENC
-
-#define PDCP_HEADER_LENGTH 2
+//////////////////////////////////////////////////////////////////////////////
+// PDCP_TEST_SNOW_F8_ENC
+//////////////////////////////////////////////////////////////////////////////
+#if PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F8_ENC
 static uint8_t snow_f8_enc_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
                                     0x4E,0xA5,0xF1,0x45,0x10,0x10,0xD8,0x52};
 // PDCP header
@@ -351,11 +365,15 @@ static uint8_t snow_f8_enc_bearer = 0x3;
 
 // Start HFN
 static uint32_t snow_f8_enc_hfn = 0xFA556;
-#endif
 
-#ifdef PDCP_TEST_SNOW_F8_DEC
+// HFN threshold
+static uint32_t snow_f8_enc_hfn_threshold = 0xFF000;
 
-#define PDCP_HEADER_LENGTH 2
+//////////////////////////////////////////////////////////////////////////////
+// PDCP_TEST_SNOW_F8_DEC
+//////////////////////////////////////////////////////////////////////////////
+#elif PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F8_DEC
+
 static uint8_t snow_f8_dec_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
                                     0x4E,0xA5,0xF1,0x45,0x10,0x10,0xD8,0x52};
 // PDCP header
@@ -373,10 +391,15 @@ static uint8_t snow_f8_dec_bearer = 0x3;
 
 // Start HFN
 static uint32_t snow_f8_dec_hfn = 0xFA556;
-#endif
 
-#ifdef PDCP_TEST_AES_CTR_ENC
-#define PDCP_HEADER_LENGTH 2
+// HFN threshold
+static uint32_t snow_f8_dec_hfn_threshold = 0xFF000;
+
+//////////////////////////////////////////////////////////////////////////////
+// PDCP_TEST_AES_CTR_ENC
+//////////////////////////////////////////////////////////////////////////////
+#elif PDCP_TEST_SCENARIO == PDCP_TEST_AES_CTR_ENC
+
 static uint8_t aes_ctr_enc_key[] = {0xd3, 0xc5, 0xd5, 0x92, 0x32, 0x7f, 0xb1, 0x1c,
                                     0x40, 0x35, 0xc6, 0x68, 0x0a, 0xf8, 0xc6, 0xd1};
 
@@ -400,10 +423,14 @@ static uint8_t aes_ctr_enc_bearer = 0x15;
 // Start HFN
 static uint32_t aes_ctr_enc_hfn = 0x398A5;
 
-#endif
+// HFN threshold
+static uint32_t aes_ctr_enc_hfn_threshold = 0xFF000;
 
-#ifdef PDCP_TEST_AES_CTR_DEC
-#define PDCP_HEADER_LENGTH 2
+//////////////////////////////////////////////////////////////////////////////
+// PDCP_TEST_AES_CTR_DEC
+//////////////////////////////////////////////////////////////////////////////
+#elif PDCP_TEST_SCENARIO == PDCP_TEST_AES_CTR_DEC
+
 static uint8_t aes_ctr_dec_key[] = {0xd3, 0xc5, 0xd5, 0x92, 0x32, 0x7f, 0xb1, 0x1c,
                                     0x40, 0x35, 0xc6, 0x68, 0x0a, 0xf8, 0xc6, 0xd1};
 
@@ -427,6 +454,96 @@ static uint8_t aes_ctr_dec_bearer = 0x15;
 // Start HFN
 static uint32_t aes_ctr_dec_hfn = 0x398A5;
 
+// HFN threshold
+static uint32_t aes_ctr_dec_hfn_threshold = 0xFF000;
+#else
+#error "Unsuported test scenario!"
+#endif
+
+
+//////////////////////////////////////////////////////////////////////////////
+// PDCP_TEST_SNOW_F8_ENC
+//////////////////////////////////////////////////////////////////////////////
+#if PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F8_ENC
+
+
+#define test_crypto_key         snow_f8_enc_key
+#define test_crypto_key_len     sizeof(snow_f8_enc_key)
+
+#define test_data_in            snow_f8_enc_data_in
+#define test_data_out           snow_f8_enc_data_out
+
+#define test_pdcp_hdr           snow_f8_enc_pdcp_hdr
+#define test_bearer             snow_f8_enc_bearer
+#define test_sn_size            SEC_PDCP_SN_SIZE_12
+#define test_user_plane         PDCP_DATA_PLANE
+#define test_packet_direction   PDCP_DOWNLINK
+#define test_algorithm          SEC_ALG_SNOW
+#define test_hfn                snow_f8_enc_hfn
+#define test_hfn_threshold      snow_f8_enc_hfn_threshold
+
+//////////////////////////////////////////////////////////////////////////////
+// PDCP_TEST_SNOW_F8_DEC
+//////////////////////////////////////////////////////////////////////////////
+#elif PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F8_DEC
+
+#define test_crypto_key         snow_f8_dec_key
+#define test_crypto_key_len     sizeof(snow_f8_dec_key)
+
+#define test_data_in            snow_f8_dec_data_in
+#define test_data_out           snow_f8_dec_data_out
+
+#define test_pdcp_hdr           snow_f8_dec_pdcp_hdr
+#define test_bearer             snow_f8_dec_bearer
+#define test_sn_size            SEC_PDCP_SN_SIZE_12
+#define test_user_plane         PDCP_DATA_PLANE
+#define test_packet_direction   PDCP_UPLINK
+#define test_algorithm          SEC_ALG_SNOW
+#define test_hfn                snow_f8_dec_hfn
+#define test_hfn_threshold      snow_f8_dec_hfn_threshold
+
+//////////////////////////////////////////////////////////////////////////////
+// PDCP_TEST_AES_CTR_ENC
+//////////////////////////////////////////////////////////////////////////////
+#elif PDCP_TEST_SCENARIO == PDCP_TEST_AES_CTR_ENC
+
+#define test_crypto_key         aes_ctr_enc_key
+#define test_crypto_key_len     sizeof(aes_ctr_enc_key)
+
+#define test_data_in            aes_ctr_enc_data_in
+#define test_data_out           aes_ctr_enc_data_out
+
+#define test_pdcp_hdr           aes_ctr_enc_pdcp_hdr
+#define test_bearer             aes_ctr_enc_bearer
+#define test_sn_size            SEC_PDCP_SN_SIZE_12
+#define test_user_plane         PDCP_DATA_PLANE
+#define test_packet_direction   PDCP_DOWNLINK
+#define test_algorithm          SEC_ALG_AES
+#define test_hfn                aes_ctr_enc_hfn
+#define test_hfn_threshold      aes_ctr_enc_hfn_threshold
+
+//////////////////////////////////////////////////////////////////////////////
+// PDCP_TEST_AES_CTR_DEC
+//////////////////////////////////////////////////////////////////////////////
+#elif PDCP_TEST_SCENARIO == PDCP_TEST_AES_CTR_DEC
+
+#define test_crypto_key         aes_ctr_dec_key
+#define test_crypto_key_len     sizeof(aes_ctr_dec_key)
+
+#define test_data_in            aes_ctr_dec_data_in
+#define test_data_out           aes_ctr_dec_data_out
+
+#define test_pdcp_hdr           aes_ctr_dec_pdcp_hdr
+#define test_bearer             aes_ctr_dec_bearer
+#define test_sn_size            SEC_PDCP_SN_SIZE_12
+#define test_user_plane         PDCP_DATA_PLANE
+#define test_packet_direction   PDCP_UPLINK
+#define test_algorithm          SEC_ALG_AES
+#define test_hfn                aes_ctr_dec_hfn
+#define test_hfn_threshold      aes_ctr_dec_hfn_threshold
+
+#else
+#error "Unsuported test scenario!"
 #endif
 /*==================================================================================================
                                      LOCAL FUNCTIONS
@@ -562,7 +679,7 @@ static int release_pdcp_buffers(pdcp_context_t * pdcp_context,
     else
     {
         // the stub implementation does not return an error status
-        assert(status == SEC_STATUS_SUCCESS);
+        assert(status == SEC_STATUS_SUCCESS || status == SEC_STATUS_HFN_THRESHOLD_REACHED);
         if (pdcp_context->usage == PDCP_CONTEXT_MARKED_FOR_DELETION &&
             pdcp_context->no_of_buffers_processed == pdcp_context->no_of_buffers_to_process)
         {
@@ -601,49 +718,14 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
     out_packet->offset = pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].offset;
     out_packet->scatter_gather = SEC_CONTIGUOUS_BUFFER;
 
-#ifdef PDCP_TEST_SNOW_F8_ENC
     // copy PDCP header
-    memcpy(in_packet->address + in_packet->offset, snow_f8_enc_pdcp_hdr, sizeof(snow_f8_enc_pdcp_hdr));
+    memcpy(in_packet->address + in_packet->offset, test_pdcp_hdr, sizeof(test_pdcp_hdr));
     // copy input data
     memcpy(in_packet->address + in_packet->offset + PDCP_HEADER_LENGTH,
-           snow_f8_enc_data_in,
-           sizeof(snow_f8_enc_data_in));
-    in_packet->length = sizeof(snow_f8_enc_data_in) + PDCP_HEADER_LENGTH + in_packet->offset;
-    out_packet->length = sizeof(snow_f8_enc_data_in) + PDCP_HEADER_LENGTH + out_packet->offset;
-#endif
-
-#ifdef PDCP_TEST_SNOW_F8_DEC
-    // copy PDCP header
-    memcpy(in_packet->address + in_packet->offset, snow_f8_dec_pdcp_hdr, sizeof(snow_f8_dec_pdcp_hdr));
-    // copy input data
-    memcpy(in_packet->address + in_packet->offset + PDCP_HEADER_LENGTH,
-           snow_f8_dec_data_in,
-           sizeof(snow_f8_dec_data_in));
-    in_packet->length = sizeof(snow_f8_dec_data_in) + PDCP_HEADER_LENGTH + in_packet->offset;
-    out_packet->length = sizeof(snow_f8_dec_data_in) + PDCP_HEADER_LENGTH + out_packet->offset;
-#endif
-
-#ifdef PDCP_TEST_AES_CTR_ENC
-    // copy PDCP header
-    memcpy(in_packet->address + in_packet->offset, aes_ctr_enc_pdcp_hdr, sizeof(aes_ctr_enc_pdcp_hdr));
-    // copy input data
-    memcpy(in_packet->address + in_packet->offset + PDCP_HEADER_LENGTH,
-           aes_ctr_enc_data_in,
-           sizeof(aes_ctr_enc_data_in));
-    in_packet->length = sizeof(aes_ctr_enc_data_in) + PDCP_HEADER_LENGTH + in_packet->offset;
-    out_packet->length = sizeof(aes_ctr_enc_data_in) + PDCP_HEADER_LENGTH + out_packet->offset;
-#endif
-
-#ifdef PDCP_TEST_AES_CTR_DEC
-    // copy PDCP header
-    memcpy(in_packet->address + in_packet->offset, aes_ctr_dec_pdcp_hdr, sizeof(aes_ctr_dec_pdcp_hdr));
-    // copy input data
-    memcpy(in_packet->address + in_packet->offset + PDCP_HEADER_LENGTH,
-           aes_ctr_dec_data_in,
-           sizeof(aes_ctr_dec_data_in));
-    in_packet->length = sizeof(aes_ctr_dec_data_in) + PDCP_HEADER_LENGTH + in_packet->offset;
-    out_packet->length = sizeof(aes_ctr_dec_data_in) + PDCP_HEADER_LENGTH + out_packet->offset;
-#endif
+           test_data_in,
+           sizeof(test_data_in));
+    in_packet->length = sizeof(test_data_in) + PDCP_HEADER_LENGTH + in_packet->offset;
+    out_packet->length = sizeof(test_data_in) + PDCP_HEADER_LENGTH + out_packet->offset;
     pdcp_context->no_of_used_buffers++;
 
     return 0;
@@ -666,6 +748,11 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
 
     // the stub implementation for SEC driver never returns a status error
     assert(status != SEC_STATUS_ERROR);
+    // TODO: test if status is SEC_STATUS_HFN_THRESHOLD_REACHED
+    if(status == SEC_STATUS_HFN_THRESHOLD_REACHED)
+    {
+        printf("HFN threshold reached for packet\n");
+    }
 
     pdcp_context = (pdcp_context_t *)ua_ctx_handle;
 
@@ -678,49 +765,14 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
             pdcp_context->no_of_buffers_to_process,
             status);
 
-
-#ifdef PDCP_TEST_SNOW_F8_ENC
-    assert(out_packet->length == sizeof(snow_f8_enc_data_out) + PDCP_HEADER_LENGTH);
-    assert(in_packet->length == sizeof(snow_f8_enc_data_in) + PDCP_HEADER_LENGTH);
+    assert(out_packet->length == sizeof(test_data_out) + PDCP_HEADER_LENGTH);
+    assert(in_packet->length == sizeof(test_data_in) + PDCP_HEADER_LENGTH);
     test_failed = (0 != memcmp(out_packet->address + out_packet->offset,
-                               snow_f8_enc_pdcp_hdr,
+                               test_pdcp_hdr,
                                PDCP_HEADER_LENGTH) ||
                    0 != memcmp(out_packet->address + out_packet->offset + PDCP_HEADER_LENGTH,
-                               snow_f8_enc_data_out,
-                               sizeof(snow_f8_enc_data_out)));
-#endif
-
-#ifdef PDCP_TEST_SNOW_F8_DEC
-    assert(out_packet->length == sizeof(snow_f8_dec_data_out) + PDCP_HEADER_LENGTH);
-    assert(in_packet->length == sizeof(snow_f8_dec_data_in) + PDCP_HEADER_LENGTH);
-    test_failed = (0 != memcmp(out_packet->address + out_packet->offset,
-                               snow_f8_dec_pdcp_hdr,
-                               PDCP_HEADER_LENGTH) ||
-                   0 != memcmp(out_packet->address + out_packet->offset + PDCP_HEADER_LENGTH,
-                               snow_f8_dec_data_out,
-                               sizeof(snow_f8_dec_data_out)));
-#endif
-
-#ifdef PDCP_TEST_AES_CTR_ENC
-    assert(out_packet->length == sizeof(aes_ctr_enc_data_out) + PDCP_HEADER_LENGTH);
-    assert(in_packet->length == sizeof(aes_ctr_enc_data_in) + PDCP_HEADER_LENGTH);
-    test_failed = (0 != memcmp(out_packet->address + out_packet->offset,
-                               aes_ctr_enc_pdcp_hdr,
-                               PDCP_HEADER_LENGTH) ||
-                   0 != memcmp(out_packet->address + out_packet->offset + PDCP_HEADER_LENGTH,
-                               aes_ctr_enc_data_out,
-                               sizeof(aes_ctr_enc_data_out)));
-#endif
-#ifdef PDCP_TEST_AES_CTR_DEC
-    assert(out_packet->length == sizeof(aes_ctr_dec_data_out) + PDCP_HEADER_LENGTH);
-    assert(in_packet->length == sizeof(aes_ctr_dec_data_in) + PDCP_HEADER_LENGTH);
-    test_failed = (0 != memcmp(out_packet->address + out_packet->offset,
-                               aes_ctr_dec_pdcp_hdr,
-                               PDCP_HEADER_LENGTH) ||
-                   0 != memcmp(out_packet->address + out_packet->offset + PDCP_HEADER_LENGTH,
-                               aes_ctr_dec_data_out,
-                               sizeof(aes_ctr_dec_data_out)));
-#endif
+                               test_data_out,
+                               sizeof(test_data_out)));
     if(test_failed)
     {
         printf("\nthread #%d:consumer: out packet INCORRECT!!!."
@@ -989,48 +1041,16 @@ static void* pdcp_thread_routine(void* config)
 
         printf("thread #%d:producer: create pdcp context %d\n", th_config_local->tid, pdcp_context->id);
         pdcp_context->pdcp_ctx_cfg_data.notify_packet = &pdcp_ready_packet_handler;
-#ifdef PDCP_TEST_SNOW_F8_ENC
-        pdcp_context->pdcp_ctx_cfg_data.sn_size = SEC_PDCP_SN_SIZE_12;
-        pdcp_context->pdcp_ctx_cfg_data.bearer = snow_f8_enc_bearer;
-        pdcp_context->pdcp_ctx_cfg_data.user_plane = PDCP_DATA_PLANE;
-        pdcp_context->pdcp_ctx_cfg_data.packet_direction = PDCP_DOWNLINK;
-        pdcp_context->pdcp_ctx_cfg_data.algorithm = SEC_ALG_SNOW;
-        pdcp_context->pdcp_ctx_cfg_data.hfn = snow_f8_enc_hfn;
-        pdcp_context->pdcp_ctx_cfg_data.cipher_key = snow_f8_enc_key;
-        pdcp_context->pdcp_ctx_cfg_data.cipher_key_len = sizeof(snow_f8_enc_key);
-#endif
+        pdcp_context->pdcp_ctx_cfg_data.sn_size = test_sn_size;
+        pdcp_context->pdcp_ctx_cfg_data.bearer = test_bearer;
+        pdcp_context->pdcp_ctx_cfg_data.user_plane = test_user_plane;
+        pdcp_context->pdcp_ctx_cfg_data.packet_direction = test_packet_direction;
+        pdcp_context->pdcp_ctx_cfg_data.algorithm = test_algorithm;
+        pdcp_context->pdcp_ctx_cfg_data.hfn = test_hfn;
+        pdcp_context->pdcp_ctx_cfg_data.hfn_threshold = test_hfn_threshold;
+        pdcp_context->pdcp_ctx_cfg_data.cipher_key = test_crypto_key;
+        pdcp_context->pdcp_ctx_cfg_data.cipher_key_len = test_crypto_key_len;
 
-#ifdef PDCP_TEST_SNOW_F8_DEC
-        pdcp_context->pdcp_ctx_cfg_data.sn_size = SEC_PDCP_SN_SIZE_12;
-        pdcp_context->pdcp_ctx_cfg_data.bearer = snow_f8_dec_bearer;
-        pdcp_context->pdcp_ctx_cfg_data.user_plane = PDCP_DATA_PLANE;
-        pdcp_context->pdcp_ctx_cfg_data.packet_direction = PDCP_UPLINK;
-        pdcp_context->pdcp_ctx_cfg_data.algorithm = SEC_ALG_SNOW;
-        pdcp_context->pdcp_ctx_cfg_data.hfn = snow_f8_dec_hfn;
-        pdcp_context->pdcp_ctx_cfg_data.cipher_key = snow_f8_dec_key;
-        pdcp_context->pdcp_ctx_cfg_data.cipher_key_len = sizeof(snow_f8_dec_key);
-#endif
-
-#ifdef PDCP_TEST_AES_CTR_ENC
-        pdcp_context->pdcp_ctx_cfg_data.sn_size = SEC_PDCP_SN_SIZE_12;
-        pdcp_context->pdcp_ctx_cfg_data.bearer = aes_ctr_enc_bearer;
-        pdcp_context->pdcp_ctx_cfg_data.user_plane = PDCP_DATA_PLANE;
-        pdcp_context->pdcp_ctx_cfg_data.packet_direction = PDCP_DOWNLINK;
-        pdcp_context->pdcp_ctx_cfg_data.algorithm = SEC_ALG_AES;
-        pdcp_context->pdcp_ctx_cfg_data.hfn = aes_ctr_enc_hfn;
-        pdcp_context->pdcp_ctx_cfg_data.cipher_key = aes_ctr_enc_key;
-        pdcp_context->pdcp_ctx_cfg_data.cipher_key_len = sizeof(aes_ctr_enc_key);
-#endif
-#ifdef PDCP_TEST_AES_CTR_DEC
-        pdcp_context->pdcp_ctx_cfg_data.sn_size = SEC_PDCP_SN_SIZE_12;
-        pdcp_context->pdcp_ctx_cfg_data.bearer = aes_ctr_dec_bearer;
-        pdcp_context->pdcp_ctx_cfg_data.user_plane = PDCP_DATA_PLANE;
-        pdcp_context->pdcp_ctx_cfg_data.packet_direction = PDCP_UPLINK;
-        pdcp_context->pdcp_ctx_cfg_data.algorithm = SEC_ALG_AES;
-        pdcp_context->pdcp_ctx_cfg_data.hfn = aes_ctr_dec_hfn;
-        pdcp_context->pdcp_ctx_cfg_data.cipher_key = aes_ctr_dec_key;
-        pdcp_context->pdcp_ctx_cfg_data.cipher_key_len = sizeof(aes_ctr_dec_key);
-#endif
         // TODO: set auth key for control plane SNOW/AES;
 
         pdcp_context->thread_id = th_config_local->tid;
@@ -1057,7 +1077,6 @@ static void* pdcp_thread_routine(void* config)
         {
             // if SEC process packet returns that the producer JR is full, do some polling
             // on the consumer JR until the producer JR has free entries.
-            // TODO: test if sec_process_packet returns SEC_HFN_THRESHOLD_REACHED
             while (sec_process_packet(pdcp_context->sec_ctx,
                                      &in_packet,
                                      &out_packet,

@@ -214,17 +214,20 @@ int sec_pdcp_context_update_snow_f8_aes_ctr_descriptor(sec_job_t *job, sec_descr
  *  - D/C bit extracted from PDCP header
  *  - HFN is incremented if SN rolls over
  *
+ * If HFN reached the threshold configured for the SEC context this PDB belongs to,
+ * once processed, the packet will be notified to User App with a status of
+ * #SEC_STATUS_HFN_THRESHOLD_REACHED.
+ * It is not error, but an indication to User App that crypto keys must be renegotiated.
+ *
  * @param [in,out] job          SEC job
  * @param [in,out] descriptor   SEC descriptor
- *
- * @retval SEC_SUCCESS                  for success      
- * @retval SEC_HFN_THRESHOLD_REACHED    if HFN reached the threshold configured for 
- *                                      the SEC context this PDB, IV, packet belong to.
- *                                      It is not error, but an indication to User App that
- *                                      crypto keys must be renegotiated.
- * @retval other for error
+ * @param [in,out] status       SEC job status to be notified to User Application.
+ *                              Can be #SEC_STATUS_SUCCESS or #SEC_STATUS_HFN_THRESHOLD_REACHED.
  */
-int sec_pdcp_update_iv(uint32_t iv[], sec_crypto_pdb_t *sec_pdb, uint8_t *pdcp_header);
+void sec_pdcp_update_iv(uint32_t iv[],
+                        sec_crypto_pdb_t *sec_pdb,
+                        uint8_t *pdcp_header,
+                        sec_status_t *status);
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
@@ -438,9 +441,10 @@ int sec_pdcp_context_update_snow_f8_aes_ctr_descriptor(sec_job_t *job, sec_descr
     descriptor->ptr[1].eptr = PHYS_ADDR_HI(phys_addr);
 #endif
     // update IV based on SN
-    ret = sec_pdcp_update_iv(descriptor->iv,
-                             sec_pdb,
-                             job->in_packet->address + job->in_packet->offset); // PDCP header pointer
+    sec_pdcp_update_iv(descriptor->iv,
+                       sec_pdb,
+                       job->in_packet->address + job->in_packet->offset, // PDCP header pointer
+                       &job->job_status);
     // set pointer to IV
     descriptor->ptr[1].ptr = PHYS_ADDR_LO(phys_addr);
 
@@ -512,11 +516,11 @@ int sec_pdcp_context_update_snow_f8_aes_ctr_descriptor(sec_job_t *job, sec_descr
     return ret;
 }
 
-int sec_pdcp_update_iv(uint32_t iv[],
-                       sec_crypto_pdb_t *sec_pdb,
-                       uint8_t *pdcp_header)
+void sec_pdcp_update_iv(uint32_t iv[],
+                        sec_crypto_pdb_t *sec_pdb,
+                        uint8_t *pdcp_header,
+                        sec_status_t *status)
 {
-    int ret = SEC_SUCCESS;
     uint16_t seq_no = 0;
     uint16_t last_sn = 0;
     uint16_t max_sn = 0;
@@ -546,8 +550,8 @@ int sec_pdcp_update_iv(uint32_t iv[],
     }
 
     // check if HFN reached threshold
-    ret = ((sec_pdb->iv_template[0] & sec_pdb->hfn_mask) >= sec_pdb->hfn_threshold) ? 
-          SEC_HFN_THRESHOLD_REACHED : SEC_SUCCESS;
+    *status = ((sec_pdb->iv_template[0] & sec_pdb->hfn_mask) >= sec_pdb->hfn_threshold) ? 
+               SEC_STATUS_HFN_THRESHOLD_REACHED : SEC_STATUS_SUCCESS;
 
     // extract D/C bit from PDCP header
     data_control_bit = PDCP_HEADER_GET_D_C(pdcp_header);
@@ -559,8 +563,6 @@ int sec_pdcp_update_iv(uint32_t iv[],
 
     iv[0] = sec_pdb->iv_template[0];
     iv[1] = sec_pdb->iv_template[1];
-
-    return ret;
 }
 /*==================================================================================================
                                      GLOBAL FUNCTIONS

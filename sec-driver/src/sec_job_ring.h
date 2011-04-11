@@ -77,6 +77,9 @@ struct sec_job_t
     const sec_packet_t *in_packet;      /*< Input packet */
     const sec_packet_t *out_packet;     /*< Output packet */
     ua_context_handle_t ua_handle;      /*< UA handle for the context this packet belongs to */
+    sec_status_t job_status;            /*< Processing status for the packet indicated by this job.
+                                            Is required for indication that HFN reached threshold.
+                                            TODO: remove this field when migrating on 9132!*/
 }__CACHELINE_ALIGNED;
 
 
