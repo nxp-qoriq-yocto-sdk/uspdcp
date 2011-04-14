@@ -239,7 +239,7 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
         // get the first un-notified job from the job ring
         job = &job_ring->jobs[job_ring->cidx];
 
-        // check if  job is DONE
+        // check if job is DONE
         if(!hw_job_is_done(job->descr))
         {
             // check if job generated error
@@ -252,6 +252,9 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
                           job_ring->jr_id);
                 // TODO: flush jobs from JR, with error code set to callback
                 return SEC_INVALID_INPUT_PARAM;
+            }
+            else if(/*c-plane packet first step processed, needs second step process*/1)
+            {
             }
             else
             {

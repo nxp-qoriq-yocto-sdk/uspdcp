@@ -63,6 +63,10 @@ extern "C"{
  * Value assigned to packet_direction from ::sec_pdcp_context_info_t */
 #define PDCP_DOWNLINK   1
 
+/** Indicates a PDCP context that will encapsulate (encrypt) packets */
+#define PDCP_ENCAPSULATION   0
+/** Indicates a PDCP context that will decapsulate (decrypt) packets */
+#define PDCP_DECAPSULATION   1
 /*==================================================================================================
                                              ENUMS
 ==================================================================================================*/
@@ -238,14 +242,16 @@ typedef struct sec_pdcp_context_info_s
     uint8_t     user_plane:1;           /*< Control plane versus Data plane indication.
                                             Possible values: #PDCP_DATA_PLANE, #PDCP_CONTROL_PLANE. */
     uint8_t     packet_direction:1;     /*< Direction can be uplink(#PDCP_UPLINK) or downlink(#PDCP_DOWNLINK). */
-    uint8_t     protocol_direction:1;   /*< Encryption/Description indication TODO: confirm this!!! */
+    uint8_t     protocol_direction:1;   /*< Can be encapsulation(#PDCP_ENCAPSULATION) or decapsulation(#PDCP_DECAPSULATION)*/
     uint8_t     algorithm;              /*< Cryptographic algorithm used: SNOW/AES.
                                             Can have values from ::sec_crypto_alg_t enum. */
     uint32_t    hfn;                    /*< HFN for this radio bearer. Represents the most significant bits from sequence number. */
     uint32_t    hfn_threshold;          /*< HFN threshold for this radio bearer. If HFN matches or exceeds threshold,
                                             sec_out_cbk will  be called with status #SEC_STATUS_HFN_THRESHOLD_REACHED. */
+    // TODO: eliminate a memcpy in driver if crypto/auth keys are provided by UA as DMA-capable memory!
     uint8_t    *cipher_key;             /*< Ciphering key. */
     uint8_t    cipher_key_len;          /*< Ciphering key length. */
+    // TODO: eliminate a memcpy in driver if crypto/auth keys are provided by UA as DMA-capable memory!
     uint8_t    *integrity_key;          /*< Integrity key. */
     uint8_t    integrity_key_len;       /*< Integrity key length. */
     void        *custom;                /*< User Application custom data for this PDCP context. Usage to be defined. */

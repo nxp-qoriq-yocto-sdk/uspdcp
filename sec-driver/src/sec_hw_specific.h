@@ -43,14 +43,19 @@
                               DEFINES AND MACROS
 ==============================================================================*/
 
-/** Maximum length in bytes for IV(Initialization Vector) */
-#define SEC_IV_MAX_LENGTH  24
+/** Maximum length in words (4 bytes)  for IV(Initialization Vector)
+ * In the same memory location we keep F8 IV followed by F9 IV.
+ * On 9132...24 bytes are enough to hold them both.
+ * However, on P2020, the IV for F9 is required to be 24 bytes long.
+ *
+ * TODO: change length to 6 when migrating on 9132 */
+#define SEC_IV_MAX_LENGTH          8
 
-/** Maximum length in bytes for cryptographic key */
-#define SEC_CRYPTO_KEY_MAX_LENGTH  32
+/** Maximum length in words (4 bytes) for cryptographic key */
+#define SEC_CRYPTO_KEY_MAX_LENGTH  8
 
-/** Maximum length in bytes for authentication key */
-#define SEC_AUTH_KEY_MAX_LENGTH    32
+/** Maximum length in words (4 bytes) for authentication key */
+#define SEC_AUTH_KEY_MAX_LENGTH    8
 
 
 /*****************************************************************
@@ -143,6 +148,8 @@
 #define SEC_REG_VAL_CCCR_LO_CDWE    0x10
 /* Enable done IRQ */
 #define SEC_REG_VAL_CCCR_LO_CDIE    0x2
+/* Enable ICV writeback if descriptor configured for ICV */
+#define SEC_REG_VAL_CCCR_LO_IWSE    0x80
 
 /*****************************************************************
  * FFER(Fetch Fifo Enqueue Register) offset
@@ -216,11 +223,17 @@
  *****************************************************************/
 
 /**  Select STEU execution unit, the one implementing SNOW 3G */
-#define SEC_DESC_HDR_EU_SEL0_STEU   0x90000000
+#define SEC_DESC_HDR_EU_SEL0_STEU       0x90000000
 /** Mode data used to program STEU execution unit for F8 processing */
-#define SEC_DESC_HDR_MODE0_STEU_F8  0x00900000
+#define SEC_DESC_HDR_MODE0_STEU_F8      0x00900000
+/** Mode data used to program STEU execution unit for F9 processing,
+ *  no MAC-I check */
+#define SEC_DESC_HDR_MODE0_STEU_F9      0x01a00000
+/** Mode data used to program STEU execution unit for F9 processing,
+ *  with MAC-I check */
+#define SEC_DESC_HDR_MODE0_STEU_F9_ICV  0x05a00000
 /** Select SNOW 3G descriptor type = common_nonsnoop */
-#define SEC_DESC_HDR_DESC_TYPE_STEU 0x00000010
+#define SEC_DESC_HDR_DESC_TYPE_STEU     0x00000010
 
 /*****************************************************************
  * AES descriptor configuration

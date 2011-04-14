@@ -202,6 +202,7 @@
 // function defined in compat.h from dma_mem library.
 #define REMOTE_IN_OUT_BE32
 
+
 /*==============================================================================
                                     ENUMS
 ==============================================================================*/
@@ -232,6 +233,14 @@ static inline void out_be32(volatile uint32_t *addr, uint32_t val) {
 /** Read 32bit values */
 static inline uint32_t in_be32(const volatile uint32_t *addr) {
 	return *addr;
+}
+
+/** Utility routine to grab the cycle counter by reading ATB (Alternate Time Base) register. */
+static inline int mfatbl(void)
+{
+    int retval;
+    asm volatile ("mfspr %0,526" : "=r"(retval));
+    return retval;
 }
 /*============================================================================*/
 

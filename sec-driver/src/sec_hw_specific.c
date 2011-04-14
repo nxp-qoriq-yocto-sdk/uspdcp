@@ -105,9 +105,12 @@ int hw_reset_job_ring(sec_job_ring_t *job_ring)
     reg_val |= SEC_REG_VAL_CCCR_LO_CDIE;
 #endif
 
+    // Enable integrity check if configured in descriptors.
+    // Required for PDCP control plane processing.
+    reg_val |= SEC_REG_VAL_CCCR_LO_IWSE;
+
     setbits32(job_ring->register_base_addr + SEC_REG_CCCR_LO(job_ring), reg_val);
 
-    // TODO: integrity check required for PDCP processing ?
     return 0;
 }
 

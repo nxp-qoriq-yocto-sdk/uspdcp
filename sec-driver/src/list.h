@@ -82,7 +82,7 @@ struct list_s;
  * */
 typedef uint8_t (*is_empty_func)(struct list_s * list);
 
-/** @brief Add a note to the tail of the list.
+/** @brief Add a node to the tail of the list.
  *
  * @param [in] list              Pointer to the list.
  * @param [in] node              Pointer to the node that must be added to the list.

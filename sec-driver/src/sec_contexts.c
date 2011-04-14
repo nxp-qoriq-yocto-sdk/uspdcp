@@ -202,6 +202,7 @@ static void free_in_use_context(sec_contexts_pool_t * pool, sec_context_t * ctx)
     ctx->crypto_desc_pdb.keys = save_keys;
 
     // add context to free list
+    // TODO: maybe add new context to head -> better chance for a cache hit if same element is reused next
     pool->free_list.add_tail(&pool->free_list, &ctx->node);
 }
 
@@ -263,6 +264,7 @@ static void run_contexts_garbage_colector(sec_contexts_pool_t * pool)
 
     if (deleted_nodes.is_empty(&deleted_nodes) == 0)
     {
+        // TODO: maybe add new context to head -> better chance for a cache hit if same element is reused next
         pool->free_list.attach_list_to_tail(&pool->free_list, &deleted_nodes);
     }
 
