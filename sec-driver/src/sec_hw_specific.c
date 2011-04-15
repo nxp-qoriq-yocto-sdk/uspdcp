@@ -111,6 +111,13 @@ int hw_reset_job_ring(sec_job_ring_t *job_ring)
 
     setbits32(job_ring->register_base_addr + SEC_REG_CCCR_LO(job_ring), reg_val);
 
+    // Disable Integrity check error interrupt in STEU, the execution
+    // unit that performs SNOW F9.
+    reg_val = SEC_REG_STEU_IMR_DISABLE_ICE; 
+    setbits32(job_ring->register_base_addr + SEC_REG_STEU_IMR_LO, reg_val);
+
+    // TODO: disable ICV error in AESU?
+
     return 0;
 }
 

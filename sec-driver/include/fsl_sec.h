@@ -262,7 +262,9 @@ typedef struct sec_pdcp_context_info_s
 /** Configuration data structure that must be provided by UA when SEC user space driver is initialized */
 typedef struct sec_config_s
 {
-    void            *memory_area;
+    void            *memory_area;           /*< UA provided- virtual memory of size #SEC_DMA_MEMORY_SIZE to be used internally 
+                                                by the driver to allocate data (like SEC descriptors) that needs to be passed to
+                                                SEC device in physical addressing. */
     uint32_t        irq_coalescing_timer;   /*< Interrupt Coalescing Timer Threshold.
                                                 @note Applicable to SEC 4.4 only!
 

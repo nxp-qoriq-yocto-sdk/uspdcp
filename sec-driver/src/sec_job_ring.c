@@ -123,6 +123,11 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
     job_ring->descriptors = *dma_mem;
     memset(job_ring->descriptors, 0, SEC_JOB_RING_SIZE * sizeof(struct sec_descriptor_t));
     *dma_mem += SEC_JOB_RING_SIZE * sizeof(struct sec_descriptor_t);
+    // TODO: check that we do not use more DMA mem than actually allocated/reserved for us by User App.
+    // Options: 
+    // - check if used more than #SEC_DMA_MEMORY_SIZE and/or
+    // - implement wrapper functions that access dma_mem and maintain/increment size of dma mem used -> central point of
+    // accessing dma mem -> central point of check for boundary issues!
 
     for(i = 0; i < SEC_JOB_RING_SIZE; i++)
     {

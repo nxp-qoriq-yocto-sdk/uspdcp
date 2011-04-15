@@ -43,13 +43,12 @@
                               DEFINES AND MACROS
 ==============================================================================*/
 
-/** Maximum length in words (4 bytes)  for IV(Initialization Vector)
- * In the same memory location we keep F8 IV followed by F9 IV.
- * On 9132...24 bytes are enough to hold them both.
- * However, on P2020, the IV for F9 is required to be 24 bytes long.
- *
- * TODO: change length to 6 when migrating on 9132 */
-#define SEC_IV_MAX_LENGTH          8
+/** Maximum length in words (4 bytes)  for IV(Initialization Vector) */
+#define SEC_IV_MAX_LENGTH          6
+
+/** Maximum length in words (4 bytes)  for IV (Initialization Vector) template.
+ * Stores F8 IV followed by F9 IV. */
+#define SEC_IV_TEMPLATE_MAX_LENGTH 8
 
 /** Maximum length in words (4 bytes) for cryptographic key */
 #define SEC_CRYPTO_KEY_MAX_LENGTH  8
@@ -205,13 +204,45 @@
 
 
 /*****************************************************************
+ * STEU IMR (Interrupt Mask Register) offset.
+ * STEU is execution unit implementing SNOW F8 and F9.
+ *****************************************************************/
+
+/**  Offset to higher 32 bits of STEU IMR */
+#define SEC_REG_STEU_IMR      0xD038
+/**  Offset to lower 32 bits of STEU IMR */
+#define SEC_REG_STEU_IMR_LO   0xD03C
+
+/*****************************************************************
+ * STEU IMR (Interrupt Mask Register) values
+ * STEU is execution unit implementing SNOW F8 and F9.
+ *****************************************************************/
+
+/** Disable integrity check error interrupt in STEU */
+#define SEC_REG_STEU_IMR_DISABLE_ICE    0x4000
+
+
+/*****************************************************************
  * Descriptor format: Header Dword values
  *****************************************************************/
 
-/** Written back when packet processing is done */
+/** Written back when packet processing is done,
+ * in lower 32 bits of Descriptor header */
 #define SEC_DESC_HDR_DONE           0xff000000
 /** Request done notification (DN) per descriptor */
 #define SEC_DESC_HDR_DONE_NOTIFY    0x00000001
+
+/** Mask used to extract ICCR0 result from lower 32 bits of Descriptor header.
+ * ICCR0 indicates result for integrity check performed by primary execution unit.
+ * ICCR1 does the same for secondary execution unit.
+ * Only ICCR0 used by driver. */
+#define SEC_DESC_HDR_ICCR0_MASK     0x18000000
+/** Written back when MAC-I check passed for packet,
+ * in lower 32 bits of Descriptor header */
+#define SEC_DESC_HDR_ICCR0_PASS     0x08000000
+/** Written back when MAC-I check failed for packet,
+ * in lower 32 bits of Descriptor header */
+#define SEC_DESC_HDR_ICCR0_FAIL     0x10000000
 
 /** Determines the processing type. Outbound means encrypting packets */
 #define SEC_DESC_HDR_DIR_OUTBOUND   0x00000000
@@ -240,10 +271,16 @@
  *****************************************************************/
 
 /**  Select STEU execution unit, the one implementing AES */
-#define SEC_DESC_HDR_EU_SEL0_AESU   0x60000000
+#define SEC_DESC_HDR_EU_SEL0_AESU           0x60000000
 /** Mode data used to program AESU execution unit for AES CTR processing */
-#define SEC_DESC_HDR_MODE0_AESU_CTR 0x00600000
-
+#define SEC_DESC_HDR_MODE0_AESU_CTR         0x00600000
+/** Mode data used to program AESU execution unit for AES CMAC processing */
+#define SEC_DESC_HDR_MODE0_AESU_CMAC        0x04400000
+/** Mode data used to program AESU execution unit for AES CMAC processing.
+ * Perform MAC-I check */
+#define SEC_DESC_HDR_MODE0_AESU_CMAC_ICV    0x06400000
+/** Select AES descriptor type = common_nonsnoop */
+#define SEC_DESC_HDR_DESC_TYPE_AESU         0x00000010
 
 /*****************************************************************
  * Macros manipulating descriptor header
@@ -252,14 +289,20 @@
 /** Check if a descriptor has the DONE bits set.
  * If yes, it means the packet tied to the descriptor 
  * is processed by SEC engine already.*/
-#define hw_job_is_done(descriptor)   ((descriptor->hdr & SEC_DESC_HDR_DONE) == SEC_DESC_HDR_DONE)
+#define hw_job_is_done(descriptor)          ((descriptor->hdr & SEC_DESC_HDR_DONE) == SEC_DESC_HDR_DONE)
+
+/** Check if integrity check performed by primary execution unit failed */
+#define hw_icv_check_failed(descriptor)     ((descriptor->hdr_lo & SEC_DESC_HDR_ICCR0_MASK) == SEC_DESC_HDR_ICCR0_FAIL)
+
+/** Check if integrity check performed by primary execution unit passed */
+#define hw_icv_check_passed(descriptor)     ((descriptor->hdr_lo & SEC_DESC_HDR_ICCR0_MASK) == SEC_DESC_HDR_ICCR0_PASS)
 
 /** Enable done writeback in descriptor header dword after packet is processed by SEC engine */
 #define hw_job_enable_writeback(descriptor_hdr) ((descriptor_hdr) |= SEC_DESC_HDR_DONE_NOTIFY)
 
 /** Return 0 if no error generated on this job ring.
  * Return non-zero if error. */
-#define hw_job_ring_error(jr) (in_be32(job_ring->register_base_addr + SEC_REG_CSR_LO(jr)) & SEC_REG_CSR_ERROR_MASK)
+#define hw_job_ring_error(jr) (in_be32((jr)->register_base_addr + SEC_REG_CSR_LO(jr)) & SEC_REG_CSR_ERROR_MASK)
 
 /*****************************************************************
  * Macros manipulating SEC registers for a job ring/channel
@@ -380,9 +423,8 @@ typedef struct sec_crypto_pdb_s
                                 Lower 32 bits are reserved and unused. */
     uint32_t auth_hdr;      /*< Higher 32 bits of Descriptor Header dword, used for authentication operations.
                                 Lower 32 bits are reserved and unused. */
-    // TODO: use same IV for F9 when packet is passed second time through SEC...?
-    uint32_t iv_template[SEC_IV_MAX_LENGTH];    /*< Template for Initialization Vector. 
-                                                    HFN is stored and maintained here. */
+    uint32_t iv_template[SEC_IV_TEMPLATE_MAX_LENGTH];       /*< Template for Initialization Vector. 
+                                                                HFN is stored and maintained here. */
     sec_keys_t  *keys;      /*< Pointer to structure holding the crypto and authentication keys for this context.
                                 Crypto and authentication keys NEED BE DMA ACCESSIBLE for SEC engine!*/
     uint32_t hfn_threshold; /*< Threshold for HFN configured by User Application. 

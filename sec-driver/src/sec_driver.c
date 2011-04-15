@@ -243,6 +243,8 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
         if(!hw_job_is_done(job->descr))
         {
             // check if job generated error
+            printf("$$$$ CSR lo = 0x%x\n", in_be32(job_ring->register_base_addr + SEC_REG_CSR_LO(job_ring)));
+
             error_code = hw_job_ring_error(job_ring);
             if (error_code)
             {
@@ -261,6 +263,19 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
                 // Packet is not processed yet, exit
                 break;
             }
+        }
+
+        if(hw_icv_check_failed(job->descr))
+        {
+            SEC_ERROR("Integrity check FAILED for packet!. hdr_lo = 0x%x", job->descr->hdr_lo);
+        }
+        else if(hw_icv_check_passed(job->descr))
+        {
+            SEC_ERROR("Integrity check PASSED for packet!. hdr_lo = 0x%x", job->descr->hdr_lo);
+        }
+        else
+        {
+            SEC_ERROR("Integrity check NOT DONE for packet!. hdr_lo = 0x%x", job->descr->hdr_lo);
         }
 
         // copy into a temporary job the fields from the job we need to raise callback

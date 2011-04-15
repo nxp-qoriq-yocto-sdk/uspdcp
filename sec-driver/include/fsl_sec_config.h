@@ -203,7 +203,7 @@ extern "C"{
  *  of size #SEC_DMA_MEMORY_SIZE to be  used internally by the driver
  *  to allocate data (like SEC descriptors) that needs to be passed to 
  *  SEC device in physical addressing and later on retrieved from SEC device. 
- *  At sec_init() the UA provides specialized ptov/vtop functions to
+ *  At initialization the UA provides specialized ptov/vtop functions/macros to
  *  translate addresses allocated from this memory area. */
 #define SEC_DMA_MEMORY_SIZE     (SEC_CRYPTO_DESCRIPTOR_SIZE) * (SEC_MAX_PDCP_CONTEXTS)  + \
                                 (SEC_DMA_MEM_JOB_RING_SIZE) * (MAX_SEC_JOB_RINGS)

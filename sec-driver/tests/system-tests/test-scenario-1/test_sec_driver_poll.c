@@ -72,7 +72,7 @@ extern "C" {
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F8_DEC
 
 // Authentication
-#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F9_ENC
+//#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F9_ENC
 // Authentication
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F9_DEC
 
@@ -82,7 +82,7 @@ extern "C" {
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CTR_DEC
 
 // Authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CMAC_ENC
+#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CMAC_ENC
 // Authentication
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CMAC_DEC
 
@@ -548,6 +548,100 @@ static uint32_t snow_f9_enc_hfn = 0xA3C9F2;
 
 // HFN threshold
 static uint32_t snow_f9_enc_hfn_threshold = 0xFF000;
+
+//////////////////////////////////////////////////////////////////////////////
+// PDCP_TEST_SNOW_F9_DEC
+//////////////////////////////////////////////////////////////////////////////
+#elif PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F9_DEC
+
+// Extracted from:
+// Specification of the 3GPP Confidentiality and Integrity Algorithms UEA2 & UIA2
+// Document 3: Implementors. Test Data
+// Version: 1.0
+// Date: 10th January 2006
+// Section 5. INTEGRITY ALGORITHM UIA2, Test Set 4
+
+// Length of PDCP header
+#define PDCP_HEADER_LENGTH 1
+
+static uint8_t snow_f9_dec_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
+                                    0x4E,0xA5,0xF1,0x45,0x10,0x10,0xD8,0x52};
+
+static uint8_t snow_f9_auth_dec_key[] = {0xC7,0x36,0xC6,0xAA,0xB2,0x2B,0xFF,0xF9,
+                                         0x1E,0x26,0x98,0xD2,0xE2,0x2A,0xD5,0x7E};
+// PDCP header
+static uint8_t snow_f9_dec_pdcp_hdr[] = { 0xD0};
+
+// PDCP payload not encrypted
+//static uint8_t snow_f9_enc_data_in[] = {0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,
+//                                        0x57,0xA4,0x9D,0x42,0x14,0x07,0xE8};
+
+static uint8_t snow_f9_dec_data_in[] = {0xA7 ,0xD4,0x63,0xDF,0x9F,0xB2,0xB2,
+                                        0x78,0x83,0x3F,0xA0,0x2E,0x23,0x5A,0xA1,
+                                        0x72,0xBD,0x97,0x0C,0x14,0x73,0xE1,0x29,
+                                        0x07,0xFB,0x64,0x8B,0x65,0x99,0xAA,0xA0,
+                                        0xB2,0x4A,0x03,0x86,0x65,0x42,0x2B,0x20,
+                                        0xA4,0x99,0x27,0x6A,0x50,0x42,0x70,0x09,
+                                        // The MAC-I from packet
+                                        0x38,0xB6,0x54,0xC0};
+
+// PDCP payload encrypted
+//static uint8_t snow_f9_enc_data_out[] = {0xBA,0x0F,0x31,0x30,0x03,0x34,0xC5,0x6B, // PDCP payload encrypted
+//                                         0x52,0xA7,0x49,0x7C,0xBA,0xC0,0x46};
+static uint8_t snow_f9_dec_data_out[] = { 0x38,0xB5,0x54,0xC0};
+
+// Radio bearer id
+static uint8_t snow_f9_dec_bearer = 0x0;
+
+// Start HFN
+static uint32_t snow_f9_dec_hfn = 0xA3C9F2;
+
+// HFN threshold
+static uint32_t snow_f9_dec_hfn_threshold = 0xFF000;
+
+//////////////////////////////////////////////////////////////////////////////
+// PDCP_TEST_AES_CMAC_ENC
+//////////////////////////////////////////////////////////////////////////////
+#elif PDCP_TEST_SCENARIO == PDCP_TEST_AES_CMAC_ENC
+
+
+// Length of PDCP header
+#define PDCP_HEADER_LENGTH 1
+
+static uint8_t aes_cmac_enc_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
+                                    0x4E,0xA5,0xF1,0x45,0x10,0x10,0xD8,0x52};
+
+static uint8_t aes_cmac_auth_enc_key[] = {0xC7,0x36,0xC6,0xAA,0xB2,0x2B,0xFF,0xF9,
+                                         0x1E,0x26,0x98,0xD2,0xE2,0x2A,0xD5,0x7E};
+// PDCP header
+static uint8_t aes_cmac_enc_pdcp_hdr[] = { 0xD0};
+
+// PDCP payload not encrypted
+//static uint8_t snow_f9_enc_data_in[] = {0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,
+//                                        0x57,0xA4,0x9D,0x42,0x14,0x07,0xE8};
+
+static uint8_t aes_cmac_enc_data_in[] = {0xA7 ,0xD4,0x63,0xDF,0x9F,0xB2,0xB2,
+                                        0x78,0x83,0x3F,0xA0,0x2E,0x23,0x5A,0xA1,
+                                        0x72,0xBD,0x97,0x0C,0x14,0x73,0xE1,0x29,
+                                        0x07,0xFB,0x64,0x8B,0x65,0x99,0xAA,0xA0,
+                                        0xB2,0x4A,0x03,0x86,0x65,0x42,0x2B,0x20,
+                                        0xA4,0x99,0x27,0x6A,0x50,0x42,0x70,0x09,
+                                        // The MAC-I from packet
+                                        0x38,0xB6,0x54,0xC0};
+
+// PDCP payload encrypted
+//static uint8_t aes_cmac_enc_data_out[] = {0xBA,0x0F,0x31,0x30,0x03,0x34,0xC5,0x6B, // PDCP payload encrypted
+//                                         0x52,0xA7,0x49,0x7C,0xBA,0xC0,0x46};
+static uint8_t aes_cmac_enc_data_out[] = { 0x38,0xB5,0x54,0xC0};
+
+// Radio bearer id
+static uint8_t aes_cmac_enc_bearer = 0x0;
+
+// Start HFN
+static uint32_t aes_cmac_enc_hfn = 0xA3C9F2;
+
+// HFN threshold
+static uint32_t aes_cmac_enc_hfn_threshold = 0xFF000;
 #else
 #error "Unsuported test scenario!"
 #endif
@@ -674,6 +768,53 @@ static uint32_t snow_f9_enc_hfn_threshold = 0xFF000;
 #define test_hfn                snow_f9_enc_hfn
 #define test_hfn_threshold      snow_f9_enc_hfn_threshold
 
+//////////////////////////////////////////////////////////////////////////////
+// PDCP_TEST_SNOW_F9_DEC
+//////////////////////////////////////////////////////////////////////////////
+#elif PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F9_DEC
+
+#define test_crypto_key         snow_f9_dec_key
+#define test_crypto_key_len     sizeof(snow_f9_dec_key)
+
+#define test_auth_key           snow_f9_auth_dec_key
+#define test_auth_key_len       sizeof(snow_f9_auth_dec_key)
+
+#define test_data_in            snow_f9_dec_data_in
+#define test_data_out           snow_f9_dec_data_out
+
+#define test_pdcp_hdr           snow_f9_dec_pdcp_hdr
+#define test_bearer             snow_f9_dec_bearer
+#define test_sn_size            SEC_PDCP_SN_SIZE_5
+#define test_user_plane         PDCP_CONTROL_PLANE
+#define test_packet_direction   PDCP_DOWNLINK
+#define test_protocol_direction PDCP_DECAPSULATION
+#define test_algorithm          SEC_ALG_SNOW
+#define test_hfn                snow_f9_dec_hfn
+#define test_hfn_threshold      snow_f9_dec_hfn_threshold
+
+//////////////////////////////////////////////////////////////////////////////
+// PDCP_TEST_AES_CMAC_ENC
+//////////////////////////////////////////////////////////////////////////////
+#elif PDCP_TEST_SCENARIO == PDCP_TEST_AES_CMAC_ENC
+
+#define test_crypto_key         aes_cmac_enc_key
+#define test_crypto_key_len     sizeof(aes_cmac_enc_key)
+
+#define test_auth_key           aes_cmac_auth_enc_key
+#define test_auth_key_len       sizeof(aes_cmac_auth_enc_key)
+
+#define test_data_in            aes_cmac_enc_data_in
+#define test_data_out           aes_cmac_enc_data_out
+
+#define test_pdcp_hdr           aes_cmac_enc_pdcp_hdr
+#define test_bearer             aes_cmac_enc_bearer
+#define test_sn_size            SEC_PDCP_SN_SIZE_5
+#define test_user_plane         PDCP_CONTROL_PLANE
+#define test_packet_direction   PDCP_DOWNLINK
+#define test_protocol_direction PDCP_ENCAPSULATION
+#define test_algorithm          SEC_ALG_AES
+#define test_hfn                aes_cmac_enc_hfn
+#define test_hfn_threshold      aes_cmac_enc_hfn_threshold
 #else
 #error "Unsuported test scenario!"
 #endif
@@ -912,7 +1053,7 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
                " out pkt= ",
                (pdcp_context->thread_id + 1)%2);
         int i;
-        for(i = out_packet->length - 4; i <  out_packet->length; i++)
+        for(i = 0/*out_packet->length - 4*/; i <  out_packet->length; i++)
         {
             printf("%02x ", out_packet->address[i]);
         }
