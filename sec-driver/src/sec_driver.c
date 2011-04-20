@@ -257,6 +257,10 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
             }
             else if(/*c-plane packet first step processed, needs second step process*/1)
             {
+#if defined(PDCP_TEST_SNOW_F9_ONLY)
+                // TODO: just call callback, do not run the packet through SEC again...(for encapsulation)
+                // For decapsulation..need to decrypt first..then do  F9/AES CMAC..then call callback...complicated!!!
+#endif
             }
             else
             {
@@ -264,6 +268,11 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
                 break;
             }
         }
+
+        printf("-----AESU Status Register hi = 0x%x. lo = 0x%x\n",
+                in_be32(job_ring->register_base_addr + SEC_REG_AESU_SR), 
+                in_be32(job_ring->register_base_addr + SEC_REG_AESU_SR_LO));
+
 
         if(hw_icv_check_failed(job->descr))
         {

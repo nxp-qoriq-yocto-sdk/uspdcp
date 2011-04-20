@@ -44,7 +44,9 @@
 ==============================================================================*/
 
 /** Maximum length in words (4 bytes)  for IV(Initialization Vector) */
-#define SEC_IV_MAX_LENGTH          6
+// TODO: Modify back to be 6 bytes...cannot do MAC-I checking with AES anyway....
+// will do memcmp in software.
+#define SEC_IV_MAX_LENGTH          12
 
 /** Maximum length in words (4 bytes)  for IV (Initialization Vector) template.
  * Stores F8 IV followed by F9 IV. */
@@ -209,9 +211,9 @@
  *****************************************************************/
 
 /**  Offset to higher 32 bits of STEU IMR */
-#define SEC_REG_STEU_IMR      0xD038
+#define SEC_REG_STEU_IMR        0xD038
 /**  Offset to lower 32 bits of STEU IMR */
-#define SEC_REG_STEU_IMR_LO   0xD03C
+#define SEC_REG_STEU_IMR_LO     0xD03C
 
 /*****************************************************************
  * STEU IMR (Interrupt Mask Register) values
@@ -220,6 +222,36 @@
 
 /** Disable integrity check error interrupt in STEU */
 #define SEC_REG_STEU_IMR_DISABLE_ICE    0x4000
+
+
+/*****************************************************************
+ * AESU SR(Status Register) offset.
+ * AESU is execution unit implementing AES CTR and AES CMAC.
+ *****************************************************************/
+
+/**  Offset to higher 32 bits of AESU SR */
+#define SEC_REG_AESU_SR         0x4028
+/**  Offset to lower 32 bits of AESU SR */
+#define SEC_REG_AESU_SR_LO      0x402C
+
+/*****************************************************************
+ * AESU IMR (Interrupt Mask Register) offset.
+ * AESU is execution unit implementing AES CTR and AES CMAC.
+ *****************************************************************/
+
+/**  Offset to higher 32 bits of AESU IMR */
+#define SEC_REG_AESU_IMR        0x4038
+/**  Offset to lower 32 bits of AESU IMR */
+#define SEC_REG_AESU_IMR_LO     0x403C
+
+
+/*****************************************************************
+ * AESU IMR (Interrupt Mask Register) values
+ * AESU is execution unit implementing AES CTR and AES CMAC.
+ *****************************************************************/
+
+/** Disable integrity check error interrupt in STEU */
+#define SEC_REG_AESU_IMR_DISABLE_ICE    0x4000
 
 
 /*****************************************************************

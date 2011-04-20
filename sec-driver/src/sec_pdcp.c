@@ -104,6 +104,8 @@ extern "C" {
  * On P2020, 24 bytes are required even though the PDCP spec says 12 bytes. */
 #define PDCP_SNOW_F9_IV_LENGTH          24
 
+/** Length in bytes of IV(Initialization Vector) for AES CMAC. */
+#define PDCP_AES_CMAC_CONTEXT_IN_LENGTH 48
 
 /** Length in bytes for AES CMAC IV.
  * Note that AES CMAC does not use an IV in the same sense as AES CTR or SNOW F8/F9.
@@ -391,7 +393,7 @@ static int sec_pdcp_create_snow_f9_descriptor(sec_context_t *ctx)
         ctx->crypto_desc_pdb.auth_hdr = SEC_PDCP_SNOW_F9_DEC_DESCRIPTOR_HEADER_HI;
     }
 
-    printf("----descr hdr = 0x%x\n\n", ctx->crypto_desc_pdb.auth_hdr);
+    printf("------SNOW F9 descr hdr = 0x%x\n\n", ctx->crypto_desc_pdb.auth_hdr);
 
     // Copy crypto data into PDB.
     // Copy/update only data that was not already set by data-plane corresponding function!
@@ -449,7 +451,7 @@ static int sec_pdcp_create_aes_cmac_descriptor(sec_context_t *ctx)
         // Create descriptor for decrypt
         ctx->crypto_desc_pdb.auth_hdr = SEC_PDCP_AES_CMAC_DEC_DESCRIPTOR_HEADER_HI;
     }
-    printf("----descr hdr = 0x%x\n\n", ctx->crypto_desc_pdb.auth_hdr);
+    printf("AES CMAC ----descr hdr = 0x%x\n\n", ctx->crypto_desc_pdb.auth_hdr);
 
     // Copy crypto data into PDB.
     // Copy/update only data that was not already set by data-plane corresponding function!
@@ -583,10 +585,12 @@ static int sec_pdcp_context_create_aes_descriptor(sec_context_t *ctx)
         {
             // On c-plane decapsulation, PDCP packet arrives encripted.
             // First step is to decrypt with AES CTR
-            //ctx->update_crypto_descriptor = sec_pdcp_context_update_snow_f8_aes_ctr_descriptor;
+            ctx->update_crypto_descriptor = sec_pdcp_context_update_snow_f8_aes_ctr_descriptor;
 
+#if defined(PDCP_TEST_AES_CMAC_ONLY)
             // TODO: remove this, added only to be able to test AES CMAC enc/dec without AES CTR
             ctx->update_crypto_descriptor = sec_pdcp_context_update_aes_cmac_descriptor;
+#endif
         }
     }
 
@@ -630,7 +634,7 @@ static int sec_pdcp_context_update_snow_f8_aes_ctr_descriptor(sec_job_t *job, se
 
     // Configure SEC descriptor header for crypto operation
     descriptor->hdr = sec_pdb->crypto_hdr;
-    printf("~~~~~~~~ Descriptor header = 0x%x\n", descriptor->hdr);
+    printf("~~~~~~~~ confidentiality Descriptor header = 0x%x\n", descriptor->hdr);
     //descriptor->hdr_lo = 0;
 
     // update the remaining 7 dwords
@@ -870,8 +874,7 @@ static int sec_pdcp_context_update_snow_f9_descriptor(sec_job_t *job, sec_descri
     // next 2 pointers unused
     //////////////////////////////////////////////////////////////
 
-    //memset(&(descriptor->ptr[4]), 0, 2 * sizeof(struct sec_ptr));
-    memset(&(descriptor->ptr[4]), 0, 3 * sizeof(struct sec_ptr));
+    memset(&(descriptor->ptr[4]), 0, 2 * sizeof(struct sec_ptr));
 
     //////////////////////////////////////////////////////////////
     // set output buffer
@@ -906,6 +909,7 @@ static int sec_pdcp_context_update_aes_cmac_descriptor(sec_job_t *job, sec_descr
     // Configure SEC descriptor header for integrity check operation
     descriptor->hdr = sec_pdb->auth_hdr;
     //descriptor->hdr_lo = 0;
+    printf("----integrity descr hdr = 0x%x\n\n", descriptor->hdr);
 
     // update the remaining 7 dwords
 
@@ -918,53 +922,54 @@ static int sec_pdcp_context_update_aes_cmac_descriptor(sec_job_t *job, sec_descr
     //////////////////////////////////////////////////////////////
     // set IV(Initialization Vector)
     //////////////////////////////////////////////////////////////
+    
+    memset(&(descriptor->ptr[1]), 0, sizeof(struct sec_ptr));
 
-    phys_addr = sec_vtop(descriptor->iv);
-    descriptor->ptr[1].len = PDCP_SNOW_F9_IV_LENGTH;
-    // no s/g
-    descriptor->ptr[1].j_extent = 0;
-#if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
-    // Update for 36bit physical address
-    descriptor->ptr[1].eptr = PHYS_ADDR_HI(phys_addr);
-#endif
     // update IV based on SN
     sec_pdcp_update_iv_template(sec_pdb,
                                 job->in_packet->address + job->in_packet->offset, // PDCP header pointer
                                 &job->job_status,
                                 PDCP_INTEGRITY_IV_POS);
 
-    descriptor->iv[0] = sec_pdb->iv_template[PDCP_INTEGRITY_IV_POS];
-    descriptor->iv[1] = sec_pdb->iv_template[PDCP_INTEGRITY_IV_POS + 1];
-    descriptor->iv[2] = 0;
-
+    // Is inbound or outbound?
     is_inbound = ((descriptor->hdr & SEC_DESC_HDR_DIR_INBOUND) == SEC_DESC_HDR_DIR_INBOUND);
-    
-    // For C-plane inbound, set in IV MAC-I extracted from last 4 bytes of input packet.
-    // Sec engine to check against generated MAC-I.
-    descriptor->iv[3] = is_inbound ? (*(uint32_t*)(job->in_packet->address +
-                                                   job->in_packet->length -
-                                                   PDCP_MAC_I_LENGTH))
-                                   : 0;
 
-    descriptor->iv[4] = 0; 
+    if (is_inbound)
+    {
+        // IV is used only for inbound packets, to store the received MAC-I code
+        phys_addr = sec_vtop(descriptor->iv);
+        descriptor->ptr[1].len = PDCP_AES_CMAC_CONTEXT_IN_LENGTH;
+        // no s/g
+        descriptor->ptr[1].j_extent = 0;
+#if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
+        // Update for 36bit physical address
+        descriptor->ptr[1].eptr = PHYS_ADDR_HI(phys_addr);
+#endif
+        // For C-plane inbound, set in IV MAC-I extracted from last 4 bytes of input packet.
+        // Sec engine to check against generated MAC-I.
+        descriptor->iv[4] = (*(uint32_t*)(job->in_packet->address + job->in_packet->length -
+                                          PDCP_MAC_I_LENGTH));
+        
+        // set pointer to IV
+        descriptor->ptr[1].ptr = PHYS_ADDR_LO(phys_addr);
 
-    //descriptor->iv[5] = sec_pdb->iv_template[PDCP_INTEGRITY_IV_POS + 2];
+    }
 
-    // For SNOW F9 outbound test vector!
-    // FRESH field in 3G, replaced in LTE to be BEARER | 27 bits of zero!
-    descriptor->iv[5] = 0x397E8FD; 
-
-    printf("IV[0] = 0x%x, IV[1] = 0x%x, IV[2] = 0x%x, IV[3] = 0x%x, IV[4] = 0x%x, IV[5] = 0x%x    \n\n",
+    printf("IV[0] = 0x%x, IV[1] = 0x%x, IV[2] = 0x%x, IV[3] = 0x%x, IV[4] = 0x%x, IV[5] = 0x%x "
+           "IV[6] = 0x%x, IV[7] = 0x%x, IV[8] = 0x%x, IV[9] = 0x%x, IV[10] = 0x%x, IV[11] = 0x%x\n\n",
             descriptor->iv[0],
             descriptor->iv[1],
             descriptor->iv[2],
             descriptor->iv[3],
             descriptor->iv[4],
-            descriptor->iv[5]
+            descriptor->iv[5],
+            descriptor->iv[6],
+            descriptor->iv[7],
+            descriptor->iv[8],
+            descriptor->iv[9],
+            descriptor->iv[10],
+            descriptor->iv[11]
             );
-
-    // set pointer to IV
-    descriptor->ptr[1].ptr = PHYS_ADDR_LO(phys_addr);
 
     //////////////////////////////////////////////////////////////
     // set auth key
@@ -991,16 +996,41 @@ static int sec_pdcp_context_update_aes_cmac_descriptor(sec_job_t *job, sec_descr
     // set input buffer.
     //////////////////////////////////////////////////////////////
 
+    uint32_t* dummy = (uint32_t*)(job->in_packet->address + job->in_packet->offset) - 2;
+    *dummy = sec_pdb->iv_template[PDCP_INTEGRITY_IV_POS];
+
+    dummy = (uint32_t*)(job->in_packet->address + job->in_packet->offset) - 1;
+    *dummy = sec_pdb->iv_template[PDCP_INTEGRITY_IV_POS + 1];
+
     // Integrity check is performed on both PDCP header + PDCP payload
+    phys_addr = sec_vtop(job->in_packet->address) + job->in_packet->offset - 8;
+
+    descriptor->ptr[3].len =  is_inbound ? job->in_packet->length - job->in_packet->offset - PDCP_MAC_I_LENGTH + 8
+                                         : job->in_packet->length - job->in_packet->offset + 8;
+    printf("in packet(len = %d) = %x %x %x %x...\n", 
+             descriptor->ptr[3].len,
+            *((uint32_t*)(job->in_packet->address + job->in_packet->offset) - 2),
+            *((uint32_t*)(job->in_packet->address+job->in_packet->offset) - 1),
+            *((uint32_t*)(job->in_packet->address+job->in_packet->offset)),
+            *((uint32_t*)(job->in_packet->address+job->in_packet->offset) + 1));
+    
+    
+/*    
     phys_addr = sec_vtop(job->in_packet->address) + job->in_packet->offset;
-    printf("in packet = %x %x %x %x...\n", 
-            job->in_packet->address[0],
-            job->in_packet->address[1],
-            job->in_packet->address[2],
-            job->in_packet->address[3]
-            );
     descriptor->ptr[3].len =  is_inbound ? job->in_packet->length - job->in_packet->offset - PDCP_MAC_I_LENGTH
                                          : job->in_packet->length - job->in_packet->offset;
+
+
+
+    printf("in packet(len = %d) = %x %x %x %x...\n", 
+             descriptor->ptr[3].len,
+            *((uint32_t*)(job->in_packet->address + job->in_packet->offset)),
+            *((uint32_t*)(job->in_packet->address+job->in_packet->offset) + 1),
+            *((uint32_t*)(job->in_packet->address+job->in_packet->offset)+ 2),
+            *((uint32_t*)(job->in_packet->address+job->in_packet->offset) + 3));
+
+*/
+
     // no s/g
     descriptor->ptr[3].j_extent = 0;
 #if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
@@ -1014,17 +1044,22 @@ static int sec_pdcp_context_update_aes_cmac_descriptor(sec_job_t *job, sec_descr
     // next 2 pointers unused
     //////////////////////////////////////////////////////////////
 
-    //memset(&(descriptor->ptr[4]), 0, 2 * sizeof(struct sec_ptr));
-    memset(&(descriptor->ptr[4]), 0, 3 * sizeof(struct sec_ptr));
+    memset(&(descriptor->ptr[4]), 0, 2 * sizeof(struct sec_ptr));
+
+    // Set extent field to the size (in bytes) for MAC-I.
+    // AESU execution unit does not support MAC-I size  smaller than 8 bytes...
+    descriptor->ptr[4].j_extent = 8;
 
     //////////////////////////////////////////////////////////////
     // set output buffer
     //////////////////////////////////////////////////////////////
-/*
+
+    printf("----||| out pkt len = %d\n", job->out_packet->length);
     // Generated MAC-I (4 byte) will be appended to the output message.
-    phys_addr = sec_vtop(job->out_packet->address)  + job->out_packet->length - 2 * PDCP_MAC_I_LENGTH;
-    // first 4 bytes are filled with zero-s. last 4 bytes contain the MAC-I
-    descriptor->ptr[6].len = PDCP_MAC_I_LENGTH * 2; 
+    phys_addr = sec_vtop(job->out_packet->address)  + job->out_packet->length - PDCP_MAC_I_LENGTH;
+    // If no size is given for output data = MAC-I, then SEC engine generates by default
+    // a 16 byte MAC-I. Configure for 8 byte MAC-I.
+    descriptor->ptr[6].len = 2 * PDCP_MAC_I_LENGTH;
     // no s/g
     descriptor->ptr[6].j_extent = 0;
 #if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
@@ -1034,7 +1069,7 @@ static int sec_pdcp_context_update_aes_cmac_descriptor(sec_job_t *job, sec_descr
     // pointer to output buffer. Skip UA offset and PDCP header
     descriptor->ptr[6].ptr = PHYS_ADDR_LO(phys_addr);
 
-*/
+
     return ret;
 }
 
@@ -1052,9 +1087,10 @@ static void sec_pdcp_update_iv_template(sec_crypto_pdb_t *sec_pdb,
     // When testing only SNOW F9 encapsulation/decapsulation (not PDCP control plane,
     // which means SNOW F8 + SNOW F9), use an artificial SN, as extracted from test vector
     seq_no = 1;
-#warning "F9 only"
+#warning "F9 only!!!"
+#elif defined(PDCP_TEST_AES_CMAC_ONLY)
+    seq_no = 20;
 #else
-#warning "NOT F9 only"
     // extract sequence number from PDCP header located in input packet
     seq_no = PDCP_HEADER_GET_SN(pdcp_header, sec_pdb);
 #endif

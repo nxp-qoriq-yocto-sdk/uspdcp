@@ -74,7 +74,7 @@ extern "C" {
 // Authentication
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F9_ENC
 // Authentication
-#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F9_DEC
+//#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F9_DEC
 
 // Ciphering
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CTR_ENC
@@ -84,7 +84,7 @@ extern "C" {
 // Authentication
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CMAC_ENC
 // Authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CMAC_DEC
+#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CMAC_DEC
 
 
 
@@ -615,12 +615,15 @@ static uint8_t aes_cmac_enc_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
 
 static uint8_t aes_cmac_auth_enc_key[] = {0xd3,0xc5,0xd5,0x92,0x32,0x7f,0xb1,0x1c,
                                           0x40,0x35,0xc6,0x68,0x0a,0xf8,0xc6,0xd1};
+
+                                            // M. Torla's test vector
+                                         /*{ 0x2b,0x7e,0x15,0x16,0x28,0xae,0xd2,0xa6,
+                                          0xab,0xf7,0x15,0x88,0x09,0xcf,0x4f,0x3c};*/
     
 // PDCP header
-// First byte from input test data.
-// This is a customization...PDCP c-plane integrity check is applied on both PDCP header + PDCP payload.
-// Simulate that the first byte from test vector represents the PDCP header.
 static uint8_t aes_cmac_enc_pdcp_hdr[] = { 0x48};
+                                            // M. Torla's test vector
+//static uint8_t aes_cmac_enc_pdcp_hdr[] = { 0x6b};
 
 // PDCP payload not encrypted
 //static uint8_t snow_f9_enc_data_in[] = {0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,
@@ -628,10 +631,19 @@ static uint8_t aes_cmac_enc_pdcp_hdr[] = { 0x48};
 
 static uint8_t aes_cmac_enc_data_in[] = {0x45,0x83,0xd5,0xaf,0xe0,0x82,0xae};
 
+                                            // M. Torla's test vector
+/*                                      {0xc1,0xbe,0xe2,0x2e,0x40,0x9f,0x96,
+                                      0xe9,0x3d,0x7e,0x11,0x73,0x93,0x17,0x2a,
+                                      0xae,0x2d,0x8a,0x57,0x1e,0x03,0xac,0x9c,
+                                      0x9e,0xb7,0x6f,0xac,0x45,0xaf,0x8e,0x51,
+                                      0x30,0xc8,0x1c,0x46,0xa3,0x5c,0xe4,0x11};*/
+
 // PDCP payload encrypted
-//static uint8_t aes_cmac_enc_data_out[] = {0xBA,0x0F,0x31,0x30,0x03,0x34,0xC5,0x6B, // PDCP payload encrypted
-//                                         0x52,0xA7,0x49,0x7C,0xBA,0xC0,0x46};
 static uint8_t aes_cmac_enc_data_out[] = {0xb9,0x37,0x87,0xe6};
+                                            // M. Torla's test vector
+/*static uint8_t aes_cmac_enc_data_out[] = {0xDF,0xA6,0x67,0x47,0xDE,0x9A,0xE6,0x30,
+                                          0x30,0xCA,0x32,0x61,0x14,0x97,0xC8,0x27};
+                                          */
 
 // Radio bearer id
 static uint8_t aes_cmac_enc_bearer = 0x1a;
@@ -641,6 +653,43 @@ static uint32_t aes_cmac_enc_hfn = 0x1CC52CD;
 
 // HFN threshold
 static uint32_t aes_cmac_enc_hfn_threshold = 0xFF00000;
+
+//////////////////////////////////////////////////////////////////////////////
+// PDCP_TEST_AES_CMAC_DEC
+//////////////////////////////////////////////////////////////////////////////
+#elif PDCP_TEST_SCENARIO == PDCP_TEST_AES_CMAC_DEC
+
+// Test Set 2
+
+
+// Length of PDCP header
+#define PDCP_HEADER_LENGTH 1
+
+static uint8_t aes_cmac_dec_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
+                                    0x4E,0xA5,0xF1,0x45,0x10,0x10,0xD8,0x52};
+
+static uint8_t aes_cmac_auth_dec_key[] = {0xd3,0xc5,0xd5,0x92,0x32,0x7f,0xb1,0x1c,
+                                          0x40,0x35,0xc6,0x68,0x0a,0xf8,0xc6,0xd1};
+    
+// PDCP header
+static uint8_t aes_cmac_dec_pdcp_hdr[] = { 0x48};
+
+// PDCP payload not encrypted
+static uint8_t aes_cmac_dec_data_in[] = {0x45,0x83,0xd5,0xaf,0xe0,0x82,0xae,
+                                         // The MAC-I from packet
+                                         0xb9,0x37,0x87,0xe6};
+
+// PDCP payload encrypted
+static uint8_t aes_cmac_dec_data_out[] = {0xb9,0x37,0x87,0xe6};
+
+// Radio bearer id
+static uint8_t aes_cmac_dec_bearer = 0x1a;
+
+// Start HFN
+static uint32_t aes_cmac_dec_hfn = 0x1CC52CD;
+
+// HFN threshold
+static uint32_t aes_cmac_dec_hfn_threshold = 0xFF00000;
 #else
 #error "Unsuported test scenario!"
 #endif
@@ -814,6 +863,30 @@ static uint32_t aes_cmac_enc_hfn_threshold = 0xFF00000;
 #define test_algorithm          SEC_ALG_AES
 #define test_hfn                aes_cmac_enc_hfn
 #define test_hfn_threshold      aes_cmac_enc_hfn_threshold
+
+//////////////////////////////////////////////////////////////////////////////
+// PDCP_TEST_AES_CMAC_DEC
+//////////////////////////////////////////////////////////////////////////////
+#elif PDCP_TEST_SCENARIO == PDCP_TEST_AES_CMAC_DEC
+
+#define test_crypto_key         aes_cmac_dec_key
+#define test_crypto_key_len     sizeof(aes_cmac_dec_key)
+
+#define test_auth_key           aes_cmac_auth_dec_key
+#define test_auth_key_len       sizeof(aes_cmac_auth_dec_key)
+
+#define test_data_in            aes_cmac_dec_data_in
+#define test_data_out           aes_cmac_dec_data_out
+
+#define test_pdcp_hdr           aes_cmac_dec_pdcp_hdr
+#define test_bearer             aes_cmac_dec_bearer
+#define test_sn_size            SEC_PDCP_SN_SIZE_5
+#define test_user_plane         PDCP_CONTROL_PLANE
+#define test_packet_direction   PDCP_DOWNLINK
+#define test_protocol_direction PDCP_DECAPSULATION
+#define test_algorithm          SEC_ALG_AES
+#define test_hfn                aes_cmac_dec_hfn
+#define test_hfn_threshold      aes_cmac_dec_hfn_threshold
 #else
 #error "Unsuported test scenario!"
 #endif
@@ -1063,7 +1136,7 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
     test_failed = (0 != memcmp(out_packet->address + out_packet->length - 4,
                                test_data_out,
                                sizeof(test_data_out)));
-#warning "testing F9 only..."
+
 #else
 
     assert(out_packet->length == sizeof(test_data_out) + PDCP_HEADER_LENGTH + out_packet->offset);
@@ -1095,7 +1168,7 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
            }
            printf("\n");
            */
-        assert(0);
+//        assert(0);
 
     }
     else
