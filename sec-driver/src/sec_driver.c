@@ -243,8 +243,6 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
         if(!hw_job_is_done(job->descr))
         {
             // check if job generated error
-            printf("$$$$ CSR lo = 0x%x\n", in_be32(job_ring->register_base_addr + SEC_REG_CSR_LO(job_ring)));
-
             error_code = hw_job_ring_error(job_ring);
             if (error_code)
             {
@@ -268,11 +266,6 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
                 break;
             }
         }
-
-        printf("-----AESU Status Register hi = 0x%x. lo = 0x%x\n",
-                in_be32(job_ring->register_base_addr + SEC_REG_AESU_SR), 
-                in_be32(job_ring->register_base_addr + SEC_REG_AESU_SR_LO));
-
 
         if(hw_icv_check_failed(job->descr))
         {
@@ -383,7 +376,7 @@ sec_return_code_t sec_init(const sec_config_t *sec_config_data,
     // DMA memory area must be cacheline aligned
     SEC_ASSERT ((dma_addr_t)sec_config_data->memory_area % CACHE_LINE_SIZE == 0, 
                 SEC_INVALID_INPUT_PARAM,
-                "Configured memory is not cacheline aligned (to 64 bytes)");
+                "Configured memory is not cacheline aligned");
 
 
     g_job_rings_no = job_rings_no;
@@ -530,6 +523,19 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
     SEC_ASSERT(sec_ctx_info->notify_packet != NULL, 
                SEC_INVALID_INPUT_PARAM, 
                "sec_ctx_inf has NULL notify_packet function pointer");
+
+    // Crypto keys must come from DMA memory area and must be cacheline aligned
+    SEC_ASSERT((dma_addr_t)sec_ctx_info->cipher_key % CACHE_LINE_SIZE == 0,
+               SEC_INVALID_INPUT_PARAM,
+               "Configured crypto key is not cacheline aligned");
+
+    if(sec_ctx_info->integrity_key != NULL)
+    {
+        // Authentication keys must come from DMA memory area and must be cacheline aligned
+        SEC_ASSERT((dma_addr_t)sec_ctx_info->integrity_key % CACHE_LINE_SIZE == 0,
+                   SEC_INVALID_INPUT_PARAM,
+                   "Configured integrity key is not cacheline aligned");
+    }
 
     // Either UA specifies a job ring to associate with this context,
     // either the driver will choose a job ring in round robin fashion.

@@ -322,12 +322,6 @@ static int sec_pdcp_create_snow_f8_aes_ctr_descriptor(sec_context_t *ctx)
 
     // Copy crypto data into PDB
     ASSERT(ctx->pdcp_crypto_info->cipher_key != NULL);
-    ASSERT(ctx->pdcp_crypto_info->cipher_key_len <= SEC_CRYPTO_KEY_MAX_LENGTH * 4);
-
-    // Copy crypto key
-    // TODO: Maybe eliminate this memcpy if crypto/auth keys are provided by UA as DMA-capable memory!
-    memcpy(sec_pdb->keys->crypto_key, ctx->pdcp_crypto_info->cipher_key, ctx->pdcp_crypto_info->cipher_key_len);
-    sec_pdb->crypto_key_len = ctx->pdcp_crypto_info->cipher_key_len;
 
     // Copy HFN threshold
     sec_pdb->hfn_threshold = ctx->pdcp_crypto_info->hfn_threshold << ctx->pdcp_crypto_info->sn_size;
@@ -399,15 +393,7 @@ static int sec_pdcp_create_snow_f9_descriptor(sec_context_t *ctx)
     // Copy/update only data that was not already set by data-plane corresponding function!
 
     ASSERT(ctx->pdcp_crypto_info->integrity_key != NULL);
-    ASSERT(ctx->pdcp_crypto_info->integrity_key_len <= SEC_AUTH_KEY_MAX_LENGTH * 4);
     ASSERT(ctx->pdcp_crypto_info->sn_size == SEC_PDCP_SN_SIZE_5); 
-
-    // Copy integrity key
-    // TODO: Maybe eliminate this memcpy if crypto/auth keys are provided by UA as DMA-capable memory!
-    memcpy(sec_pdb->keys->auth_key,
-           ctx->pdcp_crypto_info->integrity_key,
-           ctx->pdcp_crypto_info->integrity_key_len);
-    sec_pdb->auth_key_len = ctx->pdcp_crypto_info->integrity_key_len;
 
     // IV Template format:
     // word 0 : F8 IV[0]
@@ -457,15 +443,7 @@ static int sec_pdcp_create_aes_cmac_descriptor(sec_context_t *ctx)
     // Copy/update only data that was not already set by data-plane corresponding function!
 
     ASSERT(ctx->pdcp_crypto_info->integrity_key != NULL);
-    ASSERT(ctx->pdcp_crypto_info->integrity_key_len <= SEC_AUTH_KEY_MAX_LENGTH * 4);
     ASSERT(ctx->pdcp_crypto_info->sn_size == SEC_PDCP_SN_SIZE_5);
-
-    // Copy integrity key
-    // TODO: Maybe eliminate this memcpy if crypto/auth keys are provided by UA as DMA-capable memory!
-    memcpy(sec_pdb->keys->auth_key,
-           ctx->pdcp_crypto_info->integrity_key,
-           ctx->pdcp_crypto_info->integrity_key_len);
-    sec_pdb->auth_key_len = ctx->pdcp_crypto_info->integrity_key_len;
 
     // IV Template format:
     // word 0 : AES CTR  IV[0]
@@ -629,6 +607,7 @@ static int sec_pdcp_context_update_snow_f8_aes_ctr_descriptor(sec_job_t *job, se
 {
     int ret = SEC_SUCCESS;
     sec_crypto_pdb_t *sec_pdb = &job->sec_context->crypto_desc_pdb;
+    const sec_pdcp_context_info_t *ua_crypto_info = job->sec_context->pdcp_crypto_info;
     uint8_t pdcp_hdr_len = 0;
     dma_addr_t phys_addr = 0;
 
@@ -676,8 +655,17 @@ static int sec_pdcp_context_update_snow_f8_aes_ctr_descriptor(sec_job_t *job, se
     // set cipher key
     //////////////////////////////////////////////////////////////
 
-    phys_addr = sec_vtop(sec_pdb->keys->crypto_key);
-    descriptor->ptr[2].len = sec_pdb->crypto_key_len;
+    phys_addr = sec_vtop(ua_crypto_info->cipher_key);
+    descriptor->ptr[2].len = ua_crypto_info->cipher_key_len;
+
+    printf("~~~~~~ cipher key = %x %x %x %x\n",
+    ua_crypto_info->cipher_key[0],
+    ua_crypto_info->cipher_key[1],
+    ua_crypto_info->cipher_key[2],
+    ua_crypto_info->cipher_key[3]
+    );
+
+
     // no s/g
     descriptor->ptr[2].j_extent = 0;
 #if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
@@ -689,12 +677,6 @@ static int sec_pdcp_context_update_snow_f8_aes_ctr_descriptor(sec_job_t *job, se
 
     // calculate PDCP header length
     pdcp_hdr_len = sec_pdb->sns ? PDCP_HEADER_LENGTH_SHORT : PDCP_HEADER_LENGTH_LONG;
-
-    printf("~~~~~~~ cipher key = 0x %x %x %x %x....\n", sec_pdb->keys->crypto_key[0],
-    sec_pdb->keys->crypto_key[1],
-    sec_pdb->keys->crypto_key[2],
-    sec_pdb->keys->crypto_key[3]);
-
 
     //////////////////////////////////////////////////////////////
     // set input buffer
@@ -755,6 +737,7 @@ static int sec_pdcp_context_update_snow_f9_descriptor(sec_job_t *job, sec_descri
 {
     int ret = SEC_SUCCESS;
     sec_crypto_pdb_t *sec_pdb = &job->sec_context->crypto_desc_pdb;
+    const sec_pdcp_context_info_t *ua_crypto_info = job->sec_context->pdcp_crypto_info;
     dma_addr_t phys_addr = 0;
     int is_inbound = FALSE;
 
@@ -830,14 +813,14 @@ static int sec_pdcp_context_update_snow_f9_descriptor(sec_job_t *job, sec_descri
     // set auth key
     //////////////////////////////////////////////////////////////
 
-    phys_addr = sec_vtop(sec_pdb->keys->auth_key);
+    phys_addr = sec_vtop(ua_crypto_info->integrity_key);
     printf("auth key = %x %x %x %x...\n", 
-        sec_pdb->keys->auth_key[0],
-        sec_pdb->keys->auth_key[1],
-        sec_pdb->keys->auth_key[2],
-        sec_pdb->keys->auth_key[3]
+        ua_crypto_info->integrity_key[0],
+        ua_crypto_info->integrity_key[1],
+        ua_crypto_info->integrity_key[2],
+        ua_crypto_info->integrity_key[3]
         );
-    descriptor->ptr[2].len = sec_pdb->auth_key_len;
+    descriptor->ptr[2].len = ua_crypto_info->integrity_key_len;
     // no s/g
     descriptor->ptr[2].j_extent = 0;
 #if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
@@ -903,6 +886,7 @@ static int sec_pdcp_context_update_aes_cmac_descriptor(sec_job_t *job, sec_descr
 {
     int ret = SEC_SUCCESS;
     sec_crypto_pdb_t *sec_pdb = &job->sec_context->crypto_desc_pdb;
+    const sec_pdcp_context_info_t *ua_crypto_info = job->sec_context->pdcp_crypto_info;
     dma_addr_t phys_addr = 0;
     int is_inbound = FALSE;
 
@@ -975,14 +959,14 @@ static int sec_pdcp_context_update_aes_cmac_descriptor(sec_job_t *job, sec_descr
     // set auth key
     //////////////////////////////////////////////////////////////
 
-    phys_addr = sec_vtop(sec_pdb->keys->auth_key);
+    phys_addr = sec_vtop(ua_crypto_info->integrity_key);
     printf("auth key = %x %x %x %x...\n", 
-        sec_pdb->keys->auth_key[0],
-        sec_pdb->keys->auth_key[1],
-        sec_pdb->keys->auth_key[2],
-        sec_pdb->keys->auth_key[3]
+        ua_crypto_info->integrity_key[0],
+        ua_crypto_info->integrity_key[1],
+        ua_crypto_info->integrity_key[2],
+        ua_crypto_info->integrity_key[3]
         );
-    descriptor->ptr[2].len = sec_pdb->auth_key_len;
+    descriptor->ptr[2].len = ua_crypto_info->integrity_key_len;
     // no s/g
     descriptor->ptr[2].j_extent = 0;
 #if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
@@ -1089,6 +1073,7 @@ static void sec_pdcp_update_iv_template(sec_crypto_pdb_t *sec_pdb,
     seq_no = 1;
 #warning "F9 only!!!"
 #elif defined(PDCP_TEST_AES_CMAC_ONLY)
+#warning "AES CMAC only!!!"
     seq_no = 20;
 #else
     // extract sequence number from PDCP header located in input packet

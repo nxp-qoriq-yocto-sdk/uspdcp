@@ -67,7 +67,7 @@ extern "C" {
 //////////////////////////////////////////////////////////////////////////
 
 // Ciphering
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F8_ENC
+#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F8_ENC
 // Deciphering
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F8_DEC
 
@@ -84,7 +84,7 @@ extern "C" {
 // Authentication
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CMAC_ENC
 // Authentication
-#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CMAC_DEC
+//#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CMAC_DEC
 
 
 
@@ -126,6 +126,8 @@ extern "C" {
 // Alignment for input/output packets allocated from DMA-memory zone
 #define BUFFER_ALIGNEMENT 32
 #define BUFFER_SIZE       128
+// Max length in bytes for a confidentiality /integrity key.
+#define MAX_KEY_LENGTH    32
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
 ==================================================================================================*/
@@ -1430,12 +1432,19 @@ static void* pdcp_thread_routine(void* config)
         pdcp_context->pdcp_ctx_cfg_data.algorithm = test_algorithm;
         pdcp_context->pdcp_ctx_cfg_data.hfn = test_hfn;
         pdcp_context->pdcp_ctx_cfg_data.hfn_threshold = test_hfn_threshold;
-        pdcp_context->pdcp_ctx_cfg_data.cipher_key = test_crypto_key;
+        memcpy(pdcp_context->pdcp_ctx_cfg_data.cipher_key,
+               test_crypto_key,
+               test_crypto_key_len);
         pdcp_context->pdcp_ctx_cfg_data.cipher_key_len = test_crypto_key_len;
-        pdcp_context->pdcp_ctx_cfg_data.integrity_key = test_auth_key;
-        pdcp_context->pdcp_ctx_cfg_data.integrity_key_len = test_auth_key_len;
 
-        // TODO: set auth key for control plane SNOW/AES;
+        uint8_t* temp_auth_key = test_auth_key;
+        if(temp_auth_key != NULL)
+        {
+            memcpy(pdcp_context->pdcp_ctx_cfg_data.integrity_key,
+                   temp_auth_key,
+                   test_auth_key_len);
+            pdcp_context->pdcp_ctx_cfg_data.integrity_key_len = test_auth_key_len;
+        }
 
         pdcp_context->thread_id = th_config_local->tid;
 
@@ -1567,11 +1576,21 @@ static int setup_sec_environment(void)
         // allocate output buffers from memory zone DMA-accessible to SEC engine
         pdcp_dl_contexts[i].output_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT,
                                                               sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
+
+        pdcp_dl_contexts[i].pdcp_ctx_cfg_data.cipher_key = dma_mem_memalign(BUFFER_ALIGNEMENT,
+                                                                            MAX_KEY_LENGTH);
+        pdcp_dl_contexts[i].pdcp_ctx_cfg_data.integrity_key = dma_mem_memalign(BUFFER_ALIGNEMENT,
+                                                                               MAX_KEY_LENGTH);
         // validate that the address of the freshly allocated buffer falls in the second memory are.
         assert (pdcp_dl_contexts[i].input_buffers != NULL);
         assert (pdcp_dl_contexts[i].output_buffers != NULL);
+        assert (pdcp_dl_contexts[i].pdcp_ctx_cfg_data.cipher_key != NULL);
+        assert (pdcp_dl_contexts[i].pdcp_ctx_cfg_data.integrity_key != NULL);
+
         assert((dma_addr_t)pdcp_dl_contexts[i].input_buffers >= DMA_MEM_SEC_DRIVER);
         assert((dma_addr_t)pdcp_dl_contexts[i].output_buffers >= DMA_MEM_SEC_DRIVER);
+        assert((dma_addr_t)pdcp_dl_contexts[i].pdcp_ctx_cfg_data.cipher_key >= DMA_MEM_SEC_DRIVER);
+        assert((dma_addr_t)pdcp_dl_contexts[i].pdcp_ctx_cfg_data.integrity_key >= DMA_MEM_SEC_DRIVER);
 
         memset(pdcp_dl_contexts[i].input_buffers, 0, sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
         memset(pdcp_dl_contexts[i].output_buffers, 0, sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
@@ -1583,11 +1602,22 @@ static int setup_sec_environment(void)
         // validate that the address of the freshly allocated buffer falls in the second memory are.
         pdcp_ul_contexts[i].output_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT, 
                                                               sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
+
+        pdcp_ul_contexts[i].pdcp_ctx_cfg_data.cipher_key = dma_mem_memalign(BUFFER_ALIGNEMENT,
+                                                                            MAX_KEY_LENGTH);
+        pdcp_ul_contexts[i].pdcp_ctx_cfg_data.integrity_key = dma_mem_memalign(BUFFER_ALIGNEMENT,
+                                                                               MAX_KEY_LENGTH);
         // validate that the address of the freshly allocated buffer falls in the second memory are.
         assert (pdcp_ul_contexts[i].input_buffers != NULL);
         assert (pdcp_ul_contexts[i].output_buffers != NULL);
+        assert (pdcp_ul_contexts[i].pdcp_ctx_cfg_data.cipher_key != NULL);
+        assert (pdcp_ul_contexts[i].pdcp_ctx_cfg_data.integrity_key != NULL);
+
         assert((dma_addr_t)pdcp_ul_contexts[i].input_buffers >= DMA_MEM_SEC_DRIVER);
         assert((dma_addr_t)pdcp_ul_contexts[i].output_buffers >= DMA_MEM_SEC_DRIVER);
+        assert((dma_addr_t)pdcp_ul_contexts[i].pdcp_ctx_cfg_data.cipher_key >= DMA_MEM_SEC_DRIVER);
+        assert((dma_addr_t)pdcp_ul_contexts[i].pdcp_ctx_cfg_data.integrity_key >= DMA_MEM_SEC_DRIVER);
+
 
         memset(pdcp_ul_contexts[i].input_buffers, 0, sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
         memset(pdcp_ul_contexts[i].output_buffers, 0, sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
@@ -1642,9 +1672,14 @@ static int cleanup_sec_environment(void)
         dma_mem_free(pdcp_dl_contexts[i].input_buffers,  BUFFER_SIZE * MAX_PACKET_NUMBER_PER_CTX);
         dma_mem_free(pdcp_dl_contexts[i].output_buffers,  BUFFER_SIZE * MAX_PACKET_NUMBER_PER_CTX);
 
+        dma_mem_free(pdcp_dl_contexts[i].pdcp_ctx_cfg_data.cipher_key, MAX_KEY_LENGTH);
+        dma_mem_free(pdcp_dl_contexts[i].pdcp_ctx_cfg_data.integrity_key, MAX_KEY_LENGTH);
+
         dma_mem_free(pdcp_ul_contexts[i].input_buffers,  BUFFER_SIZE * MAX_PACKET_NUMBER_PER_CTX);
         dma_mem_free(pdcp_ul_contexts[i].output_buffers,  BUFFER_SIZE * MAX_PACKET_NUMBER_PER_CTX);
 
+        dma_mem_free(pdcp_ul_contexts[i].pdcp_ctx_cfg_data.cipher_key, MAX_KEY_LENGTH);
+        dma_mem_free(pdcp_ul_contexts[i].pdcp_ctx_cfg_data.integrity_key, MAX_KEY_LENGTH);
 
     }
 	// unmap the physical memory

@@ -179,7 +179,6 @@ static void retire_context(sec_contexts_pool_t * pool, sec_context_t * ctx)
 
 static void free_in_use_context(sec_contexts_pool_t * pool, sec_context_t * ctx)
 {
-    sec_keys_t *save_keys = NULL;
     ASSERT(ctx != NULL);
     ASSERT(pool != NULL);
 
@@ -196,10 +195,6 @@ static void free_in_use_context(sec_contexts_pool_t * pool, sec_context_t * ctx)
     ctx->jr_handle = NULL;
     ctx->pdcp_crypto_info = NULL;
     ctx->update_crypto_descriptor = NULL;
-    memset(ctx->crypto_desc_pdb.keys, 0, sizeof(sec_keys_t));
-    save_keys = ctx->crypto_desc_pdb.keys;
-    memset(&ctx->crypto_desc_pdb, 0, sizeof(sec_crypto_pdb_t));
-    ctx->crypto_desc_pdb.keys = save_keys;
 
     // add context to free list
     // TODO: maybe add new context to head -> better chance for a cache hit if same element is reused next
@@ -323,15 +318,6 @@ sec_return_code_t init_contexts_pool(sec_contexts_pool_t * pool,
         // initialize validation patterns
         ctx->start_pattern = CONTEXT_VALIDATION_PATTERN;
         ctx->end_pattern = CONTEXT_VALIDATION_PATTERN;
-
-        // For crypto information allocate DMA-capable memory 
-        // from memory area configured by UA.
-        ctx->crypto_desc_pdb.keys = *dma_mem;
-        memset(ctx->crypto_desc_pdb.keys, 0, sizeof(sec_keys_t));
-
-        // Increment address for available DMA memory area
-        *dma_mem += sizeof(sec_keys_t);
-
 
         // Add the context to the free list
         // WARNING: do not memset with zero the context after adding it

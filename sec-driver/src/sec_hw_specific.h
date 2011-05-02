@@ -52,13 +52,6 @@
  * Stores F8 IV followed by F9 IV. */
 #define SEC_IV_TEMPLATE_MAX_LENGTH 8
 
-/** Maximum length in words (4 bytes) for cryptographic key */
-#define SEC_CRYPTO_KEY_MAX_LENGTH  8
-
-/** Maximum length in words (4 bytes) for authentication key */
-#define SEC_AUTH_KEY_MAX_LENGTH    8
-
-
 /*****************************************************************
  * SEC REGISTER CONFIGURATIONS
  *****************************************************************/
@@ -436,15 +429,6 @@ struct sec_descriptor_t
 
 } __CACHELINE_ALIGNED;
 
-/** Cryptographic and authentication keys that need be accessed
- * and used by SEC engine via DMA for a each packet belonging 
- * to a SEC context. */
-typedef struct sec_keys_s
-{
-    uint32_t __CACHELINE_ALIGNED crypto_key[SEC_CRYPTO_KEY_MAX_LENGTH]; /*< Encryption/decryption key */
-    uint32_t __CACHELINE_ALIGNED auth_key[SEC_AUTH_KEY_MAX_LENGTH];     /*< Authentication key */
-}sec_keys_t;
-
 /** Cryptographic data belonging to a SEC context.
  * Can be considered a joint venture between:
  * - a 'shared descriptor' (the descriptor header word)
@@ -457,8 +441,6 @@ typedef struct sec_crypto_pdb_s
                                 Lower 32 bits are reserved and unused. */
     uint32_t iv_template[SEC_IV_TEMPLATE_MAX_LENGTH];       /*< Template for Initialization Vector. 
                                                                 HFN is stored and maintained here. */
-    sec_keys_t  *keys;      /*< Pointer to structure holding the crypto and authentication keys for this context.
-                                Crypto and authentication keys NEED BE DMA ACCESSIBLE for SEC engine!*/
     uint32_t hfn_threshold; /*< Threshold for HFN configured by User Application. 
                                 Bitshifted left to skip SN bits from first word of IV. */
     uint32_t hfn_mask;      /*< Mask applied on IV to extract HFN */
@@ -467,8 +449,6 @@ typedef struct sec_crypto_pdb_s
                                 - 5 bit for c-plane and 7 bit for d-plane.
                                 Is set to 0 if long SN is used:
                                 - 12 bit for d-plane */
-    uint8_t crypto_key_len; /*< Length of crypto key */
-    uint8_t auth_key_len;   /*< Length of authentication key */
 }sec_crypto_pdb_t;
 /*==============================================================================
                                  CONSTANTS

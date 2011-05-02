@@ -208,7 +208,7 @@
 // without doing F8+F9, which is what PDCP control plane really does.
 //////////////////////////////////////////////////////////////////////////////
 //#define PDCP_TEST_SNOW_F9_ONLY
-#define PDCP_TEST_AES_CMAC_ONLY
+//#define PDCP_TEST_AES_CMAC_ONLY
 
 /*==============================================================================
                                     ENUMS
