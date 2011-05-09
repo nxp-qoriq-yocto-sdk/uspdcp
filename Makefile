@@ -42,7 +42,7 @@ ifneq (distclean,$(MAKECMDGOALS))
    $(ARCH)_SPEC_DEFINE	:= _FILE_OFFSET_BITS=64
    $(ARCH)_SPEC_INC_PATH:=
    $(ARCH)_SPEC_LIB_PATH:=
-   $(ARCH)_SPEC_CFLAGS	:= -mcpu=e500mc -pthread -O3 -Wall -Wshadow
+   $(ARCH)_SPEC_CFLAGS	:= -pthread -O3 -Wall -Wshadow
    $(ARCH)_SPEC_LDFLAGS	:= -pthread
  else
    ifeq (i686, $(ARCH))
