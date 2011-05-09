@@ -57,6 +57,8 @@
 #define SEC_INFO(format, ...)
 /** No logging of error messages */
 #define SEC_ERROR(format, ...)
+/** No logging of debug messages */
+#define SEC_DEBUG(format, ...)
 
 #elif SEC_DRIVER_LOGGING == ON
 
@@ -64,8 +66,10 @@
 
 /** Log info messages to stdout */
 #define SEC_INFO(format, ...) printf("%s() (%s@%d): " format "\n", __FUNCTION__, __FILE__, __LINE__ , ##__VA_ARGS__) 
-/** No logging of error messages */
+/** Logging of error messages to stdout*/
 #define SEC_ERROR(format, ...) printf("%s() (%s@%d): " format "\n", __FUNCTION__, __FILE__, __LINE__ , ##__VA_ARGS__) 
+/** No logging of debug messages */
+#define SEC_DEBUG(format, ...)
 
 #elif SEC_DRIVER_LOGGING_LEVEL == SEC_DRIVER_LOG_ERROR
 
@@ -73,10 +77,20 @@
 #define SEC_INFO(format, ...)
 /** Log error messages to stdout */
 #define SEC_ERROR(format, ...) printf("%s() (%s@%d): " format "\n", __FUNCTION__, __FILE__, __LINE__ , ##__VA_ARGS__) 
+/** No logging of debug messages */
+#define SEC_DEBUG(format, ...)
+
+#elif SEC_DRIVER_LOGGING_LEVEL == SEC_DRIVER_LOG_DEBUG
+/** Log info messages to stdout */
+#define SEC_INFO(format, ...) printf("%s() (%s@%d): " format "\n", __FUNCTION__, __FILE__, __LINE__ , ##__VA_ARGS__)
+/** Logging of error messages to stdout*/
+#define SEC_ERROR(format, ...) printf("%s() (%s@%d): " format "\n", __FUNCTION__, __FILE__, __LINE__ , ##__VA_ARGS__)
+/** Logging of debug messages to stdout*/
+#define SEC_DEBUG(format, ...) printf("%s() (%s@%d): " format "\n", __FUNCTION__, __FILE__, __LINE__ , ##__VA_ARGS__)
 
 #else
 #error "Invalid value for SEC_DRIVER_LOGGING_LEVEL!"
-#endif // #if SEC_DRIVER_LOGGING_LEVEL == SEC_DRIVER_LOG_INFO
+#endif // #if SEC_DRIVER_LOGGING_LEVEL == SEC_DRIVER_LOG_DEBUG
 
 #else // #if SEC_DRIVER_LOGGING == OFF
 #error "Invalid value for SEC_DRIVER_LOGGING!"
@@ -186,6 +200,10 @@
 /** Expression that uses bitwise operations to evaluate if x == a AND y == b */
 #define COND_EXPR1_EQ_AND_EXPR2_EQ(x, a, y, b) \
 (!(((x) ^(a)) | ((y) ^ (b))))
+
+/** Expression that uses bitwise operations to evaluate if x == a AND y != b */
+#define COND_EXPR1_EQ_AND_EXPR2_NEQ(x, a, y, b) \
+(!(((x) ^(a)) | !(((y) ^ (b)))))
 
 /** Return higher 32 bits of physical address */
 #define PHYS_ADDR_HI(phys_addr) \

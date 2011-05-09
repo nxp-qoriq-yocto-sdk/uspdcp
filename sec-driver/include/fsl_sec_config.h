@@ -80,9 +80,11 @@ extern "C"{
 
 
 /** Logging level for SEC user space driver: log only errors */
-#define SEC_DRIVER_LOG_ERROR 0
+#define SEC_DRIVER_LOG_ERROR    0
 /** Logging level for SEC user space driver: log both errors and info messages */
-#define SEC_DRIVER_LOG_INFO  1
+#define SEC_DRIVER_LOG_INFO     1
+/** Logging level for SEC user space driver: log errors, info and debug messages */
+#define SEC_DRIVER_LOG_DEBUG    2
 
 /** SEC driver will use NAPI model to receive notifications
  * for processed packets from SEC engine hardware: 
@@ -242,7 +244,8 @@ extern "C"{
 /** Configure logging level at compile time.
  * Valid values:
  * SEC_DRIVER_LOG_ERROR - log only errors
- * SEC_DRIVER_LOG_INFO - log errors and info messages
+ * SEC_DRIVER_LOG_INFO  - log errors and info messages
+ * SEC_DRIVER_LOG_DEBUG - log errors, info and debug messages
  */
 #define SEC_DRIVER_LOGGING_LEVEL SEC_DRIVER_LOG_INFO
 

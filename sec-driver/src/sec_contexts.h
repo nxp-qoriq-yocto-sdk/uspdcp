@@ -71,6 +71,9 @@ extern "C"{
 /** Validation bit pattern. A valid sec_context_t item would contain
  * this pattern at predefined position/s in the item itself. */
 #define CONTEXT_VALIDATION_PATTERN  0xF0A955CD
+
+ /** Length of MAC-I code, as required by SEC 3.1. */
+#define SEC_3_1_MAC_I_REQUIRED_LEN  8
 /*==================================================================================================
                                              ENUMS
 ==================================================================================================*/
@@ -105,6 +108,13 @@ typedef struct sec_contexts_pool_s
     struct sec_context_t *sec_contexts;
 
 }sec_contexts_pool_t;
+
+
+/** MAC-I, encapsulated in a structure to ensure cacheline-alignment.*/
+typedef struct sec_mac_i_s
+{
+    uint8_t code[SEC_3_1_MAC_I_REQUIRED_LEN];
+}__CACHELINE_ALIGNED sec_mac_i_t;
 
 
 /** The declaration of a SEC context structure. */
@@ -157,13 +167,17 @@ struct sec_context_t
     /** Crypto info received from UA.
      * TODO: replace with union when other protocols besides PDCP will be supported!*/
     const sec_pdcp_context_info_t *pdcp_crypto_info;
-    /** Cryptographic information that defines this SEC context.
-     * The <keys> member from this structure is DMA-accesible by SEC device. */
+    /** Cryptographic information that defines this SEC context. */
     sec_crypto_pdb_t crypto_desc_pdb;
     /** Function used to update a crypto descriptor for a packet
-     * belonging to this context. Does not apply to authentication descriptor!
-     */
+     * belonging to this context. Does not apply to authentication descriptor! */
     sec_update_descriptor update_crypto_descriptor;
+    /** Function used to update an authentication descriptor for a packet
+     * belonging to this context. */
+    sec_update_descriptor update_auth_descriptor;
+    /** SEC 3.1 generates only 8 bytes MAC-I. SEC generates here the MAC-I. 
+     * Later the driver will copy it to output packet. */
+    sec_mac_i_t *mac_i;
     /** Validation pattern at end of structure. */
     uint32_t end_pattern;
 }__CACHELINE_ALIGNED;

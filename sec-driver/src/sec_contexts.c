@@ -315,6 +315,16 @@ sec_return_code_t init_contexts_pool(sec_contexts_pool_t * pool,
         ctx->ci = 0;
         ctx->pool = pool;
 
+        SEC_ASSERT ((dma_addr_t)*dma_mem % CACHE_LINE_SIZE == 0,
+                SEC_INVALID_INPUT_PARAM,
+                "Current ctx->mac_i id %d position is not cacheline aligned.", i);
+
+        // Allocate DMA-capable memory where SEC 3.1 will generate MAC-I for
+        // SNOW F9 and AES CMAC integrity check algorithms (PDCP control-plane).
+        ctx->mac_i = *dma_mem;
+        memset(ctx->mac_i, 0, sizeof(sec_mac_i_t));
+        *dma_mem += sizeof(sec_mac_i_t);
+
         // initialize validation patterns
         ctx->start_pattern = CONTEXT_VALIDATION_PATTERN;
         ctx->end_pattern = CONTEXT_VALIDATION_PATTERN;

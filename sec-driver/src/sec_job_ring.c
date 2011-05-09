@@ -101,20 +101,22 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
     // if the driver starts with IRQs on or off.
     if(startup_work_mode == SEC_STARTUP_INTERRUPT_MODE)
     {
-        hw_enable_irq_on_job_ring(job_ring);
+        SEC_INFO("Enabling DONE IRQ generation on job ring with id %d", job_ring->jr_id);
+        hw_enable_done_irq_on_job_ring(job_ring);
     }
 #endif
 
 #if SEC_NOTIFICATION_TYPE == SEC_NOTIFICATION_TYPE_IRQ
     // When SEC US driver works in pure interrupt mode, IRQ's are always enabled.
-    hw_enable_irq_on_job_ring(job_ring);
+    SEC_INFO("Enabling DONE IRQ generation on job ring with id %d", job_ring->jr_id);
+    hw_enable_done_irq_on_job_ring(job_ring);
 #endif
 
     // Memory area must start from cacheline-aligned boundary.
     // Each job entry is itself aligned to cacheline.
     SEC_ASSERT ((dma_addr_t)*dma_mem % CACHE_LINE_SIZE == 0, 
             SEC_INVALID_INPUT_PARAM,
-            "Current memory position is not cacheline aligned (to 64 bytes)."
+            "Current memory position is not cacheline aligned."
             "Job ring id = %d", job_ring->jr_id);
 
     // Allocate job items from the DMA-capable memory area provided by UA

@@ -42,6 +42,9 @@
                               DEFINES AND MACROS
 ==============================================================================*/
 
+/** Length in bytes for PDCP control plane MAC-I */
+#define PDCP_MAC_I_LENGTH  4
+
 /*==============================================================================
                                     ENUMS
 ==============================================================================*/
@@ -92,7 +95,8 @@ int sec_pdcp_context_set_crypto_info(sec_context_t *ctx,
  */
 int sec_pdcp_context_update_descriptor(sec_context_t *ctx,
                                        sec_job_t *job,
-                                       sec_descriptor_t *descriptor);
+                                       sec_descriptor_t *descriptor,
+                                       uint8_t do_integrity_check);
 /*============================================================================*/
 
 

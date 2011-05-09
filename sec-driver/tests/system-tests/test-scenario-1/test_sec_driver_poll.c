@@ -128,6 +128,8 @@ extern "C" {
 #define BUFFER_SIZE       128
 // Max length in bytes for a confidentiality /integrity key.
 #define MAX_KEY_LENGTH    32
+
+#define SEC_ALG_NONE      -1
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
 ==================================================================================================*/
@@ -618,34 +620,14 @@ static uint8_t aes_cmac_enc_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
 static uint8_t aes_cmac_auth_enc_key[] = {0xd3,0xc5,0xd5,0x92,0x32,0x7f,0xb1,0x1c,
                                           0x40,0x35,0xc6,0x68,0x0a,0xf8,0xc6,0xd1};
 
-                                            // M. Torla's test vector
-                                         /*{ 0x2b,0x7e,0x15,0x16,0x28,0xae,0xd2,0xa6,
-                                          0xab,0xf7,0x15,0x88,0x09,0xcf,0x4f,0x3c};*/
-    
 // PDCP header
 static uint8_t aes_cmac_enc_pdcp_hdr[] = { 0x48};
-                                            // M. Torla's test vector
-//static uint8_t aes_cmac_enc_pdcp_hdr[] = { 0x6b};
 
-// PDCP payload not encrypted
-//static uint8_t snow_f9_enc_data_in[] = {0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,
-//                                        0x57,0xA4,0x9D,0x42,0x14,0x07,0xE8};
-
+// PDCP payload
 static uint8_t aes_cmac_enc_data_in[] = {0x45,0x83,0xd5,0xaf,0xe0,0x82,0xae};
-
-                                            // M. Torla's test vector
-/*                                      {0xc1,0xbe,0xe2,0x2e,0x40,0x9f,0x96,
-                                      0xe9,0x3d,0x7e,0x11,0x73,0x93,0x17,0x2a,
-                                      0xae,0x2d,0x8a,0x57,0x1e,0x03,0xac,0x9c,
-                                      0x9e,0xb7,0x6f,0xac,0x45,0xaf,0x8e,0x51,
-                                      0x30,0xc8,0x1c,0x46,0xa3,0x5c,0xe4,0x11};*/
 
 // PDCP payload encrypted
 static uint8_t aes_cmac_enc_data_out[] = {0xb9,0x37,0x87,0xe6};
-                                            // M. Torla's test vector
-/*static uint8_t aes_cmac_enc_data_out[] = {0xDF,0xA6,0x67,0x47,0xDE,0x9A,0xE6,0x30,
-                                          0x30,0xCA,0x32,0x61,0x14,0x97,0xC8,0x27};
-                                          */
 
 // Radio bearer id
 static uint8_t aes_cmac_enc_bearer = 0x1a;
@@ -718,7 +700,8 @@ static uint32_t aes_cmac_dec_hfn_threshold = 0xFF00000;
 #define test_user_plane         PDCP_DATA_PLANE
 #define test_packet_direction   PDCP_DOWNLINK
 #define test_protocol_direction PDCP_ENCAPSULATION
-#define test_algorithm          SEC_ALG_SNOW
+#define test_cipher_algorithm   SEC_ALG_SNOW
+#define test_integrity_algorithm SEC_ALG_NONE
 #define test_hfn                snow_f8_enc_hfn
 #define test_hfn_threshold      snow_f8_enc_hfn_threshold
 
@@ -742,7 +725,8 @@ static uint32_t aes_cmac_dec_hfn_threshold = 0xFF00000;
 #define test_user_plane         PDCP_DATA_PLANE
 #define test_packet_direction   PDCP_DOWNLINK
 #define test_protocol_direction PDCP_DECAPSULATION
-#define test_algorithm          SEC_ALG_SNOW
+#define test_cipher_algorithm    SEC_ALG_SNOW
+#define test_integrity_algorithm SEC_ALG_NONE
 #define test_hfn                snow_f8_dec_hfn
 #define test_hfn_threshold      snow_f8_dec_hfn_threshold
 
@@ -766,7 +750,8 @@ static uint32_t aes_cmac_dec_hfn_threshold = 0xFF00000;
 #define test_user_plane         PDCP_DATA_PLANE
 #define test_packet_direction   PDCP_DOWNLINK
 #define test_protocol_direction PDCP_ENCAPSULATION
-#define test_algorithm          SEC_ALG_AES
+#define test_cipher_algorithm    SEC_ALG_AES
+#define test_integrity_algorithm SEC_ALG_NONE
 #define test_hfn                aes_ctr_enc_hfn
 #define test_hfn_threshold      aes_ctr_enc_hfn_threshold
 
@@ -790,7 +775,8 @@ static uint32_t aes_cmac_dec_hfn_threshold = 0xFF00000;
 #define test_user_plane         PDCP_DATA_PLANE
 #define test_packet_direction   PDCP_DOWNLINK
 #define test_protocol_direction PDCP_DECAPSULATION
-#define test_algorithm          SEC_ALG_AES
+#define test_cipher_algorithm    SEC_ALG_AES
+#define test_integrity_algorithm SEC_ALG_NONE
 #define test_hfn                aes_ctr_dec_hfn
 #define test_hfn_threshold      aes_ctr_dec_hfn_threshold
 
@@ -814,7 +800,8 @@ static uint32_t aes_cmac_dec_hfn_threshold = 0xFF00000;
 #define test_user_plane         PDCP_CONTROL_PLANE
 #define test_packet_direction   PDCP_DOWNLINK
 #define test_protocol_direction PDCP_ENCAPSULATION
-#define test_algorithm          SEC_ALG_SNOW
+#define test_cipher_algorithm          SEC_ALG_SNOW
+#define test_integrity_algorithm SEC_ALG_SNOW
 #define test_hfn                snow_f9_enc_hfn
 #define test_hfn_threshold      snow_f9_enc_hfn_threshold
 
@@ -838,7 +825,8 @@ static uint32_t aes_cmac_dec_hfn_threshold = 0xFF00000;
 #define test_user_plane         PDCP_CONTROL_PLANE
 #define test_packet_direction   PDCP_DOWNLINK
 #define test_protocol_direction PDCP_DECAPSULATION
-#define test_algorithm          SEC_ALG_SNOW
+#define test_cipher_algorithm    SEC_ALG_SNOW
+#define test_integrity_algorithm SEC_ALG_SNOW
 #define test_hfn                snow_f9_dec_hfn
 #define test_hfn_threshold      snow_f9_dec_hfn_threshold
 
@@ -862,7 +850,8 @@ static uint32_t aes_cmac_dec_hfn_threshold = 0xFF00000;
 #define test_user_plane         PDCP_CONTROL_PLANE
 #define test_packet_direction   PDCP_DOWNLINK
 #define test_protocol_direction PDCP_ENCAPSULATION
-#define test_algorithm          SEC_ALG_AES
+#define test_cipher_algorithm    SEC_ALG_AES
+#define test_integrity_algorithm SEC_ALG_AES
 #define test_hfn                aes_cmac_enc_hfn
 #define test_hfn_threshold      aes_cmac_enc_hfn_threshold
 
@@ -886,7 +875,8 @@ static uint32_t aes_cmac_dec_hfn_threshold = 0xFF00000;
 #define test_user_plane         PDCP_CONTROL_PLANE
 #define test_packet_direction   PDCP_DOWNLINK
 #define test_protocol_direction PDCP_DECAPSULATION
-#define test_algorithm          SEC_ALG_AES
+#define test_cipher_algorithm    SEC_ALG_AES
+#define test_integrity_algorithm SEC_ALG_AES
 #define test_hfn                aes_cmac_dec_hfn
 #define test_hfn_threshold      aes_cmac_dec_hfn_threshold
 #else
@@ -1058,7 +1048,7 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
     in_packet->address = &(pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].buffer[0]);
     //in_packet->offset = pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].offset;
 
-    // Needed 8 bytes before actual start of PDCP packet, for PDCP control-plane + AES algo tetsing.
+    // Needed 8 bytes before actual start of PDCP packet, for PDCP control-plane + AES algo testing.
     in_packet->offset = 8;
     in_packet->scatter_gather = SEC_CONTIGUOUS_BUFFER;
 
@@ -1068,7 +1058,7 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
 
     //out_packet->offset = pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].offset;
 
-    // Needed 8 bytes before actual start of PDCP packet, for PDCP control-plane + AES algo tetsing.
+    // Needed 8 bytes before actual start of PDCP packet, for PDCP control-plane + AES algo testing.
     out_packet->offset = 8;
     out_packet->scatter_gather = SEC_CONTIGUOUS_BUFFER;
 
@@ -1109,9 +1099,7 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
     assert(in_packet != NULL);
     assert(out_packet != NULL);
 
-    // the stub implementation for SEC driver never returns a status error
     assert(status != SEC_STATUS_ERROR);
-    // TODO: test if status is SEC_STATUS_HFN_THRESHOLD_REACHED
     if(status == SEC_STATUS_HFN_THRESHOLD_REACHED)
     {
         printf("HFN threshold reached for packet\n");
@@ -1135,7 +1123,7 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
     (PDCP_TEST_SCENARIO == PDCP_TEST_AES_CMAC_DEC)
 
     // For SNOW F9 and AES CMAC, output data consists only of MAC-I code = 4 bytes
-    test_failed = (0 != memcmp(out_packet->address + out_packet->length - 4,
+    test_failed = (0 != memcmp(out_packet->address + out_packet->offset,
                                test_data_out,
                                sizeof(test_data_out)));
 
@@ -1170,7 +1158,7 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
            }
            printf("\n");
            */
-//        assert(0);
+        assert(0);
 
     }
     else
@@ -1402,6 +1390,7 @@ static void* pdcp_thread_routine(void* config)
     int ret = 0;
     unsigned int packets_received = 0;
     pdcp_context_t *pdcp_context;
+    unsigned int do_integrity_check = 0;
 
     int total_no_of_contexts_deleted = 0;
     int no_of_contexts_deleted = 0;
@@ -1429,7 +1418,7 @@ static void* pdcp_thread_routine(void* config)
         pdcp_context->pdcp_ctx_cfg_data.user_plane = test_user_plane;
         pdcp_context->pdcp_ctx_cfg_data.packet_direction = test_packet_direction;
         pdcp_context->pdcp_ctx_cfg_data.protocol_direction = test_protocol_direction;
-        pdcp_context->pdcp_ctx_cfg_data.algorithm = test_algorithm;
+        pdcp_context->pdcp_ctx_cfg_data.cipher_algorithm = test_cipher_algorithm;
         pdcp_context->pdcp_ctx_cfg_data.hfn = test_hfn;
         pdcp_context->pdcp_ctx_cfg_data.hfn_threshold = test_hfn_threshold;
         memcpy(pdcp_context->pdcp_ctx_cfg_data.cipher_key,
@@ -1440,10 +1429,13 @@ static void* pdcp_thread_routine(void* config)
         uint8_t* temp_auth_key = test_auth_key;
         if(temp_auth_key != NULL)
         {
+            pdcp_context->pdcp_ctx_cfg_data.integrity_algorithm = test_integrity_algorithm;
+
             memcpy(pdcp_context->pdcp_ctx_cfg_data.integrity_key,
                    temp_auth_key,
                    test_auth_key_len);
             pdcp_context->pdcp_ctx_cfg_data.integrity_key_len = test_auth_key_len;
+            do_integrity_check = 1;
         }
 
         pdcp_context->thread_id = th_config_local->tid;
@@ -1473,6 +1465,7 @@ static void* pdcp_thread_routine(void* config)
             while (sec_process_packet(pdcp_context->sec_ctx,
                                      &in_packet,
                                      &out_packet,
+                                     do_integrity_check, // do not do integrity check. TODO: change this to do double pass through SEC for PDCP c-plane
                                      (ua_context_handle_t)pdcp_context) == SEC_JR_IS_FULL)
             {
             	// wait while the producer JR is empty, and in the mean time do some

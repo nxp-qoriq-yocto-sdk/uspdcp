@@ -304,6 +304,16 @@ int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
     uint8_t config_jr_no = 0;
     int jr_idx = 0, jr_no = 0;
  
+
+#if SEC_NOTIFICATION_TYPE == SEC_NOTIFICATION_TYPE_POLL
+    SEC_INFO("SEC driver configured with SEC_NOTIFICATION_TYPE_POLL enabled");
+#elif SEC_NOTIFICATION_TYPE == SEC_NOTIFICATION_TYPE_IRQ
+    SEC_INFO("SEC driver configured with SEC_NOTIFICATION_TYPE_IRQ enabled");
+#elif SEC_NOTIFICATION_TYPE == SEC_NOTIFICATION_TYPE_NAPI
+    SEC_INFO("SEC driver configured with SEC_NOTIFICATION_TYPE_NAPI enabled");
+#endif
+
+
 #ifdef SEC_HW_VERSION_3_1
     // Get device node for SEC 3.1
     for_each_compatible_node(dpa_node, NULL, "fsl,sec3.1")
