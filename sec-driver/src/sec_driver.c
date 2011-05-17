@@ -150,7 +150,7 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
 /** @brief Poll the HW for already processed jobs in the JR
  * and silently discard the available jobs.
  *
- * @param [in]  job_ring    The job ring to poll.
+ * @param [in,out]  job_ring    The job ring to poll.
  */
 static void hw_flush_job_ring(sec_job_ring_t *job_ring);
 
@@ -159,6 +159,28 @@ static void hw_flush_job_ring(sec_job_ring_t *job_ring);
  * WITHOUT beeing notified to UA.
  */
 static void flush_job_rings();
+
+/** @brief Checks if there are any PDCP control-plane packets waiting
+ * to be processed, on a certain job ring.
+ * PDCP control-plane packets may require a two step processing:
+ * sent once to SEC for integrity checking, sent second time to SEC
+ * for confidentiality protection.
+ *
+ * @param [in,out]     job_ring     Job ring
+ *
+ * @retval SEC_SUCCESS for success
+ * @retval other for error
+ */
+static int sec_process_pdcp_c_plane_packets(sec_job_ring_t *job_ring);
+
+static void sec_handle_mac_i_generation(sec_context_t *sec_context, uint32_t *out_mac_i);
+
+static int sec_handle_mac_i_validation(sec_job_t *job, sec_context_t *sec_context);
+
+static int sec_handle_pdcp_c_plane_packets(sec_job_t *job,
+                                           sec_context_t *sec_context,
+                                           sec_status_t *status,
+                                           uint8_t *notify_pkt);
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
@@ -186,7 +208,9 @@ static void hw_flush_job_ring(sec_job_ring_t * job_ring)
 
     // compute the number of jobs available in the job ring based on the
     // producer and consumer index values.
-    number_of_jobs_available = SEC_JOB_RING_DIFF(SEC_JOB_RING_SIZE, job_ring->pidx, job_ring->cidx);
+    number_of_jobs_available = SEC_JOB_RING_NUMBER_OF_ITEMS(SEC_JOB_RING_SIZE,
+                                                            job_ring->pidx,
+                                                            job_ring->cidx);
 
     // Discard all jobs
     jobs_no_to_discard = number_of_jobs_available;
@@ -220,8 +244,8 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
     int32_t number_of_jobs_available = 0;
     uint32_t error_code = 0;
     int ret = 0;
-    uint8_t mac_i_check_failed = FALSE;
-    uint32_t original_mac_i;
+    uint8_t notify_pkt = TRUE;
+    
 
     // Compute the number of notifications that need to be raised to UA
     // If limit < 0 -> notify all done jobs
@@ -231,7 +255,7 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
 
     // compute the number of jobs available in the job ring based on the
     // producer and consumer index values.
-    number_of_jobs_available = SEC_JOB_RING_DIFF(SEC_JOB_RING_SIZE, job_ring->pidx, job_ring->cidx);
+    number_of_jobs_available = SEC_JOB_RING_NUMBER_OF_ITEMS(SEC_JOB_RING_SIZE, job_ring->pidx, job_ring->cidx);
 
     jobs_no_to_notify = (limit < 0 || limit > number_of_jobs_available) ? number_of_jobs_available : limit;
 
@@ -273,83 +297,32 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
         // Used only for #SEC_STATUS_HFN_THRESHOLD_REACHED code, which is set by the driver,
         // before the packet is sent to SEC.
         status = saved_job.job_status;
+        sec_context = saved_job.sec_context;
 
-        //TODO: maybe increment consumer index here, and do all these checks on saved job.
-        // Check when doing benchmark.
-
-        // Packet processing is DONE. See if it's processed with crypto or integrity algo
-        if(job->is_integrity_algo == TRUE)
+        // Packet processing is DONE. See if it's a data-plane or control-plane packet
+        if(sec_context->pdcp_crypto_info->user_plane == PDCP_CONTROL_PLANE)
         {
-#if !defined(PDCP_TEST_SNOW_F9_ONLY) && !defined(PDCP_TEST_AES_CMAC_ONLY)
-            if(job->sec_context->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION)
-#endif
+            sec_handle_pdcp_c_plane_packets(&saved_job, sec_context, &status, &notify_pkt);
+
+            // If control-plane packet must be sent to SEC a second time,
+            // it will not be notified now.
+            if(notify_pkt == FALSE)
             {
-                // SEC 3.1 generated an 8 byte long MAC-I into a per-context-memory-zone internal
-                // to the driver. Copy the relevant 4 bytes of MAC-I code into output buffer.
-                if(job->sec_context->pdcp_crypto_info->integrity_algorithm == SEC_ALG_SNOW)
-                {
-                    // SEC 3.1 generates SNOW F9 MAC-I code that is 8 bytes long, having first 4 bytes
-                    // set to zero. PDCP MAC-I is in the last 4 bytes.
-                    *((uint32_t*)(job->out_packet->address + job->out_packet->offset)) = 
-                        *((uint32_t*)(job->sec_context->mac_i->code + 4));
-                }
-                else if(job->sec_context->pdcp_crypto_info->integrity_algorithm == SEC_ALG_AES)
-                {
+                // increment the consumer index for the current job ring
+                job_ring->cidx = SEC_CIRCULAR_COUNTER(job_ring->cidx, SEC_JOB_RING_SIZE);
 
-                    // SEC 3.1 generates AES CMAC MAC-I code that is 8 bytes long, 
-                    // having PDCP MAC-I in the first 4 bytes. Last 4 bytes unused.
-                    *((uint32_t*)(job->out_packet->address + job->out_packet->offset)) = 
-                        *((uint32_t*)(job->sec_context->mac_i->code));
-                }
-
-                SEC_DEBUG("Generated MAC-I = 0x%x", *((uint32_t*)(job->out_packet->address + job->out_packet->offset)));
-            }
-#if !defined(PDCP_TEST_SNOW_F9_ONLY) && !defined(PDCP_TEST_AES_CMAC_ONLY)
-            else
-#else
-            if(job->sec_context->pdcp_crypto_info->protocol_direction == PDCP_DECAPSULATION)
-#endif
-            {
-                // Decapsulation. MAC-I validation was performed.
-                if(job->sec_context->pdcp_crypto_info->integrity_algorithm == SEC_ALG_SNOW)
-                {
-                    // SEC 3.1 is capable of doing MAC-I validation itself for SNOW F9
-                    mac_i_check_failed = hw_icv_check_failed(job->descr);
-                }
-                else if (job->sec_context->pdcp_crypto_info->integrity_algorithm == SEC_ALG_AES)
-                {
-                    // Do manually the MAC-I validation for AES CMAC.
-                    // SEC 3.1 does not support ICV len smaller than 8 bytes for AES CMAC.
-                    original_mac_i = (*(uint32_t*)(job->in_packet->address +
-                                                   job->in_packet->length -
-                                                   PDCP_MAC_I_LENGTH));
-
-                    mac_i_check_failed = (original_mac_i != *((uint32_t*)(job->sec_context->mac_i->code)));
-                }
-
-                // Check if MAC-I validation failed
-                if(mac_i_check_failed)
-                {
-                    SEC_ERROR("Integrity check FAILED for packet!. "
-                              "in pkt addr(virt sec_packet_t) = %p. out pkt addr(virt sec_packet_t) = %p"
-                              "original MAC-I = 0x%x. generated MAC-I = 0x%x\n",
-                              job->in_packet, job->out_packet,
-                              original_mac_i,
-                              *((uint32_t*)(job->sec_context->mac_i->code)));
-
-                    status = SEC_STATUS_ERROR;
-                    // TODO: set error info to: MAC-I validation failed.
-                }
+                // consume processed packet for this sec context
+                CONTEXT_CONSUME_PACKET(sec_context);
+                continue;
             }
         }
 
         // increment the consumer index for the current job ring
         job_ring->cidx = SEC_CIRCULAR_COUNTER(job_ring->cidx, SEC_JOB_RING_SIZE);
 
-        // packet is processed by SEC engine, notify it to UA
-        sec_context = saved_job.sec_context;
-
-        // if context is retiring, set a suggestive status for the packets notified to UA
+        // If context is retiring, set a suggestive status for the packets notified to UA.
+        // Doesn't matter if the status is overwritten here, if UA deleted the context,
+        // it does not care about any other packet status.
         if(sec_context->state == SEC_CONTEXT_RETIRING)
         {
             // at this point, PI per context is frozen, context is retiring,
@@ -359,7 +332,6 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
         }
 
         // call the calback
-        // TODO: set error_info on MAC-I validation failed, if this is the case.
         ret = sec_context->notify_packet_cbk(saved_job.in_packet,
                                              saved_job.out_packet,
                                              saved_job.ua_handle,
@@ -400,6 +372,159 @@ static void flush_job_rings()
             hw_flush_job_ring(job_ring);
         }
     }
+}
+
+static int sec_process_pdcp_c_plane_packets(sec_job_ring_t *job_ring)
+{
+    int ret = SEC_SUCCESS;
+    int32_t nr_of_c_plane_pkts = 0;
+    sec_job_t *job = NULL;
+    struct fifo_t *c_plane_fifo = &job_ring->pdcp_c_plane_fifo;
+    sec_context_t *sec_context = NULL;
+
+    nr_of_c_plane_pkts = FIFO_NUMBER_OF_ITEMS(FIFO_CAPACITY, c_plane_fifo->pidx, c_plane_fifo->cidx);
+
+    while(nr_of_c_plane_pkts > 0)    
+    {
+        // check if the Job Ring is full
+        if(SEC_JOB_RING_IS_FULL(job_ring->pidx, job_ring->cidx,
+                    SEC_JOB_RING_SIZE, SEC_JOB_RING_HW_SIZE))
+        {
+            // check control-plane internal fifo for work to do
+            ret = sec_process_pdcp_c_plane_packets(job_ring);
+            SEC_ASSERT(ret == SEC_SUCCESS, ret,
+                    "sec_process_pdcp_c_plane_packets returned error code %d", ret);
+
+            return SEC_JR_IS_FULL;
+        }
+
+        // get the first un-notified job from the job ring
+        job = c_plane_fifo->items[c_plane_fifo->cidx];
+
+        sec_context = job->sec_context;
+        // send packet to SEC again, for second processing step:
+        // integrity check or confidentiality.
+
+        //TODO: update in, out packet pointers?
+
+        // if packet was already processed with integrity algorithm,
+        // process now with confidentiality. And viceversa...
+        job->is_integrity_algo = !job->is_integrity_algo;
+
+        // Update SEC descriptor. If HFN reached the configured threshold, then
+        // the User App callback will be raised with status set to SEC_STATUS_HFN_THRESHOLD_REACHED.
+        ret = sec_pdcp_context_update_descriptor(job->sec_context, job, job->descr, job->is_integrity_algo);
+        SEC_ASSERT(ret == SEC_SUCCESS, ret,
+                   "sec_pdcp_context_update_descriptor returned error code %d", ret);
+
+        // keep count of submitted packets for this sec context
+        CONTEXT_ADD_PACKET(sec_context);
+
+        // increment the producer index for the current job ring
+        job_ring->pidx = SEC_CIRCULAR_COUNTER(job_ring->pidx, SEC_JOB_RING_SIZE);
+
+
+        // Enqueue this descriptor into the Fetch FIFO of this JR
+        // Need write memory barrier here so that descriptor is written before
+        // packet is enqueued in SEC's job ring.
+        // GCC's builtins offers full memry barrier, use it here.
+        atomic_synchronize();
+        hw_enqueue_packet_on_job_ring(job_ring, job->descr_phys_addr);
+        
+        nr_of_c_plane_pkts--;
+
+        // increment the consumer index for the current job ring
+        c_plane_fifo->cidx = FIFO_CIRCULAR_COUNTER(c_plane_fifo->cidx, FIFO_CAPACITY);
+    }
+
+    return SEC_SUCCESS;
+}
+
+static void sec_handle_mac_i_generation(sec_context_t *sec_context, uint32_t *out_mac_i)
+{
+    // SEC 3.1 generated an 8 byte long MAC-I into a per-context-memory-zone internal
+    // to the driver. Copy the relevant 4 bytes of MAC-I code into output buffer.
+    if(sec_context->pdcp_crypto_info->integrity_algorithm == SEC_ALG_SNOW)
+    {
+        // SEC 3.1 generates SNOW F9 MAC-I code that is 8 bytes long, having first 4 bytes
+        // set to zero. PDCP MAC-I is in the last 4 bytes.
+        *out_mac_i = *((uint32_t*)(sec_context->mac_i->code + 4));
+    }
+    else if(sec_context->pdcp_crypto_info->integrity_algorithm == SEC_ALG_AES)
+    {
+
+        // SEC 3.1 generates AES CMAC MAC-I code that is 8 bytes long, 
+        // having PDCP MAC-I in the first 4 bytes. Last 4 bytes unused.
+        *out_mac_i = *((uint32_t*)(sec_context->mac_i->code));
+    }
+
+    SEC_DEBUG("Generated MAC-I = 0x%x", *out_mac_i);
+}
+
+static int sec_handle_mac_i_validation(sec_job_t *job, sec_context_t *sec_context)
+{
+    uint32_t original_mac_i;
+
+    // Decapsulation. MAC-I validation was performed.
+    if(sec_context->pdcp_crypto_info->integrity_algorithm == SEC_ALG_SNOW)
+    {
+        // SEC 3.1 is capable of doing MAC-I validation itself for SNOW F9
+        return hw_icv_check_failed(job->descr);
+    }
+    else if (sec_context->pdcp_crypto_info->integrity_algorithm == SEC_ALG_AES)
+    {
+        // Do manually the MAC-I validation for AES CMAC.
+        // SEC 3.1 does not support ICV len smaller than 8 bytes for AES CMAC.
+        original_mac_i = (*(uint32_t*)(job->in_packet->address +
+                    job->in_packet->length -
+                    PDCP_MAC_I_LENGTH));
+
+        return (original_mac_i != *((uint32_t*)(sec_context->mac_i->code)));
+    }
+    return 0;
+}
+
+static int sec_handle_pdcp_c_plane_packets(sec_job_t *job,
+                                           sec_context_t *sec_context,
+                                           sec_status_t *status,
+                                           uint8_t *notify_pkt)
+{
+    uint8_t mac_i_check_failed = FALSE;
+#if !defined(PDCP_TEST_SNOW_F9_ONLY) && !defined(PDCP_TEST_AES_CMAC_ONLY)
+    if(sec_context->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION)
+#endif
+    {
+        // copy generated MAC-I code into input or output packet:
+        // - for double pass c-plane packets, copy into input packet
+        // - for single pass c-plane packets with integrity only, copy into output packet
+        sec_handle_mac_i_generation(sec_context,
+                                    (uint32_t*)(job->out_packet->address + job->out_packet->offset));
+    }
+#if !defined(PDCP_TEST_SNOW_F9_ONLY) && !defined(PDCP_TEST_AES_CMAC_ONLY)
+    else
+#else
+        if(sec_context->pdcp_crypto_info->protocol_direction == PDCP_DECAPSULATION)
+#endif
+        {
+            mac_i_check_failed = sec_handle_mac_i_validation(job, sec_context);
+
+            // Check if MAC-I validation failed
+            if(mac_i_check_failed)
+            {
+                SEC_ERROR("Integrity check FAILED for packet!. "
+                        "in pkt addr(virt sec_packet_t) = %p. out pkt addr(virt sec_packet_t) = %p"
+                        "original MAC-I = 0x%x. generated MAC-I = 0x%x\n",
+                        job->in_packet, job->out_packet,
+                        original_mac_i,
+                        *((uint32_t*)(sec_context->mac_i->code)));
+
+                *status = SEC_STATUS_ERROR;
+                // TODO: set error info to: MAC-I validation failed.
+            }
+        }
+
+
+    return 0;
 }
 /*==================================================================================================
                                      GLOBAL FUNCTIONS
@@ -824,12 +949,12 @@ sec_return_code_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle,
 sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
                                      const sec_packet_t *in_packet,
                                      const sec_packet_t *out_packet,
-                                     uint8_t do_integrity_check,
                                      ua_context_handle_t ua_ctx_handle)
 {
     int ret = SEC_SUCCESS;
     sec_job_t *job = NULL;
     sec_job_ring_t *job_ring = NULL;
+    uint8_t do_integrity_check = FALSE;
 
 #if FSL_SEC_ENABLE_SCATTER_GATHER == ON
 #error "Scatter/Gather support is not implemented!"
@@ -862,22 +987,23 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
                "Wait until all in-fligh packets are processed.");
     ASSERT(sec_context->state != SEC_CONTEXT_UNUSED);
 
-    // Integrity check algorithm can be run only for PDCP control-plane packets.
-    SEC_ASSERT(!COND_EXPR1_EQ_AND_EXPR2_NEQ(do_integrity_check,
-                                           1,
-                                           sec_context->pdcp_crypto_info->user_plane,
-                                           PDCP_CONTROL_PLANE),
-               SEC_INVALID_INPUT_PARAM,
-               "Cannot do integrity check on data plane PDCP context!");
-
     job_ring = (sec_job_ring_t *)sec_context->jr_handle;
     ASSERT(job_ring != NULL);
 
     // check if the Job Ring is full
-    if(SEC_JOB_RING_IS_FULL(job_ring, SEC_JOB_RING_SIZE, SEC_JOB_RING_HW_SIZE))
+    if(SEC_JOB_RING_IS_FULL(job_ring->pidx, job_ring->cidx,
+                            SEC_JOB_RING_SIZE, SEC_JOB_RING_HW_SIZE))
     {
+        // check control-plane internal fifo for work to do
+        ret = sec_process_pdcp_c_plane_packets(job_ring);
+        SEC_ASSERT(ret == SEC_SUCCESS, ret,
+                   "sec_process_pdcp_c_plane_packets returned error code %d", ret);
+
         return SEC_JR_IS_FULL;
     }
+
+    do_integrity_check = (sec_context->pdcp_crypto_info->user_plane == PDCP_CONTROL_PLANE) && 
+                         (sec_context->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION) ? TRUE : FALSE;
 
     // get first available job from job ring
     job = &job_ring->jobs[job_ring->pidx];
@@ -894,8 +1020,7 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
     ASSERT(job->descr != NULL);
 
     // Update SEC descriptor. If HFN reached the configured threshold, then
-    // the return code will be SEC_HFN_THRESHOLD_REACHED. 
-    // We MUST return it from sec_process_packet() as well!!!
+    // the User App callback will be raised with status set to SEC_STATUS_HFN_THRESHOLD_REACHED.
     ret = sec_pdcp_context_update_descriptor(sec_context, job, job->descr, do_integrity_check);
     SEC_ASSERT(ret == SEC_SUCCESS, ret,
                "sec_pdcp_context_update_descriptor returned error code %d", ret);
@@ -914,7 +1039,12 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
     atomic_synchronize();
     hw_enqueue_packet_on_job_ring(job_ring, job->descr_phys_addr);
 
-    return ret;
+    // Check control-plane internal queue for packets that need be sent to SEC
+    // for second processing step.
+    ret = sec_process_pdcp_c_plane_packets(job_ring);
+    SEC_ASSERT(ret == SEC_SUCCESS, ret,
+               "sec_process_pdcp_c_plane_packets returned error code %d", ret);
+    return SEC_SUCCESS;
 }
 
 uint32_t sec_get_last_error(void)
@@ -934,6 +1064,7 @@ const char* sec_get_error_message(sec_return_code_t error)
     // TODO: to be implemented
     return g_return_code_string[0];
 }
+
 
 /*================================================================================================*/
 

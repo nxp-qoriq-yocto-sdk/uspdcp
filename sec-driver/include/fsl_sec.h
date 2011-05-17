@@ -505,6 +505,13 @@ sec_return_code_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle,
  * receive notifications of the processing completion status. The notifications are received
  * by UA by means of callback (see ::sec_out_cbk).
  *
+ * @note For packets submitted for PDCP control-plane context it is possible to
+ *       be sent to SEC twice for processing: once to do integrity check, second to do
+ *       encryption/decryption. This will happen when the algorithm for integrity is 
+ *       different than the algorithm for confidentiality.
+ *       When both algorithms are the same, the packet will be sent only once, on P9132 (SEC 4.4).
+ *       On P2020 (SEC 3.1) the control-plane packets will ALWAYS be sent to SEC twice.
+ *
  * @note The input packet and output packet must not both point to the same memory location!
  *
  * @param [in]  sec_ctx_handle     The handle of the context associated to this packet.
@@ -513,9 +520,6 @@ sec_return_code_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle,
  *                                 required for this packet.
  * @param [in]  in_packet          Input packet read by SEC.
  * @param [in]  out_packet         Output packet where SEC writes result.
- * @param [in]  do_integrity_check Has relevance only for PDCP control plane packets.
- *                                 If set to value 1, then integrity check algoritm is performed on the packet.
- *                                 When set to 0, cryptographic algorithm is run on the packet.
  * @param [in]  ua_ctx_handle      The handle to a User Application packet context.
  *                                 This handle is opaque from the SEC driver's point of view and
  *                                 will be provided by SEC driver in the response callback.
@@ -537,7 +541,6 @@ sec_return_code_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle,
 sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
                                      const sec_packet_t *in_packet,
                                      const sec_packet_t *out_packet,
-                                     uint8_t do_integrity_check,
                                      ua_context_handle_t ua_ctx_handle);
 
 

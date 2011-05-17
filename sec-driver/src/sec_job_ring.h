@@ -39,6 +39,7 @@
 #include "fsl_sec.h"
 #include "sec_contexts.h"
 #include "sec_hw_specific.h"
+#include "fifo.h"
 
 /*==============================================================================
                               DEFINES AND MACROS
@@ -47,18 +48,15 @@
 
 /** Update circular counter when maximum value of counter is a power of 2.
  * Use bitwise operations to roll over. */
-#define SEC_CIRCULAR_COUNTER(x, max)   (((x) + 1) & (max - 1))
+#define SEC_CIRCULAR_COUNTER            FIFO_CIRCULAR_COUNTER
 
 /** The number of jobs in a JOB RING */
-#define SEC_JOB_RING_DIFF(ring_max_size, pi, ci) (((pi) < (ci)) ? \
-                    ((ring_max_size) + (pi) - (ci)) : ((pi) - (ci)))
+#define SEC_JOB_RING_NUMBER_OF_ITEMS    FIFO_NUMBER_OF_ITEMS
 
 /** Test if job ring is full. Used job ring capacity to be 32 = a power of 2.
  * A job ring is full when there are 24 entries, which is the maximum
  * capacity of SEC's hardware FIFO. */
-#define SEC_JOB_RING_IS_FULL(jr, ring_max_size, ring_threshold) \
-                    (((jr)->pidx + 1 + ((ring_max_size) - (ring_threshold))) & (ring_max_size - 1))  == \
-                    ((jr)->cidx)
+#define SEC_JOB_RING_IS_FULL            FIFO_IS_FULL
 
 /*==============================================================================
                                     ENUMS
@@ -99,6 +97,8 @@ struct sec_job_ring_t
                                                    Size of array is power of 2 to allow fast update of
                                                    producer/consumer indexes with bitwise operations. */
     struct sec_descriptor_t *descriptors;      /*< Ring of descriptors sent to SEC engine for processing */
+    struct fifo_t pdcp_c_plane_fifo;           /*< Ring of PDCP control plane packets that must be sent 
+                                                   a second time to SEC for processing */
 
     volatile uint32_t pidx;             /*< Producer index for job ring (jobs array) */
     uint32_t uio_fd;                    /*< The file descriptor used for polling from user space

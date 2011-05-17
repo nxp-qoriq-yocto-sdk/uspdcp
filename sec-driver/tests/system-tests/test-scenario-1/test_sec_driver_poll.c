@@ -88,6 +88,12 @@ extern "C" {
 
 
 
+
+//#define test_printf(format, ...)
+#define test_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__) 
+
+
+
 // Number of SEC JRs used by this test application
 // @note: Currently this test application supports only 2 JRs (not less, not more)
 #define JOB_RING_NUMBER              2
@@ -936,7 +942,7 @@ static void release_pdcp_context(int * no_of_used_pdcp_contexts, pdcp_context_t 
     assert(pdcp_context != NULL);
     assert(no_of_used_pdcp_contexts != NULL);
 
-    printf("thread #%d:producer: release pdcp context id = %d\n", pdcp_context->thread_id, pdcp_context->id);
+    test_printf("thread #%d:producer: release pdcp context id = %d\n", pdcp_context->thread_id, pdcp_context->id);
 
     // there should be at least one pdcp context in the pool of contexts
     assert(*no_of_used_pdcp_contexts > 0);
@@ -1102,12 +1108,12 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
     assert(status != SEC_STATUS_ERROR);
     if(status == SEC_STATUS_HFN_THRESHOLD_REACHED)
     {
-        printf("HFN threshold reached for packet\n");
+        test_printf("HFN threshold reached for packet\n");
     }
 
     pdcp_context = (pdcp_context_t *)ua_ctx_handle;
 
-    printf("\nthread #%d:consumer: sec_callback called for context_id = %d, "
+    test_printf("\nthread #%d:consumer: sec_callback called for context_id = %d, "
             "no of buffers processed = %d, no of buffers to process = %d, "
             "status = %d\n",
             (pdcp_context->thread_id + 1)%2,
@@ -1140,23 +1146,23 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
 
     if(test_failed)
     {
-        printf("\nthread #%d:consumer: out packet INCORRECT!!!."
+        test_printf("\nthread #%d:consumer: out packet INCORRECT!!!."
                " out pkt= ",
                (pdcp_context->thread_id + 1)%2);
         int i;
         for(i = 0; i <  out_packet->length; i++)
         {
-            printf("%02x ", out_packet->address[i]);
+            test_printf("%02x ", out_packet->address[i]);
         }
-        printf("\n");
+        test_printf("\n");
         /*
-           printf("\nreference data: ");
+           test_printf("\nreference data: ");
 
            for(i = 0; i <  job->out_packet->length; i++)
            {
-           printf("%02x ", snow_f8_enc_data_out[i]);
+           test_printf("%02x ", snow_f8_enc_data_out[i]);
            }
-           printf("\n");
+           test_printf("\n");
            */
         assert(0);
 
@@ -1164,12 +1170,12 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
     else
     {
         int i;
-        printf("\nthread #%d:consumer: packet CORRECT!!! out pkt = . ", (pdcp_context->thread_id + 1)%2);
+        test_printf("\nthread #%d:consumer: packet CORRECT!!! out pkt = . ", (pdcp_context->thread_id + 1)%2);
         for(i = 0; i <  out_packet->length; i++)
         {
-            printf("%02x ", out_packet->address[i]);
+            test_printf("%02x ", out_packet->address[i]);
         }
-        printf("\n");
+        test_printf("\n");
     }
 
     // Buffers processing.
@@ -1195,7 +1201,7 @@ static int get_results(uint8_t job_ring, int limit, uint32_t *packets_out)
     ret = sec_poll_job_ring(job_ring_descriptors[job_ring].job_ring_handle, limit, packets_out);
     if (ret != SEC_SUCCESS)
     {
-        printf("sec_poll_job_ring::Error %d when polling for SEC results on Job Ring %d \n", ret, job_ring);
+        test_printf("sec_poll_job_ring::Error %d when polling for SEC results on Job Ring %d \n", ret, job_ring);
         return 1;
     }
     // validate that number of packets notified does not exceed limit when limit is > 0.
@@ -1224,12 +1230,12 @@ static int delete_context(pdcp_context_t * pdcp_context, int *no_of_used_pdcp_co
         ret = sec_delete_pdcp_context(pdcp_context->sec_ctx);
         if (ret == SEC_PACKETS_IN_FLIGHT)
         {
-            printf("thread #%d:producer: delete PDCP context no %d -> packets in flight \n",
+            test_printf("thread #%d:producer: delete PDCP context no %d -> packets in flight \n",
                     pdcp_context->thread_id, pdcp_context->id);
         }
         else if (ret == SEC_LAST_PACKET_IN_FLIGHT)
         {
-            printf("thread #%d:producer: delete PDCP context no %d -> last packet in flight \n",
+            test_printf("thread #%d:producer: delete PDCP context no %d -> last packet in flight \n",
                     pdcp_context->thread_id, pdcp_context->id);
         }
         else if (ret == SEC_SUCCESS)
@@ -1243,7 +1249,7 @@ static int delete_context(pdcp_context_t * pdcp_context, int *no_of_used_pdcp_co
         }
         else
         {
-            printf("thread #%d:producer: sec_delete_pdcp_context return error %d for PDCP context no %d \n",
+            test_printf("thread #%d:producer: sec_delete_pdcp_context return error %d for PDCP context no %d \n",
                     pdcp_context->thread_id, ret, pdcp_context->id);
             // the stub implementation of SEC driver should not return an error
             assert(0);
@@ -1380,7 +1386,7 @@ static int stop_sec_worker_threads(void)
     assert(no_of_used_pdcp_dl_contexts == 0);
     assert(no_of_used_pdcp_ul_contexts == 0);
 
-    printf("thread main: all worker threads are stopped\n");
+    test_printf("thread main: all worker threads are stopped\n");
     return 0;
 }
 
@@ -1390,7 +1396,7 @@ static void* pdcp_thread_routine(void* config)
     int ret = 0;
     unsigned int packets_received = 0;
     pdcp_context_t *pdcp_context;
-    unsigned int do_integrity_check = 0;
+//    unsigned int do_integrity_check = 0;
 
     int total_no_of_contexts_deleted = 0;
     int no_of_contexts_deleted = 0;
@@ -1399,7 +1405,7 @@ static void* pdcp_thread_routine(void* config)
     th_config_local = (thread_config_t*)config;
     assert(th_config_local != NULL);
 
-    printf("thread #%d:producer: start work, no of contexts to be created/deleted %d\n",
+    test_printf("thread #%d:producer: start work, no of contexts to be created/deleted %d\n",
             th_config_local->tid, th_config_local->no_of_pdcp_contexts_to_test);
 
     // Create a number of configurable contexts and affine them to the producer JR, send a random
@@ -1411,7 +1417,7 @@ static void* pdcp_thread_routine(void* config)
                                     &pdcp_context);
         assert(ret == 0);
 
-        printf("thread #%d:producer: create pdcp context %d\n", th_config_local->tid, pdcp_context->id);
+        test_printf("thread #%d:producer: create pdcp context %d\n", th_config_local->tid, pdcp_context->id);
         pdcp_context->pdcp_ctx_cfg_data.notify_packet = &pdcp_ready_packet_handler;
         pdcp_context->pdcp_ctx_cfg_data.sn_size = test_sn_size;
         pdcp_context->pdcp_ctx_cfg_data.bearer = test_bearer;
@@ -1435,7 +1441,7 @@ static void* pdcp_thread_routine(void* config)
                    temp_auth_key,
                    test_auth_key_len);
             pdcp_context->pdcp_ctx_cfg_data.integrity_key_len = test_auth_key_len;
-            do_integrity_check = 1;
+            //do_integrity_check = 1;
         }
 
         pdcp_context->thread_id = th_config_local->tid;
@@ -1446,7 +1452,7 @@ static void* pdcp_thread_routine(void* config)
                                        &pdcp_context->sec_ctx);
         if (ret != SEC_SUCCESS)
         {
-            printf("thread #%d:producer: sec_create_pdcp_context return error %d for PDCP context no %d \n",
+            test_printf("thread #%d:producer: sec_create_pdcp_context return error %d for PDCP context no %d \n",
                     th_config_local->tid, ret, pdcp_context->id);
             assert(0);
         }
@@ -1465,7 +1471,6 @@ static void* pdcp_thread_routine(void* config)
             while (sec_process_packet(pdcp_context->sec_ctx,
                                      &in_packet,
                                      &out_packet,
-                                     do_integrity_check, // do not do integrity check. TODO: change this to do double pass through SEC for PDCP c-plane
                                      (ua_context_handle_t)pdcp_context) == SEC_JR_IS_FULL)
             {
             	// wait while the producer JR is empty, and in the mean time do some
@@ -1477,7 +1482,7 @@ static void* pdcp_thread_routine(void* config)
             };
             if (ret != SEC_SUCCESS)
             {
-                printf("thread #%d:producer: sec_process_packet return error %d for PDCP context no %d \n",
+                test_printf("thread #%d:producer: sec_process_packet return error %d for PDCP context no %d \n",
                         th_config_local->tid, ret, pdcp_context->id);
                 assert(0);
             }
@@ -1498,7 +1503,7 @@ static void* pdcp_thread_routine(void* config)
         }
     }
 
-    printf("thread #%d: polling until all contexts are deleted\n", th_config_local->tid);
+    test_printf("thread #%d: polling until all contexts are deleted\n", th_config_local->tid);
 
     // Poll the consumer's JR for already processed packets and try to delete
     // the contexts marked as deleted (the contexts will be deleted if all
@@ -1522,7 +1527,7 @@ static void* pdcp_thread_routine(void* config)
 
     // signal to main thread that the work is done
     th_config_local->work_done = 1;
-    printf("thread #%d: work done, polling until exit signal is received\n", th_config_local->tid);
+    test_printf("thread #%d: work done, polling until exit signal is received\n", th_config_local->tid);
 
     // continue polling on the consumer job ring, in case the other worker thread
     // did not finish its work
@@ -1534,7 +1539,7 @@ static void* pdcp_thread_routine(void* config)
         assert(ret == 0);
     }
 
-    printf("thread #%d: exit\n", th_config_local->tid);
+    test_printf("thread #%d: exit\n", th_config_local->tid);
     pthread_exit(NULL);
 }
 
@@ -1555,10 +1560,10 @@ static int setup_sec_environment(void)
     ret = dma_mem_setup();
     if (ret != 0)
     {
-        printf("dma_mem_setup failed with ret = %d\n", ret);
+        test_printf("dma_mem_setup failed with ret = %d\n", ret);
         return 1;
     }
-	printf("dma_mem_setup: mapped virtual mem 0x%x to physical mem 0x%x\n", __dma_virt, DMA_MEM_PHYS);
+	test_printf("dma_mem_setup: mapped virtual mem 0x%x to physical mem 0x%x\n", __dma_virt, DMA_MEM_PHYS);
 
     for (i = 0; i < MAX_PDCP_CONTEXT_NUMBER; i++)
     {
@@ -1633,10 +1638,10 @@ static int setup_sec_environment(void)
     ret = sec_init(&sec_config_data, JOB_RING_NUMBER, &job_ring_descriptors);
     if (ret != SEC_SUCCESS)
     {
-        printf("sec_init::Error %d\n", ret);
+        test_printf("sec_init::Error %d\n", ret);
         return 1;
     }
-    printf("thread main: initialized SEC user space driver\n");
+    test_printf("thread main: initialized SEC user space driver\n");
 
     for (i = 0; i < JOB_RING_NUMBER; i++)
     {
@@ -1655,10 +1660,10 @@ static int cleanup_sec_environment(void)
     ret = sec_release();
     if (ret != 0)
     {
-        printf("sec_release returned error\n");
+        test_printf("sec_release returned error\n");
         return 1;
     }
-    printf("thread main: released SEC user space driver\n");
+    test_printf("thread main: released SEC user space driver!!\n");
 
     for (i = 0; i < MAX_PDCP_CONTEXT_NUMBER; i++)
     {
@@ -1698,7 +1703,7 @@ int main(void)
     ret = setup_sec_environment();
     if (ret != 0)
     {
-        printf("setup_sec_environment returned error\n");
+        test_printf("setup_sec_environment returned error\n");
         return 1;
     }
 
@@ -1708,7 +1713,7 @@ int main(void)
     ret = start_sec_worker_threads();
     if (ret != 0)
     {
-        printf("start_sec_worker_threads returned error\n");
+        test_printf("start_sec_worker_threads returned error\n");
         return 1;
     }
 
@@ -1718,7 +1723,7 @@ int main(void)
     ret = stop_sec_worker_threads();
     if (ret != 0)
     {
-        printf("stop_sec_worker_threads returned error\n");
+        test_printf("stop_sec_worker_threads returned error\n");
         return 1;
     }
 
@@ -1728,7 +1733,7 @@ int main(void)
     ret = cleanup_sec_environment();
     if (ret != 0)
     {
-        printf("cleanup_sec_environment returned error\n");
+        test_printf("cleanup_sec_environment returned error\n");
         return 1;
     }
 
