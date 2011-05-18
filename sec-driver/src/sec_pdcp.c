@@ -326,9 +326,14 @@ static int sec_pdcp_context_update_aes_cmac_descriptor(sec_job_t *job, sec_descr
  *                              IV and IV template store: confidentiality IV , integrity IV.
  */
 static void sec_pdcp_update_iv_template(sec_crypto_pdb_t *sec_pdb,
-                                         uint8_t *pdcp_header,
-                                         sec_status_t *status,
-                                         uint8_t iv_offset);
+                                        uint8_t *pdcp_header,
+                                        sec_status_t *status,
+                                        uint8_t iv_offset);
+
+/** @brief Fill PDB with initial data for this context: HFN threshold, HFN mask, etc
+ * @param [in,out] ctx          SEC context
+ */
+static void sec_pdcp_create_pdb(sec_context_t *ctx);
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
@@ -340,26 +345,6 @@ static int sec_pdcp_create_snow_f8_aes_ctr_descriptor(sec_context_t *ctx)
     // Copy crypto data into PDB
     ASSERT(ctx->pdcp_crypto_info->cipher_key != NULL);
 
-    // Copy HFN threshold
-    sec_pdb->hfn_threshold = ctx->pdcp_crypto_info->hfn_threshold << ctx->pdcp_crypto_info->sn_size;
-
-    // Set mask to extract HFN from IV and SN from PDCP header
-    if (ctx->pdcp_crypto_info->user_plane == PDCP_CONTROL_PLANE)
-    {
-        sec_pdb->hfn_mask = PDCP_HFN_MASK_CONTROL_PLANE;
-        sec_pdb->sn_mask = PDCP_SN_MASK_CONTROL_PLANE;
-    }
-    else
-    {
-        sec_pdb->hfn_mask = (ctx->pdcp_crypto_info->sn_size == SEC_PDCP_SN_SIZE_12) ?
-                            PDCP_HFN_MASK_DATA_PLANE_LONG_SN : PDCP_HFN_MASK_DATA_PLANE_SHORT_SN;
-
-        sec_pdb->sn_mask = (ctx->pdcp_crypto_info->sn_size == SEC_PDCP_SN_SIZE_12) ?
-                           PDCP_SN_MASK_DATA_PLANE_LONG_SN : PDCP_SN_MASK_DATA_PLANE_SHORT_SN;
-    }
-
-    // SNS = 1 if short SN is used
-    sec_pdb->sns = (ctx->pdcp_crypto_info->sn_size ==  SEC_PDCP_SN_SIZE_12) ? 0 : 1;
 
     // IV Template format:
     // word 0 : F8 IV[0]
@@ -372,6 +357,7 @@ static int sec_pdcp_create_snow_f8_aes_ctr_descriptor(sec_context_t *ctx)
     // control plane:           HFN 27 bits, SN 5 bit
     // data plane, short SN:    HFN 25 bits, SN 7 bit
     // data plane, long SN:     HFN 20 bits, SN 12 bit
+
     
     // Set HFN.
     // SN will be updated for each packet. When SN rolls over, HFN is incremented.
@@ -410,9 +396,9 @@ static int sec_pdcp_create_snow_f9_descriptor(sec_context_t *ctx)
     // control plane:           HFN 27 bits, SN 5 bit
     
 
-    // First word of F9 IV is identical with first word of F8 IV
+    // First word of F9 IV is identical with first word of F8 IV : HFN | SN
     // SN will be updated for each packet. When SN rolls over, HFN is incremented.
-    sec_pdb->iv_template[PDCP_INTEGRITY_IV_POS] = sec_pdb->iv_template[PDCP_CONFIDENTIALITY_IV_POS];
+    sec_pdb->iv_template[PDCP_INTEGRITY_IV_POS] = ctx->pdcp_crypto_info->hfn << ctx->pdcp_crypto_info->sn_size;
 
     // Set DIRECTION bit: 0 for uplink, 1 for downlink
     sec_pdb->iv_template[PDCP_INTEGRITY_IV_POS + 1] = ctx->pdcp_crypto_info->packet_direction << 26;
@@ -448,10 +434,14 @@ static int sec_pdcp_create_aes_cmac_descriptor(sec_context_t *ctx)
 
     // AES CMAC 'IV' is identical with AES CTR IV
     // SN will be updated for each packet. When SN rolls over, HFN is incremented.
-    sec_pdb->iv_template[PDCP_INTEGRITY_IV_POS] = sec_pdb->iv_template[PDCP_CONFIDENTIALITY_IV_POS];
+    sec_pdb->iv_template[PDCP_INTEGRITY_IV_POS] = ctx->pdcp_crypto_info->hfn << ctx->pdcp_crypto_info->sn_size;
 
+    // Set bearer
+    sec_pdb->iv_template[PDCP_INTEGRITY_IV_POS + 1] = ctx->pdcp_crypto_info->bearer << (32 - PDCP_BEARER_LENGTH);
+    
     // Set DIRECTION bit: 0 for uplink, 1 for downlink
-    sec_pdb->iv_template[PDCP_INTEGRITY_IV_POS + 1] = sec_pdb->iv_template[PDCP_CONFIDENTIALITY_IV_POS + 1];
+    sec_pdb->iv_template[PDCP_INTEGRITY_IV_POS + 1] = sec_pdb->iv_template[PDCP_INTEGRITY_IV_POS + 1] | 
+        (ctx->pdcp_crypto_info->packet_direction << (32 - PDCP_BEARER_LENGTH - 1));
     
     return SEC_SUCCESS;
 }
@@ -578,6 +568,9 @@ static int sec_pdcp_context_create_aes_auth_descriptor(sec_context_t *ctx)
 static int sec_pdcp_context_create_descriptor(sec_context_t *ctx)
 {
     int ret = SEC_SUCCESS;
+
+    // Create a Protocol Data Blob (PDB)
+    sec_pdcp_create_pdb(ctx);
 
     // Create ciphering descriptor.
     // Needed for both data plane and control plane
@@ -795,7 +788,7 @@ static int sec_pdcp_context_update_snow_f9_descriptor(sec_job_t *job, sec_descri
     descriptor->iv[5] = 0x397E8FD; 
 #endif
 
-    SEC_DEBUG("IV[0] = 0x%x, IV[1] = 0x%x, IV[2] = 0x%x, IV[3] = 0x%x, IV[4] = 0x%x, IV[5] = 0x%x",
+    SEC_DEBUG("\nIV[0] = 0x%x\n IV[1] = 0x%x\n IV[2] = 0x%x\n IV[3] = 0x%x\n IV[4] = 0x%x\n IV[5] = 0x%x",
               descriptor->iv[0], descriptor->iv[1], descriptor->iv[2], descriptor->iv[3],
               descriptor->iv[4], descriptor->iv[5]);
 
@@ -1062,6 +1055,33 @@ static void sec_pdcp_update_iv_template(sec_crypto_pdb_t *sec_pdb,
     *status = ((sec_pdb->iv_template[iv_offset] & sec_pdb->hfn_mask) >= sec_pdb->hfn_threshold) ? 
                SEC_STATUS_HFN_THRESHOLD_REACHED : SEC_STATUS_SUCCESS;
 }
+
+static void sec_pdcp_create_pdb(sec_context_t *ctx)
+{
+    sec_crypto_pdb_t *sec_pdb = &ctx->crypto_desc_pdb;
+
+    // Copy HFN threshold
+    sec_pdb->hfn_threshold = ctx->pdcp_crypto_info->hfn_threshold << ctx->pdcp_crypto_info->sn_size;
+
+    // Set mask to extract HFN from IV and SN from PDCP header
+    if (ctx->pdcp_crypto_info->user_plane == PDCP_CONTROL_PLANE)
+    {
+        sec_pdb->hfn_mask = PDCP_HFN_MASK_CONTROL_PLANE;
+        sec_pdb->sn_mask = PDCP_SN_MASK_CONTROL_PLANE;
+    }
+    else
+    {
+        sec_pdb->hfn_mask = (ctx->pdcp_crypto_info->sn_size == SEC_PDCP_SN_SIZE_12) ?
+                            PDCP_HFN_MASK_DATA_PLANE_LONG_SN : PDCP_HFN_MASK_DATA_PLANE_SHORT_SN;
+
+        sec_pdb->sn_mask = (ctx->pdcp_crypto_info->sn_size == SEC_PDCP_SN_SIZE_12) ?
+                           PDCP_SN_MASK_DATA_PLANE_LONG_SN : PDCP_SN_MASK_DATA_PLANE_SHORT_SN;
+    }
+
+    // SNS = 1 if short SN is used
+    sec_pdb->sns = (ctx->pdcp_crypto_info->sn_size ==  SEC_PDCP_SN_SIZE_12) ? 0 : 1;
+}
+
 /*==================================================================================================
                                      GLOBAL FUNCTIONS
 ==================================================================================================*/

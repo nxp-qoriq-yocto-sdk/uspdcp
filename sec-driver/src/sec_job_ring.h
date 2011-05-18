@@ -78,8 +78,10 @@ struct sec_job_t
     sec_status_t job_status;            /*< Processing status for the packet indicated by this job.
                                             Is required for indication that HFN reached threshold.
                                             TODO: remove this field when migrating on 9132!*/
-    uint8_t is_integrity_algo;          /*< Is set to value 1 for jobs with integrity algorithm configured.
-                                            Set to 0 for crypto algorithm. */
+    uint8_t double_pass;                /*< Is set to value #TRUE for packets that must be sent to SEC twice
+                                            (control-plane packets) and value #FALSE otherwise. */
+    uint8_t is_integrity_algo;          /*< Is set to value #TRUE for jobs with integrity algorithm configured.
+                                            Set to #FALSE for crypto algorithm. */
 }__CACHELINE_ALIGNED;
 
 

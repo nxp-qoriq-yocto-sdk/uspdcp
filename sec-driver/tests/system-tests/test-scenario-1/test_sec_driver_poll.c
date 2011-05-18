@@ -67,14 +67,14 @@ extern "C" {
 //////////////////////////////////////////////////////////////////////////
 
 // Ciphering
-#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F8_ENC
+//#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F8_ENC
 // Deciphering
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F8_DEC
 
 // Authentication
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F9_ENC
 // Authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F9_DEC
+#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F9_DEC
 
 // Ciphering
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CTR_ENC
@@ -135,7 +135,6 @@ extern "C" {
 // Max length in bytes for a confidentiality /integrity key.
 #define MAX_KEY_LENGTH    32
 
-#define SEC_ALG_NONE      -1
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
 ==================================================================================================*/
@@ -160,6 +159,7 @@ typedef struct buffer_s
     volatile pdcp_buffer_usage_t usage;
     uint8_t buffer[PDCP_BUFFER_SIZE];
     uint32_t offset;
+    sec_packet_t pdcp_packet;
 }buffer_t;
 
 typedef struct pdcp_context_s
@@ -280,8 +280,8 @@ static int release_pdcp_buffers(pdcp_context_t * pdcp_context,
  *  of a certain context.
  *  For simplicity, the pool is implemented as an array and is defined per context. */
 static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
-                                sec_packet_t *in_packet,
-                                sec_packet_t *out_packet);
+                                sec_packet_t **in_packet,
+                                sec_packet_t **out_packet);
 
 /** @brief Callback called by SEC driver for each response.
  *
@@ -532,7 +532,7 @@ static uint8_t snow_f9_auth_enc_key[] = {0xC7,0x36,0xC6,0xAA,0xB2,0x2B,0xFF,0xF9
                                          0x1E,0x26,0x98,0xD2,0xE2,0x2A,0xD5,0x7E};
 // PDCP header
 //static uint8_t snow_f9_enc_pdcp_hdr[] = {0x8B, 0x26};
-static uint8_t snow_f9_enc_pdcp_hdr[] = { 0xD0};
+static uint8_t snow_f9_enc_pdcp_hdr[] = {0xD0};
 
 // PDCP payload not encrypted
 //static uint8_t snow_f9_enc_data_in[] = {0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,
@@ -548,7 +548,7 @@ static uint8_t snow_f9_enc_data_in[] = {0xA7 ,0xD4,0x63,0xDF,0x9F,0xB2,0xB2,
 // PDCP payload encrypted
 //static uint8_t snow_f9_enc_data_out[] = {0xBA,0x0F,0x31,0x30,0x03,0x34,0xC5,0x6B, // PDCP payload encrypted
 //                                         0x52,0xA7,0x49,0x7C,0xBA,0xC0,0x46};
-static uint8_t snow_f9_enc_data_out[] = { 0x38,0xB5,0x54,0xC0};
+static uint8_t snow_f9_enc_data_out[] = {0x38,0xB5,0x54,0xC0};
 
 // Radio bearer id
 static uint8_t snow_f9_enc_bearer = 0x0;
@@ -707,7 +707,7 @@ static uint32_t aes_cmac_dec_hfn_threshold = 0xFF00000;
 #define test_packet_direction   PDCP_DOWNLINK
 #define test_protocol_direction PDCP_ENCAPSULATION
 #define test_cipher_algorithm   SEC_ALG_SNOW
-#define test_integrity_algorithm SEC_ALG_NONE
+#define test_integrity_algorithm SEC_ALG_NULL
 #define test_hfn                snow_f8_enc_hfn
 #define test_hfn_threshold      snow_f8_enc_hfn_threshold
 
@@ -732,7 +732,7 @@ static uint32_t aes_cmac_dec_hfn_threshold = 0xFF00000;
 #define test_packet_direction   PDCP_DOWNLINK
 #define test_protocol_direction PDCP_DECAPSULATION
 #define test_cipher_algorithm    SEC_ALG_SNOW
-#define test_integrity_algorithm SEC_ALG_NONE
+#define test_integrity_algorithm SEC_ALG_NULL
 #define test_hfn                snow_f8_dec_hfn
 #define test_hfn_threshold      snow_f8_dec_hfn_threshold
 
@@ -757,7 +757,7 @@ static uint32_t aes_cmac_dec_hfn_threshold = 0xFF00000;
 #define test_packet_direction   PDCP_DOWNLINK
 #define test_protocol_direction PDCP_ENCAPSULATION
 #define test_cipher_algorithm    SEC_ALG_AES
-#define test_integrity_algorithm SEC_ALG_NONE
+#define test_integrity_algorithm SEC_ALG_NULL
 #define test_hfn                aes_ctr_enc_hfn
 #define test_hfn_threshold      aes_ctr_enc_hfn_threshold
 
@@ -782,7 +782,7 @@ static uint32_t aes_cmac_dec_hfn_threshold = 0xFF00000;
 #define test_packet_direction   PDCP_DOWNLINK
 #define test_protocol_direction PDCP_DECAPSULATION
 #define test_cipher_algorithm    SEC_ALG_AES
-#define test_integrity_algorithm SEC_ALG_NONE
+#define test_integrity_algorithm SEC_ALG_NULL
 #define test_hfn                aes_ctr_dec_hfn
 #define test_hfn_threshold      aes_ctr_dec_hfn_threshold
 
@@ -806,7 +806,8 @@ static uint32_t aes_cmac_dec_hfn_threshold = 0xFF00000;
 #define test_user_plane         PDCP_CONTROL_PLANE
 #define test_packet_direction   PDCP_DOWNLINK
 #define test_protocol_direction PDCP_ENCAPSULATION
-#define test_cipher_algorithm          SEC_ALG_SNOW
+#define test_cipher_algorithm   SEC_ALG_NULL
+//#define test_cipher_algorithm   SEC_ALG_SNOW
 #define test_integrity_algorithm SEC_ALG_SNOW
 #define test_hfn                snow_f9_enc_hfn
 #define test_hfn_threshold      snow_f9_enc_hfn_threshold
@@ -831,7 +832,7 @@ static uint32_t aes_cmac_dec_hfn_threshold = 0xFF00000;
 #define test_user_plane         PDCP_CONTROL_PLANE
 #define test_packet_direction   PDCP_DOWNLINK
 #define test_protocol_direction PDCP_DECAPSULATION
-#define test_cipher_algorithm    SEC_ALG_SNOW
+#define test_cipher_algorithm   SEC_ALG_NULL
 #define test_integrity_algorithm SEC_ALG_SNOW
 #define test_hfn                snow_f9_dec_hfn
 #define test_hfn_threshold      snow_f9_dec_hfn_threshold
@@ -856,7 +857,7 @@ static uint32_t aes_cmac_dec_hfn_threshold = 0xFF00000;
 #define test_user_plane         PDCP_CONTROL_PLANE
 #define test_packet_direction   PDCP_DOWNLINK
 #define test_protocol_direction PDCP_ENCAPSULATION
-#define test_cipher_algorithm    SEC_ALG_AES
+#define test_cipher_algorithm   SEC_ALG_NULL
 #define test_integrity_algorithm SEC_ALG_AES
 #define test_hfn                aes_cmac_enc_hfn
 #define test_hfn_threshold      aes_cmac_enc_hfn_threshold
@@ -881,7 +882,7 @@ static uint32_t aes_cmac_dec_hfn_threshold = 0xFF00000;
 #define test_user_plane         PDCP_CONTROL_PLANE
 #define test_packet_direction   PDCP_DOWNLINK
 #define test_protocol_direction PDCP_DECAPSULATION
-#define test_cipher_algorithm    SEC_ALG_AES
+#define test_cipher_algorithm   SEC_ALG_NULL
 #define test_integrity_algorithm SEC_ALG_AES
 #define test_hfn                aes_cmac_dec_hfn
 #define test_hfn_threshold      aes_cmac_dec_hfn_threshold
@@ -1035,12 +1036,13 @@ static int release_pdcp_buffers(pdcp_context_t * pdcp_context,
 }
 
 static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
-                                sec_packet_t *in_packet,
-                                sec_packet_t *out_packet)
+                                sec_packet_t **in_packet,
+                                sec_packet_t **out_packet)
 {
     assert(pdcp_context != NULL);
     assert(in_packet != NULL);
     assert(out_packet != NULL);
+
 
     if (pdcp_context->no_of_used_buffers >= pdcp_context->no_of_buffers_to_process)
     {
@@ -1049,41 +1051,44 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
     }
 
     assert(pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].usage == PDCP_BUFFER_FREE);
+    *in_packet = &(pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].pdcp_packet);
 
     pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].usage = PDCP_BUFFER_USED;
-    in_packet->address = &(pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].buffer[0]);
+    (*in_packet)->address = &(pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].buffer[0]);
     //in_packet->offset = pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].offset;
 
     // Needed 8 bytes before actual start of PDCP packet, for PDCP control-plane + AES algo testing.
-    in_packet->offset = 8;
-    in_packet->scatter_gather = SEC_CONTIGUOUS_BUFFER;
+    (*in_packet)->offset = 8;
+    (*in_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
 
     assert(pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].usage == PDCP_BUFFER_FREE);
+    *out_packet = &(pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].pdcp_packet);
+
     pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].usage = PDCP_BUFFER_USED;
-    out_packet->address = &(pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].buffer[0]);
+    (*out_packet)->address = &(pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].buffer[0]);
 
     //out_packet->offset = pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].offset;
 
     // Needed 8 bytes before actual start of PDCP packet, for PDCP control-plane + AES algo testing.
-    out_packet->offset = 8;
-    out_packet->scatter_gather = SEC_CONTIGUOUS_BUFFER;
+    (*out_packet)->offset = 8;
+    (*out_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
 
     // copy PDCP header
-    memcpy(in_packet->address + in_packet->offset, test_pdcp_hdr, sizeof(test_pdcp_hdr));
+    memcpy((*in_packet)->address + (*in_packet)->offset, test_pdcp_hdr, sizeof(test_pdcp_hdr));
     // copy input data
-    memcpy(in_packet->address + in_packet->offset + PDCP_HEADER_LENGTH,
+    memcpy((*in_packet)->address + (*in_packet)->offset + PDCP_HEADER_LENGTH,
            test_data_in,
            sizeof(test_data_in));
 
-    in_packet->length = sizeof(test_data_in) + PDCP_HEADER_LENGTH + in_packet->offset;
+    (*in_packet)->length = sizeof(test_data_in) + PDCP_HEADER_LENGTH + (*in_packet)->offset;
     // TODO: finalize this...
     // Need extra 4 bytes at end of input/output packet for MAC-I code, in case of PDCP control-plane packets
     // Need  extra 8 bytes at start of input packet  for Initialization Vector (IV) when testing
     // PDCP control-plane with AES CMAC algorithm.
-    assert(in_packet->length + 4 <= PDCP_BUFFER_SIZE);
+    assert((*in_packet)->length + 4 <= PDCP_BUFFER_SIZE);
 
-    out_packet->length = sizeof(test_data_in) + PDCP_HEADER_LENGTH + out_packet->offset;
-    assert(out_packet->length + 4 <= PDCP_BUFFER_SIZE);
+    (*out_packet)->length = sizeof(test_data_in) + PDCP_HEADER_LENGTH + (*out_packet)->offset;
+    assert((*out_packet)->length + 4 <= PDCP_BUFFER_SIZE);
 
     pdcp_context->no_of_used_buffers++;
 
@@ -1124,15 +1129,18 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
 
     assert(in_packet->length == sizeof(test_data_in) + PDCP_HEADER_LENGTH + in_packet->offset);
 #if (PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F9_ENC) || \
-    (PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F9_DEC) ||\
-    (PDCP_TEST_SCENARIO == PDCP_TEST_AES_CMAC_ENC) || \
-    (PDCP_TEST_SCENARIO == PDCP_TEST_AES_CMAC_DEC)
+    (PDCP_TEST_SCENARIO == PDCP_TEST_AES_CMAC_ENC)
 
     // For SNOW F9 and AES CMAC, output data consists only of MAC-I code = 4 bytes
     test_failed = (0 != memcmp(out_packet->address + out_packet->offset,
                                test_data_out,
                                sizeof(test_data_out)));
 
+#elif (PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F9_DEC) || \
+      (PDCP_TEST_SCENARIO == PDCP_TEST_AES_CMAC_DEC)
+      // Status must be SUCCESS. When MAC-I validation failed,
+      // status is set to #SEC_STATUS_HFN_THRESHOLD_REACHED. 
+      test_failed = (status == SEC_STATUS_HFN_THRESHOLD_REACHED || status == SEC_STATUS_ERROR);
 #else
 
     assert(out_packet->length == sizeof(test_data_out) + PDCP_HEADER_LENGTH + out_packet->offset);
@@ -1173,7 +1181,7 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
         test_printf("\nthread #%d:consumer: packet CORRECT!!! out pkt = . ", (pdcp_context->thread_id + 1)%2);
         for(i = 0; i <  out_packet->length; i++)
         {
-            test_printf("%02x ", out_packet->address[i]);
+//            test_printf("%02x ", out_packet->address[i]);
         }
         test_printf("\n");
     }
@@ -1396,8 +1404,6 @@ static void* pdcp_thread_routine(void* config)
     int ret = 0;
     unsigned int packets_received = 0;
     pdcp_context_t *pdcp_context;
-//    unsigned int do_integrity_check = 0;
-
     int total_no_of_contexts_deleted = 0;
     int no_of_contexts_deleted = 0;
     int total_no_of_contexts_created = 0;
@@ -1424,24 +1430,30 @@ static void* pdcp_thread_routine(void* config)
         pdcp_context->pdcp_ctx_cfg_data.user_plane = test_user_plane;
         pdcp_context->pdcp_ctx_cfg_data.packet_direction = test_packet_direction;
         pdcp_context->pdcp_ctx_cfg_data.protocol_direction = test_protocol_direction;
-        pdcp_context->pdcp_ctx_cfg_data.cipher_algorithm = test_cipher_algorithm;
         pdcp_context->pdcp_ctx_cfg_data.hfn = test_hfn;
         pdcp_context->pdcp_ctx_cfg_data.hfn_threshold = test_hfn_threshold;
-        memcpy(pdcp_context->pdcp_ctx_cfg_data.cipher_key,
-               test_crypto_key,
-               test_crypto_key_len);
-        pdcp_context->pdcp_ctx_cfg_data.cipher_key_len = test_crypto_key_len;
 
+        // configure confidentiality algorithm
+        pdcp_context->pdcp_ctx_cfg_data.cipher_algorithm = test_cipher_algorithm;
+        uint8_t* temp_crypto_key = test_crypto_key;
+        if(temp_crypto_key != NULL)
+        {
+            memcpy(pdcp_context->pdcp_ctx_cfg_data.cipher_key,
+                    temp_crypto_key,
+                    test_crypto_key_len);
+            pdcp_context->pdcp_ctx_cfg_data.cipher_key_len = test_crypto_key_len;
+        }
+
+        // configure integrity algorithm
+        pdcp_context->pdcp_ctx_cfg_data.integrity_algorithm = test_integrity_algorithm;
         uint8_t* temp_auth_key = test_auth_key;
+
         if(temp_auth_key != NULL)
         {
-            pdcp_context->pdcp_ctx_cfg_data.integrity_algorithm = test_integrity_algorithm;
-
             memcpy(pdcp_context->pdcp_ctx_cfg_data.integrity_key,
                    temp_auth_key,
                    test_auth_key_len);
             pdcp_context->pdcp_ctx_cfg_data.integrity_key_len = test_auth_key_len;
-            //do_integrity_check = 1;
         }
 
         pdcp_context->thread_id = th_config_local->tid;
@@ -1460,8 +1472,8 @@ static void* pdcp_thread_routine(void* config)
         total_no_of_contexts_created ++;
 
         // for the newly created context, send to SEC a random number of packets for processing
-        sec_packet_t in_packet;
-        sec_packet_t out_packet;
+        sec_packet_t *in_packet;
+        sec_packet_t *out_packet;
 
 
         while (get_free_pdcp_buffer(pdcp_context, &in_packet, &out_packet) == 0)
@@ -1469,8 +1481,8 @@ static void* pdcp_thread_routine(void* config)
             // if SEC process packet returns that the producer JR is full, do some polling
             // on the consumer JR until the producer JR has free entries.
             while (sec_process_packet(pdcp_context->sec_ctx,
-                                     &in_packet,
-                                     &out_packet,
+                                     in_packet,
+                                     out_packet,
                                      (ua_context_handle_t)pdcp_context) == SEC_JR_IS_FULL)
             {
             	// wait while the producer JR is empty, and in the mean time do some

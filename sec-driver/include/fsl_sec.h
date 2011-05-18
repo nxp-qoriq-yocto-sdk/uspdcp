@@ -118,6 +118,7 @@ typedef enum sec_status_e
 
     SEC_STATUS_HFN_THRESHOLD_REACHED,   /*< Indicates HFN reached the threshold configured for the SEC context. Keys must be
                                             renegotiated at earliest convenience. */
+    SEC_STATUS_MAC_I_CHECK_FAILED,      /*< Integrity check failed for this packet. */
 }sec_status_t;
 
 /** Return codes for User Application registered callback sec_out_cbk. 
@@ -139,8 +140,10 @@ typedef enum packet_type_e
 /** Cryptographic/Integrity check algorithms */
 typedef enum sec_crypto_alg_e
 {
-    SEC_ALG_SNOW = 0,       /*< Use SNOW algorithm for ciphering/deciphering or integrity protection */
-    SEC_ALG_AES,            /*< Use AES algorithm for ciphering/deciphering or integrity protection */
+    SEC_ALG_SNOW = 0,       /*< Use SNOW algorithm for confidentiality(EEA1) or integrity protection(EIA1) */
+    SEC_ALG_AES,            /*< Use AES algorithm for confidentiality(EEA2) or integrity protection(EIA2)) */
+    SEC_ALG_NULL,           /*< Use EEA0 for confidentiality or EIA0 for integrity protection
+                                (no confidentiality and no integrity).*/
 
 }sec_crypto_alg_t;
 /*==================================================================================================

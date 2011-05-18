@@ -36,8 +36,6 @@
 /*==============================================================================
                                 INCLUDE FILES
 ==============================================================================*/
-#include <spe.h>
-
 #include "fsl_sec.h"
 #include "sec_utils.h"
 
@@ -367,29 +365,22 @@
 #if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
 
 #define hw_enqueue_packet_on_job_ring(job_ring, descriptor) \
-    __ev64_u32__ descr = { PHYS_ADDR_HI((descriptor)), PHYS_ADDR_LO((descriptor)) };\
-    volatile __ev64_u32__ *ffer_reg = (__ev64_u32__*)((job_ring)->register_base_addr + SEC_REG_FFER((job_ring)));\
-    *ffer_reg = descr;
-
-
-/*#define hw_enqueue_packet_on_job_ring(job_ring, descriptor) \
-//{\
-//    Write higher 32 bits. Only relevant when Extended address\
-//       is enabled(36 bit physical addresses).\
-//       @note address must be big endian\
-//    \
-//    out_be32(job_ring->register_base_addr + SEC_REG_FFER(job_ring),\
-//             PHYS_ADDR_HI(descriptor));\
-//    Write lower 32 bits. This is the trigger to insert the descriptor\
-//       into the channel's FETCH FIFO.\
-//       @note: This is why higher 32 bits MUST ALWAYS be written prior to\
-//       the lower 32 bits, when 36 physical addressing is ON!\
-//       @note address must be big endian\
-//    \
-//    out_be32(job_ring->register_base_addr + SEC_REG_FFER_LO(job_ring),\
-//             PHYS_ADDR_LO(descriptor));\
+{\
+    /* Write higher 32 bits. Only relevant when Extended address\
+       is enabled(36 bit physical addresses).\
+       @note address must be big endian\
+    */\
+    out_be32(job_ring->register_base_addr + SEC_REG_FFER(job_ring),\
+             PHYS_ADDR_HI(descriptor));\
+    /* Write lower 32 bits. This is the trigger to insert the descriptor\
+       into the channel's FETCH FIFO.\
+       @note: This is why higher 32 bits MUST ALWAYS be written prior to\
+       the lower 32 bits, when 36 physical addressing is ON!\
+       @note address must be big endian\
+    */\
+    out_be32(job_ring->register_base_addr + SEC_REG_FFER_LO(job_ring),\
+             PHYS_ADDR_LO(descriptor));\
 }
-*/
 
 #else //#if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
 
