@@ -141,7 +141,7 @@ extern "C"{
 
 
 /** Maximum number of PDCP contexts  per direction (uplink/downlink). */
-#define SEC_MAX_PDCP_CONTEXTS_PER_DIRECTION   192
+#define SEC_MAX_PDCP_CONTEXTS_PER_DIRECTION   256
 
 /** Maximum number of SEC PDCP contexts that can be managed
  *  simultaneously by SEC user space driver. Add 2x safety margin. */
@@ -239,7 +239,7 @@ extern "C"{
  *
  * The messages are logged at stdout.
  */
-#define SEC_DRIVER_LOGGING ON
+#define SEC_DRIVER_LOGGING OFF
 
 /** Configure logging level at compile time.
  * Valid values:
@@ -247,7 +247,7 @@ extern "C"{
  * SEC_DRIVER_LOG_INFO  - log errors and info messages
  * SEC_DRIVER_LOG_DEBUG - log errors, info and debug messages
  */
-#define SEC_DRIVER_LOGGING_LEVEL SEC_DRIVER_LOG_INFO
+#define SEC_DRIVER_LOGGING_LEVEL SEC_DRIVER_LOG_DEBUG
 
 /***************************************/
 /* SEC JOB RING related configuration. */

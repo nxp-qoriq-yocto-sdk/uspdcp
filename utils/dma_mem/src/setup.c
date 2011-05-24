@@ -33,6 +33,9 @@
 
 #include "private.h"
 
+#define test_printf(format, ...)
+//#define test_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__)
+
 /* For an efficient conversion between user-space virtual address map(s) and bus
  * addresses required by hardware for DMA, we use a single contiguous mmap() on
  * the /dev/fsl-shmem device, a pre-arranged physical base address (and
@@ -65,10 +68,10 @@ int dma_mem_setup(void)
 	 * until we find one that works or give up. */
 	for (trial = (void *)0x30000000; (unsigned long)trial < 0xc0000000;
 				trial += DMA_MEM_SIZE) {
-		pr_info("trial=%p\n", trial);
+		test_printf("trial=%p\n", trial);
 		virt = mmap(trial, DMA_MEM_SIZE, PROT_READ | PROT_WRITE,
 				MAP_SHARED | MAP_FIXED, fd, DMA_MEM_PHYS);
-		pr_info("  -> %p\n", virt);
+		test_printf("  -> %p\n", virt);
 		if (virt != MAP_FAILED)
 			break;
 		pr_info("nah, try again\n");
@@ -84,7 +87,7 @@ int dma_mem_setup(void)
 
 	__dma_virt = (dma_addr_t)virt;
 
-	printf("FSL dma_mem device mapped (phys=0x%x,virt=%p,sz=0x%x)\n",
+	test_printf("FSL dma_mem device mapped (phys=0x%x,virt=%p,sz=0x%x)\n",
 		DMA_MEM_PHYS, virt, DMA_MEM_SIZE);
 
 	// close file DMA_MEM_PATH
@@ -104,7 +107,7 @@ int dma_mem_release(void)
 	ret = munmap(virt, DMA_MEM_SIZE);
 	if (ret != 0)
 	{
-		printf("dma_mem_release: failed to unmap the virtual address 0x%x", (dma_addr_t)virt);
+		test_printf("dma_mem_release: failed to unmap the virtual address 0x%x", (dma_addr_t)virt);
 		return ret;
 	}
 	return 0;

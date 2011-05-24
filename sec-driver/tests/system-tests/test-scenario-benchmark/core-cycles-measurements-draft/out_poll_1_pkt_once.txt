@@ -1,0 +1,1425 @@
+thread #1:sec_process_packet cycles = 4467
+thread #1:sec_process_packet cycles = 843
+thread #1:sec_process_packet cycles = 293
+thread #1:sec_process_packet cycles = 407
+thread #1:sec_process_packet cycles = 273
+thread #1:sec_process_packet cycles = 240
+thread #1:sec_process_packet cycles = 318
+thread #1:sec_process_packet cycles = 229
+thread #1:sec_process_packet cycles = 221
+thread #1:sec_process_packet cycles = 300
+thread #1:sec_process_packet cycles = 306
+thread #1:sec_process_packet cycles = 303
+thread #1:sec_process_packet cycles = 393
+thread #1:sec_process_packet cycles = 236
+thread #1:sec_process_packet cycles = 333
+thread #1:sec_process_packet cycles = 226
+thread #1:sec_process_packet cycles = 221
+thread #1:sec_process_packet cycles = 456
+thread #1:sec_process_packet cycles = 277
+thread #1:sec_process_packet cycles = 326
+thread #1:sec_process_packet cycles = 221
+thread #1:sec_process_packet cycles = 236
+thread #1:sec_process_packet cycles = 855
+thread #1:sec_process_packet cycles = 332
+thread #0:sec_process_packet cycles = 686
+thread #0:sec_process_packet cycles = 899
+thread #0:sec_process_packet cycles = 350
+thread #0:sec_process_packet cycles = 304
+thread #0:sec_process_packet cycles = 222
+thread #0:sec_process_packet cycles = 297
+thread #0:sec_process_packet cycles = 241
+thread #0:sec_process_packet cycles = 229
+thread #0:sec_process_packet cycles = 220
+thread #0:sec_process_packet cycles = 323
+thread #0:sec_process_packet cycles = 320
+thread #0:sec_process_packet cycles = 306
+thread #0:sec_process_packet cycles = 222
+thread #0:sec_process_packet cycles = 287
+thread #0:sec_process_packet cycles = 223
+thread #0:sec_process_packet cycles = 232
+thread #0:sec_process_packet cycles = 221
+thread #0:sec_process_packet cycles = 358
+thread #0:sec_process_packet cycles = 316
+thread #0:sec_process_packet cycles = 328
+thread #0:sec_process_packet cycles = 220
+thread #0:sec_process_packet cycles = 235
+thread #0:sec_process_packet cycles = 220
+thread #0:sec_process_packet cycles = 110
+thread #1:sec_poll_job_ring cycles = 1085. pkts=1
+thread #1:sec_process_packet cycles = 191
+thread #1:sec_poll_job_ring cycles = 454. pkts=1
+thread #1:sec_process_packet cycles = 161
+thread #0:sec_poll_job_ring cycles = 240. pkts=1
+thread #0:sec_process_packet cycles = 730
+thread #0:sec_process_packet cycles = 338
+thread #0:sec_process_packet cycles = 56
+thread #1:sec_poll_job_ring cycles = 285. pkts=1
+thread #1:sec_process_packet cycles = 754
+thread #1:sec_process_packet cycles = 104
+thread #0:sec_poll_job_ring cycles = 208. pkts=1
+thread #0:sec_process_packet cycles = 382
+thread #0:sec_process_packet cycles = 53
+thread #1:sec_poll_job_ring cycles = 261. pkts=1
+thread #1:sec_process_packet cycles = 761
+thread #1:sec_process_packet cycles = 106
+thread #0:sec_poll_job_ring cycles = 208. pkts=1
+thread #0:sec_process_packet cycles = 379
+thread #0:sec_process_packet cycles = 60
+thread #1:sec_poll_job_ring cycles = 267. pkts=1
+thread #1:sec_process_packet cycles = 711
+thread #1:sec_process_packet cycles = 105
+thread #0:sec_poll_job_ring cycles = 206. pkts=1
+thread #0:sec_process_packet cycles = 782
+thread #0:sec_process_packet cycles = 127
+thread #1:sec_poll_job_ring cycles = 476. pkts=1
+thread #1:sec_process_packet cycles = 736
+thread #1:sec_process_packet cycles = 111
+thread #0:sec_poll_job_ring cycles = 230. pkts=1
+thread #0:sec_process_packet cycles = 354
+thread #0:sec_process_packet cycles = 60
+thread #1:sec_poll_job_ring cycles = 256. pkts=1
+thread #1:sec_process_packet cycles = 598
+thread #1:sec_process_packet cycles = 90
+thread #0:sec_poll_job_ring cycles = 208. pkts=1
+thread #0:sec_process_packet cycles = 268
+thread #0:sec_process_packet cycles = 53
+thread #1:sec_poll_job_ring cycles = 262. pkts=1
+thread #1:sec_process_packet cycles = 594
+thread #1:sec_process_packet cycles = 93
+thread #0:sec_poll_job_ring cycles = 208. pkts=1
+thread #0:sec_process_packet cycles = 296
+thread #0:sec_process_packet cycles = 59
+thread #1:sec_poll_job_ring cycles = 264. pkts=1
+thread #1:sec_process_packet cycles = 556
+thread #1:sec_process_packet cycles = 90
+thread #0:sec_poll_job_ring cycles = 207. pkts=1
+thread #0:sec_process_packet cycles = 746
+thread #0:sec_process_packet cycles = 127
+thread #1:sec_poll_job_ring cycles = 574. pkts=1
+thread #1:sec_process_packet cycles = 724
+thread #1:sec_process_packet cycles = 109
+thread #0:sec_poll_job_ring cycles = 222. pkts=1
+thread #0:sec_process_packet cycles = 334
+thread #0:sec_process_packet cycles = 57
+thread #1:sec_poll_job_ring cycles = 268. pkts=1
+thread #1:sec_process_packet cycles = 566
+thread #1:sec_process_packet cycles = 108
+thread #0:sec_poll_job_ring cycles = 183. pkts=1
+thread #0:sec_process_packet cycles = 335
+thread #0:sec_process_packet cycles = 53
+thread #1:sec_poll_job_ring cycles = 258. pkts=1
+thread #1:sec_process_packet cycles = 614
+thread #1:sec_process_packet cycles = 93
+thread #0:sec_poll_job_ring cycles = 199. pkts=1
+thread #0:sec_process_packet cycles = 334
+thread #0:sec_process_packet cycles = 59
+thread #1:sec_poll_job_ring cycles = 254. pkts=1
+thread #1:sec_process_packet cycles = 580
+thread #1:sec_process_packet cycles = 92
+thread #0:sec_poll_job_ring cycles = 450. pkts=1
+thread #0:sec_process_packet cycles = 762
+thread #0:sec_process_packet cycles = 130
+thread #1:sec_poll_job_ring cycles = 386. pkts=1
+thread #1:sec_process_packet cycles = 724
+thread #1:sec_process_packet cycles = 85
+thread #0:sec_poll_job_ring cycles = 201. pkts=1
+thread #0:sec_process_packet cycles = 272
+thread #0:sec_process_packet cycles = 53
+thread #1:sec_poll_job_ring cycles = 258. pkts=1
+thread #1:sec_process_packet cycles = 614
+thread #1:sec_process_packet cycles = 84
+thread #0:sec_poll_job_ring cycles = 199. pkts=1
+thread #0:sec_process_packet cycles = 248
+thread #0:sec_process_packet cycles = 46
+thread #1:sec_poll_job_ring cycles = 260. pkts=1
+thread #1:sec_process_packet cycles = 608
+thread #1:sec_process_packet cycles = 91
+thread #0:sec_poll_job_ring cycles = 199. pkts=1
+thread #0:sec_process_packet cycles = 252
+thread #0:sec_process_packet cycles = 49
+thread #1:sec_poll_job_ring cycles = 254. pkts=1
+thread #1:sec_process_packet cycles = 590
+thread #1:sec_process_packet cycles = 148
+thread #0:sec_poll_job_ring cycles = 412. pkts=1
+thread #0:sec_process_packet cycles = 667
+thread #0:sec_process_packet cycles = 48
+thread #1:sec_poll_job_ring cycles = 409. pkts=1
+thread #1:sec_process_packet cycles = 738
+thread #1:sec_process_packet cycles = 83
+thread #0:sec_poll_job_ring cycles = 201. pkts=1
+thread #0:sec_process_packet cycles = 302
+thread #0:sec_process_packet cycles = 53
+thread #1:sec_poll_job_ring cycles = 298. pkts=1
+thread #1:sec_process_packet cycles = 636
+thread #1:sec_process_packet cycles = 77
+thread #0:sec_poll_job_ring cycles = 199. pkts=1
+thread #0:sec_process_packet cycles = 296
+thread #0:sec_process_packet cycles = 49
+thread #1:sec_poll_job_ring cycles = 279. pkts=1
+thread #1:sec_process_packet cycles = 652
+thread #1:sec_process_packet cycles = 81
+thread #0:sec_poll_job_ring cycles = 201. pkts=1
+thread #0:sec_process_packet cycles = 310
+thread #0:sec_process_packet cycles = 53
+thread #1:sec_poll_job_ring cycles = 271. pkts=1
+thread #1:sec_process_packet cycles = 810
+thread #1:sec_process_packet cycles = 120
+thread #0:sec_poll_job_ring cycles = 416. pkts=1
+thread #0:sec_process_packet cycles = 419
+thread #0:sec_process_packet cycles = 46
+thread #1:sec_poll_job_ring cycles = 434. pkts=1
+thread #1:sec_process_packet cycles = 678
+thread #1:sec_process_packet cycles = 83
+thread #0:sec_poll_job_ring cycles = 199. pkts=1
+thread #0:sec_process_packet cycles = 335
+thread #0:sec_process_packet cycles = 51
+thread #1:sec_poll_job_ring cycles = 280. pkts=1
+thread #1:sec_process_packet cycles = 504
+thread #1:sec_process_packet cycles = 84
+thread #0:sec_poll_job_ring cycles = 199. pkts=1
+thread #0:sec_process_packet cycles = 289
+thread #0:sec_process_packet cycles = 46
+thread #1:sec_poll_job_ring cycles = 277. pkts=1
+thread #1:sec_process_packet cycles = 560
+thread #1:sec_process_packet cycles = 87
+thread #0:sec_poll_job_ring cycles = 201. pkts=1
+thread #0:sec_process_packet cycles = 293
+thread #0:sec_process_packet cycles = 51
+thread #1:sec_poll_job_ring cycles = 458. pkts=1
+thread #1:sec_process_packet cycles = 768
+thread #1:sec_process_packet cycles = 130
+thread #0:sec_poll_job_ring cycles = 199. pkts=1
+thread #0:sec_process_packet cycles = 287
+thread #0:sec_process_packet cycles = 48
+thread #1:sec_poll_job_ring cycles = 278. pkts=1
+thread #1:sec_process_packet cycles = 692
+thread #1:sec_process_packet cycles = 83
+thread #0:sec_poll_job_ring cycles = 199. pkts=1
+thread #0:sec_process_packet cycles = 279
+thread #0:sec_process_packet cycles = 53
+thread #1:sec_poll_job_ring cycles = 276. pkts=1
+thread #1:sec_process_packet cycles = 618
+thread #1:sec_process_packet cycles = 84
+thread #0:sec_poll_job_ring cycles = 183. pkts=1
+thread #0:sec_process_packet cycles = 325
+thread #0:sec_process_packet cycles = 49
+thread #1:sec_poll_job_ring cycles = 270. pkts=1
+thread #1:sec_process_packet cycles = 636
+thread #1:sec_process_packet cycles = 89
+thread #0:sec_poll_job_ring cycles = 377. pkts=1
+thread #0:sec_process_packet cycles = 326
+thread #0:sec_process_packet cycles = 50
+thread #1:sec_poll_job_ring cycles = 458. pkts=1
+thread #1:sec_process_packet cycles = 790
+thread #1:sec_process_packet cycles = 132
+thread #0:sec_poll_job_ring cycles = 182. pkts=1
+thread #0:sec_process_packet cycles = 360
+thread #0:sec_process_packet cycles = 46
+thread #1:sec_poll_job_ring cycles = 272. pkts=1
+thread #1:sec_process_packet cycles = 722
+thread #1:sec_process_packet cycles = 83
+thread #0:sec_poll_job_ring cycles = 200. pkts=1
+thread #0:sec_process_packet cycles = 252
+thread #0:sec_process_packet cycles = 54
+thread #1:sec_poll_job_ring cycles = 270. pkts=1
+thread #1:sec_process_packet cycles = 608
+thread #1:sec_process_packet cycles = 84
+thread #0:sec_poll_job_ring cycles = 201. pkts=1
+thread #0:sec_process_packet cycles = 250
+thread #0:sec_process_packet cycles = 46
+thread #1:sec_poll_job_ring cycles = 278. pkts=1
+thread #1:sec_process_packet cycles = 618
+thread #1:sec_process_packet cycles = 91
+thread #0:sec_poll_job_ring cycles = 201. pkts=1
+thread #0:sec_process_packet cycles = 254
+thread #0:sec_process_packet cycles = 136
+thread #1:sec_poll_job_ring cycles = 473. pkts=1
+thread #1:sec_process_packet cycles = 775
+thread #1:sec_process_packet cycles = 100
+thread #0:sec_poll_job_ring cycles = 201. pkts=1
+thread #0:sec_process_packet cycles = 348
+thread #0:sec_process_packet cycles = 48
+thread #1:sec_poll_job_ring cycles = 287. pkts=1
+thread #1:sec_process_packet cycles = 688
+thread #1:sec_process_packet cycles = 83
+thread #0:sec_poll_job_ring cycles = 210. pkts=1
+thread #0:sec_process_packet cycles = 295
+thread #0:sec_process_packet cycles = 53
+thread #1:sec_poll_job_ring cycles = 282. pkts=1
+thread #1:sec_process_packet cycles = 592
+thread #1:sec_process_packet cycles = 85
+thread #0:sec_poll_job_ring cycles = 190. pkts=1
+thread #0:sec_process_packet cycles = 344
+thread #0:sec_process_packet cycles = 49
+thread #1:sec_poll_job_ring cycles = 264. pkts=1
+thread #1:sec_process_packet cycles = 604
+thread #1:sec_process_packet cycles = 89
+thread #0:sec_poll_job_ring cycles = 208. pkts=1
+thread #0:sec_process_packet cycles = 764
+thread #0:sec_process_packet cycles = 118
+thread #1:sec_poll_job_ring cycles = 468. pkts=1
+thread #1:sec_process_packet cycles = 694
+thread #1:sec_process_packet cycles = 110
+thread #0:sec_poll_job_ring cycles = 190. pkts=1
+thread #0:sec_process_packet cycles = 351
+thread #0:sec_process_packet cycles = 46
+thread #1:sec_poll_job_ring cycles = 274. pkts=1
+thread #1:sec_process_packet cycles = 600
+thread #1:sec_process_packet cycles = 85
+thread #0:sec_poll_job_ring cycles = 188. pkts=1
+thread #0:sec_process_packet cycles = 252
+thread #0:sec_process_packet cycles = 55
+thread #1:sec_poll_job_ring cycles = 278. pkts=1
+thread #1:sec_process_packet cycles = 612
+thread #1:sec_process_packet cycles = 84
+thread #0:sec_poll_job_ring cycles = 208. pkts=1
+thread #0:sec_process_packet cycles = 272
+thread #0:sec_process_packet cycles = 46
+thread #1:sec_poll_job_ring cycles = 262. pkts=1
+thread #1:sec_process_packet cycles = 588
+thread #1:sec_process_packet cycles = 89
+thread #0:sec_poll_job_ring cycles = 410. pkts=1
+thread #0:sec_process_packet cycles = 764
+thread #0:sec_process_packet cycles = 117
+thread #1:sec_poll_job_ring cycles = 381. pkts=1
+thread #1:sec_process_packet cycles = 624
+thread #1:sec_process_packet cycles = 84
+thread #0:sec_poll_job_ring cycles = 208. pkts=1
+thread #0:sec_process_packet cycles = 247
+thread #0:sec_process_packet cycles = 48
+thread #1:sec_poll_job_ring cycles = 280. pkts=1
+thread #1:sec_process_packet cycles = 635
+thread #1:sec_process_packet cycles = 77
+thread #0:sec_poll_job_ring cycles = 190. pkts=1
+thread #0:sec_process_packet cycles = 253
+thread #0:sec_process_packet cycles = 49
+thread #1:sec_poll_job_ring cycles = 260. pkts=1
+thread #1:sec_process_packet cycles = 588
+thread #1:sec_process_packet cycles = 76
+thread #0:sec_poll_job_ring cycles = 181. pkts=1
+thread #0:sec_process_packet cycles = 281
+thread #0:sec_process_packet cycles = 49
+thread #1:sec_poll_job_ring cycles = 252. pkts=1
+thread #1:sec_process_packet cycles = 642
+thread #1:sec_process_packet cycles = 81
+thread #0:sec_poll_job_ring cycles = 475. pkts=1
+thread #0:sec_process_packet cycles = 824
+thread #0:sec_process_packet cycles = 131
+thread #1:sec_poll_job_ring cycles = 394. pkts=1
+thread #1:sec_process_packet cycles = 614
+thread #1:sec_process_packet cycles = 84
+thread #0:sec_poll_job_ring cycles = 181. pkts=1
+thread #0:sec_process_packet cycles = 301
+thread #0:sec_process_packet cycles = 46
+thread #1:sec_poll_job_ring cycles = 393. pkts=1
+thread #1:sec_process_packet cycles = 522
+thread #1:sec_process_packet cycles = 81
+thread #0:sec_poll_job_ring cycles = 201. pkts=1
+thread #0:sec_process_packet cycles = 293
+thread #0:sec_process_packet cycles = 51
+thread #1:sec_poll_job_ring cycles = 279. pkts=1
+thread #1:sec_process_packet cycles = 774
+thread #1:sec_process_packet cycles = 76
+thread #0:sec_poll_job_ring cycles = 181. pkts=1
+thread #0:sec_process_packet cycles = 287
+thread #0:sec_process_packet cycles = 46
+thread #1:sec_poll_job_ring cycles = 277. pkts=1
+thread #1:sec_process_packet cycles = 516
+thread #1:sec_process_packet cycles = 135
+thread #0:sec_poll_job_ring cycles = 392. pkts=1
+thread #0:sec_process_packet cycles = 737
+thread #0:sec_process_packet cycles = 50
+thread #1:sec_poll_job_ring cycles = 409. pkts=1
+thread #1:sec_process_packet cycles = 706
+thread #1:sec_process_packet cycles = 84
+thread #0:sec_poll_job_ring cycles = 200. pkts=1
+thread #0:sec_process_packet cycles = 267
+thread #0:sec_process_packet cycles = 48
+thread #1:sec_poll_job_ring cycles = 392. pkts=1
+thread #1:sec_process_packet cycles = 804
+thread #1:sec_process_packet cycles = 101
+thread #0:sec_poll_job_ring cycles = 199. pkts=1
+thread #0:sec_process_packet cycles = 396
+thread #0:sec_process_packet cycles = 49
+thread #1:sec_poll_job_ring cycles = 249. pkts=1
+thread #1:sec_process_packet cycles = 578
+thread #1:sec_process_packet cycles = 85
+thread #0:sec_poll_job_ring cycles = 201. pkts=1
+thread #0:sec_process_packet cycles = 301
+thread #0:sec_process_packet cycles = 49
+thread #1:sec_poll_job_ring cycles = 275. pkts=1
+thread #1:sec_process_packet cycles = 878
+thread #1:sec_process_packet cycles = 121
+thread #0:sec_poll_job_ring cycles = 392. pkts=1
+thread #0:sec_process_packet cycles = 325
+thread #0:sec_process_packet cycles = 52
+thread #1:sec_poll_job_ring cycles = 394. pkts=1
+thread #1:sec_process_packet cycles = 646
+thread #1:sec_process_packet cycles = 84
+thread #0:sec_poll_job_ring cycles = 201. pkts=1
+thread #0:sec_process_packet cycles = 321
+thread #0:sec_process_packet cycles = 46
+thread #1:sec_poll_job_ring cycles = 276. pkts=1
+thread #1:sec_process_packet cycles = 578
+thread #1:sec_process_packet cycles = 89
+thread #0:sec_poll_job_ring cycles = 201. pkts=1
+thread #0:sec_process_packet cycles = 272
+thread #0:sec_process_packet cycles = 51
+thread #1:sec_poll_job_ring cycles = 252. pkts=1
+thread #1:sec_process_packet cycles = 568
+thread #1:sec_process_packet cycles = 84
+thread #0:sec_poll_job_ring cycles = 183. pkts=1
+thread #0:sec_process_packet cycles = 270
+thread #0:sec_process_packet cycles = 46
+thread #1:sec_poll_job_ring cycles = 463. pkts=1
+thread #1:sec_process_packet cycles = 828
+thread #1:sec_process_packet cycles = 137
+thread #0:sec_poll_job_ring cycles = 183. pkts=1
+thread #0:sec_process_packet cycles = 287
+thread #0:sec_process_packet cycles = 52
+thread #1:sec_poll_job_ring cycles = 276. pkts=1
+thread #1:sec_process_packet cycles = 636
+thread #1:sec_process_packet cycles = 84
+thread #0:sec_poll_job_ring cycles = 199. pkts=1
+thread #0:sec_process_packet cycles = 286
+thread #0:sec_process_packet cycles = 48
+thread #1:sec_poll_job_ring cycles = 276. pkts=1
+thread #1:sec_process_packet cycles = 602
+thread #1:sec_process_packet cycles = 87
+thread #0:sec_poll_job_ring cycles = 227. pkts=1
+thread #0:sec_process_packet cycles = 280
+thread #0:sec_process_packet cycles = 49
+thread #1:sec_poll_job_ring cycles = 258. pkts=1
+thread #1:sec_process_packet cycles = 592
+thread #1:sec_process_packet cycles = 85
+thread #0:sec_poll_job_ring cycles = 183. pkts=1
+thread #0:sec_process_packet cycles = 331
+thread #0:sec_process_packet cycles = 49
+thread #1:sec_poll_job_ring cycles = 438. pkts=1
+thread #1:sec_process_packet cycles = 872
+thread #1:sec_process_packet cycles = 131
+thread #0:sec_poll_job_ring cycles = 201. pkts=1
+thread #0:sec_process_packet cycles = 365
+thread #0:sec_process_packet cycles = 50
+thread #1:sec_poll_job_ring cycles = 270. pkts=1
+thread #1:sec_process_packet cycles = 642
+thread #1:sec_process_packet cycles = 84
+thread #0:sec_poll_job_ring cycles = 183. pkts=1
+thread #0:sec_process_packet cycles = 331
+thread #0:sec_process_packet cycles = 46
+thread #1:sec_poll_job_ring cycles = 278. pkts=1
+thread #1:sec_process_packet cycles = 620
+thread #1:sec_process_packet cycles = 89
+thread #0:sec_poll_job_ring cycles = 201. pkts=1
+thread #0:sec_process_packet cycles = 270
+thread #0:sec_process_packet cycles = 50
+thread #1:sec_poll_job_ring cycles = 276. pkts=1
+thread #1:sec_process_packet cycles = 588
+thread #1:sec_process_packet cycles = 86
+thread #0:sec_poll_job_ring cycles = 201. pkts=1
+thread #0:sec_process_packet cycles = 268
+thread #0:sec_process_packet cycles = 135
+thread #1:sec_poll_job_ring cycles = 459. pkts=1
+thread #1:sec_process_packet cycles = 804
+thread #1:sec_process_packet cycles = 114
+thread #0:sec_poll_job_ring cycles = 199. pkts=1
+thread #0:sec_process_packet cycles = 345
+thread #0:sec_process_packet cycles = 52
+thread #1:sec_poll_job_ring cycles = 278. pkts=1
+thread #1:sec_process_packet cycles = 634
+thread #1:sec_process_packet cycles = 84
+thread #0:sec_poll_job_ring cycles = 199. pkts=1
+thread #0:sec_process_packet cycles = 267
+thread #0:sec_process_packet cycles = 48
+thread #1:sec_poll_job_ring cycles = 284. pkts=1
+thread #1:sec_process_packet cycles = 638
+thread #1:sec_process_packet cycles = 87
+thread #0:sec_poll_job_ring cycles = 212. pkts=1
+thread #0:sec_process_packet cycles = 296
+thread #0:sec_process_packet cycles = 49
+thread #1:sec_poll_job_ring cycles = 280. pkts=1
+thread #1:sec_process_packet cycles = 602
+thread #1:sec_process_packet cycles = 84
+thread #0:sec_poll_job_ring cycles = 206. pkts=1
+thread #0:sec_process_packet cycles = 730
+thread #0:sec_process_packet cycles = 117
+thread #1:sec_poll_job_ring cycles = 486. pkts=1
+thread #1:sec_process_packet cycles = 694
+thread #1:sec_process_packet cycles = 103
+thread #0:sec_poll_job_ring cycles = 224. pkts=1
+thread #0:sec_process_packet cycles = 379
+thread #0:sec_process_packet cycles = 52
+thread #1:sec_poll_job_ring cycles = 264. pkts=1
+thread #1:sec_process_packet cycles = 580
+thread #1:sec_process_packet cycles = 84
+thread #0:sec_poll_job_ring cycles = 188. pkts=1
+thread #0:sec_process_packet cycles = 335
+thread #0:sec_process_packet cycles = 46
+thread #1:sec_poll_job_ring cycles = 276. pkts=1
+thread #1:sec_process_packet cycles = 594
+thread #1:sec_process_packet cycles = 89
+thread #0:sec_poll_job_ring cycles = 250. pkts=1
+thread #0:sec_process_packet cycles = 296
+thread #0:sec_process_packet cycles = 50
+thread #1:sec_poll_job_ring cycles = 274. pkts=1
+thread #1:sec_process_packet cycles = 562
+thread #1:sec_process_packet cycles = 84
+thread #0:sec_poll_job_ring cycles = 432. pkts=1
+thread #0:sec_process_packet cycles = 732
+thread #0:sec_process_packet cycles = 119
+thread #1:sec_poll_job_ring cycles = 407. pkts=1
+thread #1:sec_process_packet cycles = 704
+thread #1:sec_process_packet cycles = 85
+thread #0:sec_poll_job_ring cycles = 190. pkts=1
+thread #0:sec_process_packet cycles = 304
+thread #0:sec_process_packet cycles = 48
+thread #1:sec_poll_job_ring cycles = 255. pkts=1
+thread #1:sec_process_packet cycles = 629
+thread #1:sec_process_packet cycles = 76
+thread #0:sec_poll_job_ring cycles = 190. pkts=1
+thread #0:sec_process_packet cycles = 250
+thread #0:sec_process_packet cycles = 48
+thread #1:sec_poll_job_ring cycles = 280. pkts=1
+thread #1:sec_process_packet cycles = 648
+thread #1:sec_process_packet cycles = 77
+thread #0:sec_poll_job_ring cycles = 188. pkts=1
+thread #0:sec_process_packet cycles = 278
+thread #0:sec_process_packet cycles = 49
+thread #1:sec_poll_job_ring cycles = 288. pkts=1
+thread #1:sec_process_packet cycles = 606
+thread #1:sec_process_packet cycles = 76
+thread #0:sec_poll_job_ring cycles = 412. pkts=1
+thread #0:sec_process_packet cycles = 794
+thread #0:sec_process_packet cycles = 120
+thread #1:sec_poll_job_ring cycles = 384. pkts=1
+thread #1:sec_process_packet cycles = 704
+thread #1:sec_process_packet cycles = 83
+thread #0:sec_poll_job_ring cycles = 199. pkts=1
+thread #0:sec_process_packet cycles = 333
+thread #0:sec_process_packet cycles = 49
+thread #1:sec_poll_job_ring cycles = 279. pkts=1
+thread #1:sec_process_packet cycles = 606
+thread #1:sec_process_packet cycles = 84
+thread #0:sec_poll_job_ring cycles = 183. pkts=1
+thread #0:sec_process_packet cycles = 409
+thread #0:sec_poll_job_ring cycles = 2917. pkts=22
+thread #0:sec_poll_job_ring cycles = 64. pkts=0
+thread #0:sec_poll_job_ring cycles = 56. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 104. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 58. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 75. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 87. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 113. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 91. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 80. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 80. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 90. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 80. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 80. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 81. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 101. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 80. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 80. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 80. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 99. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 80. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 80. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 80. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 99. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 91. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 91. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 91. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 99. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 91. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 91. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 80. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 99. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 91. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 80. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 80. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 115. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 80. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 86. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 81. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 99. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 91. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 91. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 91. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 99. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 91. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 91. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 90. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #0:sec_poll_job_ring cycles = 51. pkts=0
+thread #1:sec_poll_job_ring cycles = 802. pkts=1
+thread #1:sec_process_packet cycles = 1116
+thread #1:sec_process_packet cycles = 360
+thread #1:sec_poll_job_ring cycles = 3158. pkts=22
+Sent 100 packets. Received 100 packets
+thread #0:sec_poll_job_ring cycles = 891. pkts=2
+Sent 100 packets. Received 100 packets
+thread 0 core cycles = 110204
+thread 1 core cycles = 99341

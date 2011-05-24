@@ -43,6 +43,8 @@ extern "C" {
 #include <pthread.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sched.h>
+#include <sys/time.h>
 
 #include "fsl_sec.h"
 // for dma_mem library
@@ -90,7 +92,9 @@ extern "C" {
 
 
 #define test_printf(format, ...)
+#define profile_printf(format, ...)
 //#define test_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__) 
+//#define profile_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__) 
 
 
 
@@ -103,21 +107,24 @@ extern "C" {
 // The other thread is producer on JR 2 and consumer on JR 1 (PDCP DL processing).
 #define THREADS_NUMBER               2
 
-// The number of PDCP contexts used
-#define MAX_PDCP_CONTEXT_NUMBER         15
-#define MIN_PDCP_CONTEXT_NUMBER         5
+// Number of User Equipments simulated
+#define UE_NUMBER   32
+// Number of dedicated radio bearers per UE simulated
+#define DRB_PER_UE  8
+
+// The number of PDCP contexts used. Each DRB will have 2 PDCP contexts, one for each direction.
+//#define PDCP_CONTEXT_NUMBER         (UE_NUMBER * DRB_PER_UE * 2)
+#define PDCP_CONTEXT_NUMBER         1
 
 // The size of a PDCP input buffer.
 // Consider the size of the input and output buffers provided to SEC driver for processing identical.
-#define PDCP_BUFFER_SIZE   100
+#define PDCP_BUFFER_SIZE   1050
 
 // The maximum number of packets processed per context
-// This test application will process a random number of packets per context ranging
-// from a minimum to a maximum value.
-//#define MAX_PACKET_NUMBER_PER_CTX   10
-//TODO: increase back number of packets per context
-#define MAX_PACKET_NUMBER_PER_CTX   1
-#define MIN_PACKET_NUMBER_PER_CTX   1
+//#define PACKET_NUMBER_PER_CTX   20
+#define PACKET_NUMBER_PER_CTX   10000
+// The number of packets to send in a burst for each context
+#define PACKET_BURST_PER_CTX   1
 
 #ifdef SEC_HW_VERSION_4_4
 
@@ -127,7 +134,8 @@ extern "C" {
 #endif
 
 #define JOB_RING_POLL_UNLIMITED -1
-#define JOB_RING_POLL_LIMIT      5
+//#define JOB_RING_POLL_LIMIT      5
+#define JOB_RING_POLL_LIMIT      JOB_RING_POLL_UNLIMITED
 
 // Alignment for input/output packets allocated from DMA-memory zone
 #define BUFFER_ALIGNEMENT 32
@@ -135,6 +143,8 @@ extern "C" {
 // Max length in bytes for a confidentiality /integrity key.
 #define MAX_KEY_LENGTH    32
 
+#define GET_ATBL() \
+    mfspr(SPR_ATBL)
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
 ==================================================================================================*/
@@ -205,6 +215,7 @@ typedef struct thread_config_s
     volatile int work_done;
     // default to zero. set to 1 when main thread instructs the worked thread to exit.
     volatile int should_exit;
+    uint32_t core_cycles;
 }thread_config_t;
 
 /*==================================================================================================
@@ -254,7 +265,7 @@ static void* pdcp_thread_routine(void*);
 
 
 /** @brief Poll a specified SEC job ring for results */
-static int get_results(uint8_t job_ring, int limit, uint32_t *out_packets);
+static int get_results(uint8_t job_ring, int limit, uint32_t *out_packets, uint32_t *core_cycles, uint8_t tid);
 
 /** @brief Get a free PDCP context from the pool of UA contexts.
  *  For simplicity, the pool is implemented as an array. */
@@ -339,10 +350,10 @@ static const sec_job_ring_descriptor_t *job_ring_descriptors = NULL;
 
 // UA pool of PDCP contexts for UL and DL.
 // For simplicity, use an array of contexts and a mutex to synchronize access to it.
-static pdcp_context_t pdcp_ul_contexts[MAX_PDCP_CONTEXT_NUMBER];
+static pdcp_context_t pdcp_ul_contexts[PDCP_CONTEXT_NUMBER];
 static int no_of_used_pdcp_ul_contexts = 0;
 
-static pdcp_context_t pdcp_dl_contexts[MAX_PDCP_CONTEXT_NUMBER];
+static pdcp_context_t pdcp_dl_contexts[PDCP_CONTEXT_NUMBER];
 static int no_of_used_pdcp_dl_contexts = 0;
 
 // There are 2 threads: one thread handles PDCP UL and one thread handles PDCP DL
@@ -350,6 +361,8 @@ static int no_of_used_pdcp_dl_contexts = 0;
 // and consumer on JR1.
 static thread_config_t th_config[THREADS_NUMBER];
 static pthread_t threads[THREADS_NUMBER];
+
+
 
 #ifndef PDCP_TEST_SCENARIO
 #error "PDCP_TEST_SCENARIO is undefined!!!"
@@ -376,8 +389,118 @@ static uint8_t snow_f8_enc_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
 static uint8_t snow_f8_enc_pdcp_hdr[] = {0x8B, 0x26};
 
 // PDCP payload not encrypted
-static uint8_t snow_f8_enc_data_in[] = {0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,
-                                        0x57,0xA4,0x9D,0x42,0x14,0x07,0xE8};
+static uint8_t snow_f8_enc_data_in[] = {
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+   
+
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    };
 
 // PDCP payload encrypted
 static uint8_t snow_f8_enc_data_out[] = {0xBA,0x0F,0x31,0x30,0x03,0x34,0xC5,0x6B, // PDCP payload encrypted
@@ -904,13 +1027,13 @@ static int get_free_pdcp_context(pdcp_context_t * pdcp_contexts,
     assert(no_of_used_pdcp_contexts != NULL);
 
     // check if there are free contexts
-    if (*no_of_used_pdcp_contexts >= MAX_PDCP_CONTEXT_NUMBER)
+    if (*no_of_used_pdcp_contexts >= PDCP_CONTEXT_NUMBER)
     {
         // no free contexts available
         return 2;
     }
 
-    for (i = 0; i < MAX_PDCP_CONTEXT_NUMBER; i++)
+    for (i = 0; i < PDCP_CONTEXT_NUMBER; i++)
     {
         if (pdcp_contexts[i].usage == PDCP_CONTEXT_FREE)
         {
@@ -925,12 +1048,7 @@ static int get_free_pdcp_context(pdcp_context_t * pdcp_contexts,
     assert(found == 1);
 
     // Configure this PDCP context with a random number of buffers to process for test
-    // The random number will range between MIN_PACKET_NUMBER_PER_CTX and MAX_PACKET_NUMBER_PER_CTX
-    pdcp_contexts[i].no_of_buffers_to_process =
-            MIN_PACKET_NUMBER_PER_CTX + rand() % (MAX_PACKET_NUMBER_PER_CTX - MIN_PACKET_NUMBER_PER_CTX + 1);
-
-    assert(pdcp_contexts[i].no_of_buffers_to_process >= MIN_PACKET_NUMBER_PER_CTX &&
-           pdcp_contexts[i].no_of_buffers_to_process <= MAX_PACKET_NUMBER_PER_CTX);
+    pdcp_contexts[i].no_of_buffers_to_process = PACKET_NUMBER_PER_CTX;
 
     // return the context chosen
     *pdcp_context = &(pdcp_contexts[i]);
@@ -960,8 +1078,8 @@ static void release_pdcp_context(int * no_of_used_pdcp_contexts, pdcp_context_t 
     pdcp_context->job_ring = NULL;
     pdcp_context->sec_ctx = NULL;
 
-    memset(pdcp_context->input_buffers, 0, sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
-    memset(pdcp_context->output_buffers, 0, sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
+    memset(pdcp_context->input_buffers, 0, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX);
+    memset(pdcp_context->output_buffers, 0, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX);
     pdcp_context->no_of_buffers_to_process = 0;
     pdcp_context->no_of_buffers_processed = 0;
     pdcp_context->no_of_used_buffers = 0;
@@ -1101,9 +1219,12 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
                                       uint32_t status,
                                       uint32_t error_info)
 {
+
+#if 0
     int ret;
     pdcp_context_t *pdcp_context = NULL;
     int test_failed = 0;
+    uint32_t start_cycles_ = GET_ATBL();
 
     // validate input params
     assert(ua_ctx_handle != NULL);
@@ -1196,17 +1317,28 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
                                status);
     assert(ret == 0);
 
+    uint32_t dummy = (GET_ATBL() - start_cycles_);
+    profile_printf("thread #%d:UA calback cycles = %d\n", th_config_local->tid, dummy);
+
+#endif
     return SEC_RETURN_SUCCESS;
 }
 
-static int get_results(uint8_t job_ring, int limit, uint32_t *packets_out)
+static int get_results(uint8_t job_ring, int limit, uint32_t *packets_out, uint32_t *core_cycles, uint8_t tid)
 {
     int ret = 0;
+    uint32_t start_cycles_ = GET_ATBL();
 
     assert(limit != 0);
     assert(packets_out != NULL);
 
+
+
     ret = sec_poll_job_ring(job_ring_descriptors[job_ring].job_ring_handle, limit, packets_out);
+    uint32_t dummy = (GET_ATBL() - start_cycles_);
+    *core_cycles += dummy;
+    profile_printf("thread #%d:sec_poll_job_ring cycles = %d. pkts=%d\n", tid, dummy, *packets_out);
+
     if (ret != SEC_SUCCESS)
     {
         test_printf("sec_poll_job_ring::Error %d when polling for SEC results on Job Ring %d \n", ret, job_ring);
@@ -1313,7 +1445,7 @@ static int delete_contexts(pdcp_context_t * pdcp_contexts, int *no_of_used_pdcp_
         return 0;
     }
 
-    for (i = 0; i < MAX_PDCP_CONTEXT_NUMBER; i++)
+    for (i = 0; i < PDCP_CONTEXT_NUMBER; i++)
     {
         // Try an delete the contexts and count the total number of contexts deleted.
         // delete_context returns 0 if the context was not deleted, and 1 if it was deleted.
@@ -1337,12 +1469,10 @@ static int start_sec_worker_threads(void)
     th_config[0].producer_job_ring_id = 1;
     th_config[0].pdcp_contexts = &pdcp_ul_contexts[0];
     th_config[0].no_of_used_pdcp_contexts = &no_of_used_pdcp_ul_contexts;
-    th_config[0].no_of_pdcp_contexts_to_test =
-            MIN_PDCP_CONTEXT_NUMBER + rand()% (MAX_PDCP_CONTEXT_NUMBER - MIN_PDCP_CONTEXT_NUMBER + 1);
-    assert(th_config[0].no_of_pdcp_contexts_to_test >= MIN_PDCP_CONTEXT_NUMBER &&
-            th_config[0].no_of_pdcp_contexts_to_test <= MAX_PDCP_CONTEXT_NUMBER);
+    th_config[0].no_of_pdcp_contexts_to_test = PDCP_CONTEXT_NUMBER;
     th_config[0].work_done = 0;
     th_config[0].should_exit = 0;
+    th_config[0].core_cycles = 0;
     ret = pthread_create(&threads[0], NULL, &pdcp_thread_routine, (void*)&th_config[0]);
     assert(ret == 0);
 
@@ -1353,12 +1483,10 @@ static int start_sec_worker_threads(void)
     th_config[1].producer_job_ring_id = 0;
     th_config[1].pdcp_contexts = &pdcp_dl_contexts[0];
     th_config[1].no_of_used_pdcp_contexts = &no_of_used_pdcp_dl_contexts;
-    th_config[1].no_of_pdcp_contexts_to_test =
-            MIN_PDCP_CONTEXT_NUMBER + rand()% (MAX_PDCP_CONTEXT_NUMBER - MIN_PDCP_CONTEXT_NUMBER + 1);
-    assert(th_config[1].no_of_pdcp_contexts_to_test >= MIN_PDCP_CONTEXT_NUMBER &&
-            th_config[1].no_of_pdcp_contexts_to_test <= MAX_PDCP_CONTEXT_NUMBER);
+    th_config[1].no_of_pdcp_contexts_to_test = PDCP_CONTEXT_NUMBER;
     th_config[1].work_done = 0;
     th_config[1].should_exit = 0;
+    th_config[1].core_cycles = 0;
     ret = pthread_create(&threads[1], NULL, &pdcp_thread_routine, (void*)&th_config[1]);
     assert(ret == 0);
 
@@ -1391,10 +1519,12 @@ static int stop_sec_worker_threads(void)
     }
 
     // double check that indeed the threads finished their work
-    assert(no_of_used_pdcp_dl_contexts == 0);
-    assert(no_of_used_pdcp_ul_contexts == 0);
+//    assert(no_of_used_pdcp_dl_contexts == 0);
+//    assert(no_of_used_pdcp_ul_contexts == 0);
 
     test_printf("thread main: all worker threads are stopped\n");
+    profile_printf("thread 0 core cycles = %d\n", th_config[0].core_cycles);
+    profile_printf("thread 1 core cycles = %d\n", th_config[1].core_cycles);
     return 0;
 }
 
@@ -1402,11 +1532,19 @@ static void* pdcp_thread_routine(void* config)
 {
     thread_config_t *th_config_local = NULL;
     int ret = 0;
+    int i = 0;
     unsigned int packets_received = 0;
     pdcp_context_t *pdcp_context;
     int total_no_of_contexts_deleted = 0;
     int no_of_contexts_deleted = 0;
     int total_no_of_contexts_created = 0;
+    unsigned int total_packets_to_send = 0;
+    unsigned int total_packets_sent = 0;
+    unsigned int total_packets_to_receive = 0;
+    unsigned int total_packets_received = 0;
+    unsigned int ctx_packet_count = 0;
+    struct timeval start_time;
+    struct timeval end_time;
 
     th_config_local = (thread_config_t*)config;
     assert(th_config_local != NULL);
@@ -1414,13 +1552,17 @@ static void* pdcp_thread_routine(void* config)
     test_printf("thread #%d:producer: start work, no of contexts to be created/deleted %d\n",
             th_config_local->tid, th_config_local->no_of_pdcp_contexts_to_test);
 
+    /////////////////////////////////////////////////////////////////////
+    // 1. Create a number of PDCP contexts
+    /////////////////////////////////////////////////////////////////////
+
     // Create a number of configurable contexts and affine them to the producer JR, send a random
     // number of packets per each context
     while(total_no_of_contexts_created < th_config_local->no_of_pdcp_contexts_to_test)
     {
         ret = get_free_pdcp_context(th_config_local->pdcp_contexts,
-                                    th_config_local->no_of_used_pdcp_contexts,
-                                    &pdcp_context);
+                th_config_local->no_of_used_pdcp_contexts,
+                &pdcp_context);
         assert(ret == 0);
 
         test_printf("thread #%d:producer: create pdcp context %d\n", th_config_local->tid, pdcp_context->id);
@@ -1451,8 +1593,8 @@ static void* pdcp_thread_routine(void* config)
         if(temp_auth_key != NULL)
         {
             memcpy(pdcp_context->pdcp_ctx_cfg_data.integrity_key,
-                   temp_auth_key,
-                   test_auth_key_len);
+                    temp_auth_key,
+                    test_auth_key_len);
             pdcp_context->pdcp_ctx_cfg_data.integrity_key_len = test_auth_key_len;
         }
 
@@ -1460,8 +1602,8 @@ static void* pdcp_thread_routine(void* config)
 
         // create a SEC context in SEC driver
         ret = sec_create_pdcp_context (job_ring_descriptors[th_config_local->producer_job_ring_id].job_ring_handle,
-                                       &pdcp_context->pdcp_ctx_cfg_data,
-                                       &pdcp_context->sec_ctx);
+                &pdcp_context->pdcp_ctx_cfg_data,
+                &pdcp_context->sec_ctx);
         if (ret != SEC_SUCCESS)
         {
             test_printf("thread #%d:producer: sec_create_pdcp_context return error %d for PDCP context no %d \n",
@@ -1471,74 +1613,115 @@ static void* pdcp_thread_routine(void* config)
 
         total_no_of_contexts_created ++;
 
-        // for the newly created context, send to SEC a random number of packets for processing
-        sec_packet_t *in_packet;
-        sec_packet_t *out_packet;
 
+    }
 
-        while (get_free_pdcp_buffer(pdcp_context, &in_packet, &out_packet) == 0)
+    /////////////////////////////////////////////////////////////////////
+    // 2. Send a number of packets on each of the PDCP contexts
+    /////////////////////////////////////////////////////////////////////
+
+    total_packets_to_send = PDCP_CONTEXT_NUMBER * PACKET_NUMBER_PER_CTX;
+    total_packets_to_receive = PDCP_CONTEXT_NUMBER * PACKET_NUMBER_PER_CTX;
+
+    gettimeofday(&start_time, NULL);
+    // Send a burst of packets for each context, until all the packets are sent to SEC
+//    while(1)
+//    {
+    while(total_packets_to_send != total_packets_sent)
+    {
+        for(i = 0; i < PDCP_CONTEXT_NUMBER; i++)
         {
-            // if SEC process packet returns that the producer JR is full, do some polling
-            // on the consumer JR until the producer JR has free entries.
-            while (sec_process_packet(pdcp_context->sec_ctx,
-                                     in_packet,
-                                     out_packet,
-                                     (ua_context_handle_t)pdcp_context) == SEC_JR_IS_FULL)
+            pdcp_context = &th_config_local->pdcp_contexts[i];
+            ctx_packet_count = 0;
+
+            while(ctx_packet_count < PACKET_BURST_PER_CTX)
             {
-            	// wait while the producer JR is empty, and in the mean time do some
-                // polling on the consumer JR -> retrieve only 5 notifications if available
-                ret = get_results(th_config_local->consumer_job_ring_id,
-                		          JOB_RING_POLL_LIMIT,
-                		          &packets_received);
-                assert(ret == 0);
-            };
-            if (ret != SEC_SUCCESS)
-            {
-                test_printf("thread #%d:producer: sec_process_packet return error %d for PDCP context no %d \n",
-                        th_config_local->tid, ret, pdcp_context->id);
-                assert(0);
+                // for each context, send to SEC a fixed number of packets for processing
+                sec_packet_t *in_packet;
+                sec_packet_t *out_packet;
+
+                // Get a free buffer, If none, then break the loop
+                if(get_free_pdcp_buffer(pdcp_context, &in_packet, &out_packet) != 0)
+                {
+                    break;
+                }
+
+                // if SEC process packet returns that the producer JR is full, do some polling
+                // on the consumer JR until the producer JR has free entries.
+                do{
+                    uint32_t start_cycles = GET_ATBL();
+                    ret = sec_process_packet(pdcp_context->sec_ctx,
+                            in_packet,
+                            out_packet,
+                            (ua_context_handle_t)pdcp_context);
+
+                    uint32_t dummy = (GET_ATBL() - start_cycles);
+                    th_config_local->core_cycles += dummy;
+
+                    profile_printf("thread #%d:ctx #%p:sec_process_packet cycles = %d\n",
+                            th_config_local->tid, pdcp_context, dummy);
+
+                    if(ret == SEC_JR_IS_FULL)
+                    {
+                        usleep(1);
+                        // wait while the producer JR is empty, and in the mean time do some
+                        // polling on the consumer JR -> retrieve only 5 notifications if available
+                        ret = get_results(th_config_local->consumer_job_ring_id,
+                                JOB_RING_POLL_LIMIT,
+                                &packets_received,
+                                &th_config_local->core_cycles,
+                                th_config_local->tid);
+                        assert(ret == 0);
+                        total_packets_received += packets_received;
+                    }
+                    else if(ret != SEC_SUCCESS)
+                    {
+                        test_printf("thread #%d:producer: sec_process_packet return error %d for PDCP context no %d \n",
+                                th_config_local->tid, ret, pdcp_context->id);
+                        assert(0);
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }while(1);
+
+                ctx_packet_count++;
             }
-        }
-
-
-        // Now remove only the contexts with an even id.
-        // This way two scenarios are tested:
-        // - remove a context with packets in flight
-        // - remove a context with no packets in flight
-        if (total_no_of_contexts_created % 2 == 0)
-        {
-            // Remove the context now, if packets in flight the context will not be removed yet
-            // Also count the total number of contexts deleted (delete_context returns 0 if the context
-            // was not deleted, and 1 if it was deleted.)
-            ret = delete_context(pdcp_context, th_config_local->no_of_used_pdcp_contexts);
-            total_no_of_contexts_deleted += ret;
+            total_packets_sent += ctx_packet_count;
+            usleep(5);
         }
     }
+//            usleep(10);
+//    }
 
     test_printf("thread #%d: polling until all contexts are deleted\n", th_config_local->tid);
 
-    // Poll the consumer's JR for already processed packets and try to delete
-    // the contexts marked as deleted (the contexts will be deleted if all
-    // the packets in flight were notified to UA with the OVERDUE && LAST_OVERDUE status)
+    // Poll the JR until no more packets are retrieved
     do
     {
         // poll the consumer JR
         ret = get_results(th_config_local->consumer_job_ring_id,
         		          JOB_RING_POLL_UNLIMITED,
-        		          &packets_received);
+        		          &packets_received,
+                          &th_config_local->core_cycles,
+                          th_config_local->tid);
         assert(ret == 0);
+        total_packets_received += packets_received;
+        usleep(1);
 
-        // try to delete the contexts with packets in flight
-        ret = delete_contexts(th_config_local->pdcp_contexts,
-                              th_config_local->no_of_used_pdcp_contexts,
-                              &no_of_contexts_deleted);
-        assert(ret == 0);
-        total_no_of_contexts_deleted += no_of_contexts_deleted;
-    }while(total_no_of_contexts_deleted < total_no_of_contexts_created);
+    }while(total_packets_to_receive != total_packets_received);
 
+    gettimeofday(&end_time, NULL);
+
+    printf("Sent %d packets. Received %d packets.\nStart Time %d sec %d usec."
+            "End Time %d sec %d usec.\n",
+            total_packets_sent, total_packets_received, start_time.tv_sec, start_time.tv_usec, 
+            end_time.tv_sec, end_time.tv_usec);
 
     // signal to main thread that the work is done
     th_config_local->work_done = 1;
+/*
     test_printf("thread #%d: work done, polling until exit signal is received\n", th_config_local->tid);
 
     // continue polling on the consumer job ring, in case the other worker thread
@@ -1547,10 +1730,11 @@ static void* pdcp_thread_routine(void* config)
     {
         ret = get_results(th_config_local->consumer_job_ring_id,
         		          JOB_RING_POLL_UNLIMITED,
-        		          &packets_received);
+        		          &packets_received,
+                          &th_config_local->core_cycles);
         assert(ret == 0);
     }
-
+*/
     test_printf("thread #%d: exit\n", th_config_local->tid);
     pthread_exit(NULL);
 }
@@ -1565,8 +1749,8 @@ static int setup_sec_environment(void)
     time(&seconds);
     srand((unsigned int) seconds);
 
-    memset (pdcp_dl_contexts, 0, sizeof(pdcp_context_t) * MAX_PDCP_CONTEXT_NUMBER);
-    memset (pdcp_ul_contexts, 0, sizeof(pdcp_context_t) * MAX_PDCP_CONTEXT_NUMBER);
+    memset (pdcp_dl_contexts, 0, sizeof(pdcp_context_t) * PDCP_CONTEXT_NUMBER);
+    memset (pdcp_ul_contexts, 0, sizeof(pdcp_context_t) * PDCP_CONTEXT_NUMBER);
 
     // map the physical memory
     ret = dma_mem_setup();
@@ -1577,15 +1761,15 @@ static int setup_sec_environment(void)
     }
 	test_printf("dma_mem_setup: mapped virtual mem 0x%x to physical mem 0x%x\n", __dma_virt, DMA_MEM_PHYS);
 
-    for (i = 0; i < MAX_PDCP_CONTEXT_NUMBER; i++)
+    for (i = 0; i < PDCP_CONTEXT_NUMBER; i++)
     {
         pdcp_dl_contexts[i].id = i;
         // allocate input buffers from memory zone DMA-accessible to SEC engine
         pdcp_dl_contexts[i].input_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT,
-                                                             sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
+                                                             sizeof(buffer_t) * PACKET_NUMBER_PER_CTX);
         // allocate output buffers from memory zone DMA-accessible to SEC engine
         pdcp_dl_contexts[i].output_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT,
-                                                              sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
+                                                              sizeof(buffer_t) * PACKET_NUMBER_PER_CTX);
 
         pdcp_dl_contexts[i].pdcp_ctx_cfg_data.cipher_key = dma_mem_memalign(BUFFER_ALIGNEMENT,
                                                                             MAX_KEY_LENGTH);
@@ -1602,16 +1786,16 @@ static int setup_sec_environment(void)
         assert((dma_addr_t)pdcp_dl_contexts[i].pdcp_ctx_cfg_data.cipher_key >= DMA_MEM_SEC_DRIVER);
         assert((dma_addr_t)pdcp_dl_contexts[i].pdcp_ctx_cfg_data.integrity_key >= DMA_MEM_SEC_DRIVER);
 
-        memset(pdcp_dl_contexts[i].input_buffers, 0, sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
-        memset(pdcp_dl_contexts[i].output_buffers, 0, sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
+        memset(pdcp_dl_contexts[i].input_buffers, 0, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX);
+        memset(pdcp_dl_contexts[i].output_buffers, 0, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX);
 
-        pdcp_ul_contexts[i].id = i + MAX_PDCP_CONTEXT_NUMBER;
+        pdcp_ul_contexts[i].id = i + PDCP_CONTEXT_NUMBER;
         // allocate input buffers from memory zone DMA-accessible to SEC engine
         pdcp_ul_contexts[i].input_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT,
-                                                             sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
+                                                             sizeof(buffer_t) * PACKET_NUMBER_PER_CTX);
         // validate that the address of the freshly allocated buffer falls in the second memory are.
         pdcp_ul_contexts[i].output_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT, 
-                                                              sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
+                                                              sizeof(buffer_t) * PACKET_NUMBER_PER_CTX);
 
         pdcp_ul_contexts[i].pdcp_ctx_cfg_data.cipher_key = dma_mem_memalign(BUFFER_ALIGNEMENT,
                                                                             MAX_KEY_LENGTH);
@@ -1629,8 +1813,8 @@ static int setup_sec_environment(void)
         assert((dma_addr_t)pdcp_ul_contexts[i].pdcp_ctx_cfg_data.integrity_key >= DMA_MEM_SEC_DRIVER);
 
 
-        memset(pdcp_ul_contexts[i].input_buffers, 0, sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
-        memset(pdcp_ul_contexts[i].output_buffers, 0, sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
+        memset(pdcp_ul_contexts[i].input_buffers, 0, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX);
+        memset(pdcp_ul_contexts[i].output_buffers, 0, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX);
     }
 
     //////////////////////////////////////////////////////////////////////////////
@@ -1677,16 +1861,16 @@ static int cleanup_sec_environment(void)
     }
     test_printf("thread main: released SEC user space driver!!\n");
 
-    for (i = 0; i < MAX_PDCP_CONTEXT_NUMBER; i++)
+    for (i = 0; i < PDCP_CONTEXT_NUMBER; i++)
     {
-        dma_mem_free(pdcp_dl_contexts[i].input_buffers,  BUFFER_SIZE * MAX_PACKET_NUMBER_PER_CTX);
-        dma_mem_free(pdcp_dl_contexts[i].output_buffers,  BUFFER_SIZE * MAX_PACKET_NUMBER_PER_CTX);
+        dma_mem_free(pdcp_dl_contexts[i].input_buffers,  BUFFER_SIZE * PACKET_NUMBER_PER_CTX);
+        dma_mem_free(pdcp_dl_contexts[i].output_buffers,  BUFFER_SIZE * PACKET_NUMBER_PER_CTX);
 
         dma_mem_free(pdcp_dl_contexts[i].pdcp_ctx_cfg_data.cipher_key, MAX_KEY_LENGTH);
         dma_mem_free(pdcp_dl_contexts[i].pdcp_ctx_cfg_data.integrity_key, MAX_KEY_LENGTH);
 
-        dma_mem_free(pdcp_ul_contexts[i].input_buffers,  BUFFER_SIZE * MAX_PACKET_NUMBER_PER_CTX);
-        dma_mem_free(pdcp_ul_contexts[i].output_buffers,  BUFFER_SIZE * MAX_PACKET_NUMBER_PER_CTX);
+        dma_mem_free(pdcp_ul_contexts[i].input_buffers,  BUFFER_SIZE * PACKET_NUMBER_PER_CTX);
+        dma_mem_free(pdcp_ul_contexts[i].output_buffers,  BUFFER_SIZE * PACKET_NUMBER_PER_CTX);
 
         dma_mem_free(pdcp_ul_contexts[i].pdcp_ctx_cfg_data.cipher_key, MAX_KEY_LENGTH);
         dma_mem_free(pdcp_ul_contexts[i].pdcp_ctx_cfg_data.integrity_key, MAX_KEY_LENGTH);
@@ -1708,6 +1892,15 @@ static int cleanup_sec_environment(void)
 int main(void)
 {
     int ret = 0;
+    cpu_set_t cpu_mask; /* processor 0 */
+
+    /* bind process to processor 0 */
+    CPU_ZERO(&cpu_mask);
+    CPU_SET(1, &cpu_mask);
+    if(sched_setaffinity(0, sizeof(cpu_mask), &cpu_mask) < 0)
+    {
+        perror("sched_setaffinity");
+    }
 
     /////////////////////////////////////////////////////////////////////
     // 1. Initialize SEC environment
