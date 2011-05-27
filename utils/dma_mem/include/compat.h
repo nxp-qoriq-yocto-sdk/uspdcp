@@ -33,7 +33,7 @@
 #ifndef HEADER_COMPAT_H
 #define HEADER_COMPAT_H
 
-#define _GNU_SOURCE
+//#define _GNU_SOURCE
 #include <pthread.h>
 #include <stdlib.h>
 #include <stdio.h>

@@ -113,16 +113,21 @@ extern "C" {
 #define DRB_PER_UE  8
 
 // The number of PDCP contexts used. Each DRB will have 2 PDCP contexts, one for each direction.
-//#define PDCP_CONTEXT_NUMBER         (UE_NUMBER * DRB_PER_UE * 2)
-#define PDCP_CONTEXT_NUMBER         1
+#define PDCP_CONTEXT_NUMBER         (UE_NUMBER * DRB_PER_UE * 2)
+//#define PDCP_CONTEXT_NUMBER         1
 
 // The size of a PDCP input buffer.
 // Consider the size of the input and output buffers provided to SEC driver for processing identical.
 #define PDCP_BUFFER_SIZE   1050
 
-// The maximum number of packets processed per context
-//#define PACKET_NUMBER_PER_CTX   20
-#define PACKET_NUMBER_PER_CTX   10000
+// The maximum number of packets processed per DL context
+//#define PACKET_NUMBER_PER_CTX_DL   19000
+#define PACKET_NUMBER_PER_CTX_DL   38
+
+// The maximum number of packets processed per UL context
+//#define PACKET_NUMBER_PER_CTX_UL   10000
+#define PACKET_NUMBER_PER_CTX_UL   20
+
 // The number of packets to send in a burst for each context
 #define PACKET_BURST_PER_CTX   1
 
@@ -143,6 +148,7 @@ extern "C" {
 // Max length in bytes for a confidentiality /integrity key.
 #define MAX_KEY_LENGTH    32
 
+// Read ATBL(Alternate Time Base Lower) Register
 #define GET_ATBL() \
     mfspr(SPR_ATBL)
 /*==================================================================================================
@@ -216,6 +222,8 @@ typedef struct thread_config_s
     // default to zero. set to 1 when main thread instructs the worked thread to exit.
     volatile int should_exit;
     uint32_t core_cycles;
+    uint32_t rx_packets_per_ctx;
+    uint32_t tx_packets_per_ctx;
 }thread_config_t;
 
 /*==================================================================================================
@@ -499,12 +507,13 @@ static uint8_t snow_f8_enc_data_in[] = {
     0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
     0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
     0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,
     };
 
 // PDCP payload encrypted
-static uint8_t snow_f8_enc_data_out[] = {0xBA,0x0F,0x31,0x30,0x03,0x34,0xC5,0x6B, // PDCP payload encrypted
+/*static uint8_t snow_f8_enc_data_out[] = {0xBA,0x0F,0x31,0x30,0x03,0x34,0xC5,0x6B, // PDCP payload encrypted
                                          0x52,0xA7,0x49,0x7C,0xBA,0xC0,0x46};
+                                         */
 
 // Radio bearer id
 static uint8_t snow_f8_enc_bearer = 0x3;
@@ -1047,9 +1056,6 @@ static int get_free_pdcp_context(pdcp_context_t * pdcp_contexts,
     }
     assert(found == 1);
 
-    // Configure this PDCP context with a random number of buffers to process for test
-    pdcp_contexts[i].no_of_buffers_to_process = PACKET_NUMBER_PER_CTX;
-
     // return the context chosen
     *pdcp_context = &(pdcp_contexts[i]);
 
@@ -1078,8 +1084,8 @@ static void release_pdcp_context(int * no_of_used_pdcp_contexts, pdcp_context_t 
     pdcp_context->job_ring = NULL;
     pdcp_context->sec_ctx = NULL;
 
-    memset(pdcp_context->input_buffers, 0, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX);
-    memset(pdcp_context->output_buffers, 0, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX);
+//    memset(pdcp_context->input_buffers, 0, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX);
+//    memset(pdcp_context->output_buffers, 0, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX);
     pdcp_context->no_of_buffers_to_process = 0;
     pdcp_context->no_of_buffers_processed = 0;
     pdcp_context->no_of_used_buffers = 0;
@@ -1221,10 +1227,11 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
 {
 
 #if 0
-    int ret;
+    uint32_t diff_cycles = 0;
+    int ret_code;
     pdcp_context_t *pdcp_context = NULL;
     int test_failed = 0;
-    uint32_t start_cycles_ = GET_ATBL();
+    uint32_t start_cycles = GET_ATBL();
 
     // validate input params
     assert(ua_ctx_handle != NULL);
@@ -1311,14 +1318,14 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
     // In this test application we will release the input and output buffers
     // Check also if all the buffers were received for a retiring context
     // and if so mark it to be deleted
-    ret = release_pdcp_buffers(pdcp_context,
+    ret_code = release_pdcp_buffers(pdcp_context,
                                (sec_packet_t*)in_packet,
                                (sec_packet_t*)out_packet,
                                status);
-    assert(ret == 0);
+    assert(ret_code == 0);
 
-    uint32_t dummy = (GET_ATBL() - start_cycles_);
-    profile_printf("thread #%d:UA calback cycles = %d\n", th_config_local->tid, dummy);
+    diff_cycles = (GET_ATBL() - start_cycles);
+    profile_printf("thread #%d:UA calback cycles = %d\n", th_config_local->tid, diff_cycles);
 
 #endif
     return SEC_RETURN_SUCCESS;
@@ -1326,22 +1333,23 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
 
 static int get_results(uint8_t job_ring, int limit, uint32_t *packets_out, uint32_t *core_cycles, uint8_t tid)
 {
-    int ret = 0;
-    uint32_t start_cycles_ = GET_ATBL();
+    uint32_t start_cycles = GET_ATBL();
+    uint32_t diff_cycles = 0;
+    int ret_code = 0;
 
     assert(limit != 0);
     assert(packets_out != NULL);
 
 
 
-    ret = sec_poll_job_ring(job_ring_descriptors[job_ring].job_ring_handle, limit, packets_out);
-    uint32_t dummy = (GET_ATBL() - start_cycles_);
-    *core_cycles += dummy;
-    profile_printf("thread #%d:sec_poll_job_ring cycles = %d. pkts=%d\n", tid, dummy, *packets_out);
+    ret_code = sec_poll_job_ring(job_ring_descriptors[job_ring].job_ring_handle, limit, packets_out);
+    diff_cycles = (GET_ATBL() - start_cycles);
+    *core_cycles += diff_cycles;
+    profile_printf("thread #%d:sec_poll_job_ring cycles = %d. pkts = %d\n", tid, diff_cycles, *packets_out);
 
-    if (ret != SEC_SUCCESS)
+    if (ret_code != SEC_SUCCESS)
     {
-        test_printf("sec_poll_job_ring::Error %d when polling for SEC results on Job Ring %d \n", ret, job_ring);
+        test_printf("sec_poll_job_ring::Error %d when polling for SEC results on Job Ring %d \n", ret_code, job_ring);
         return 1;
     }
     // validate that number of packets notified does not exceed limit when limit is > 0.
@@ -1352,7 +1360,7 @@ static int get_results(uint8_t job_ring, int limit, uint32_t *packets_out, uint3
 
 static int delete_context(pdcp_context_t * pdcp_context, int *no_of_used_pdcp_contexts)
 {
-    int ret;
+    int ret_code;
 
     assert(pdcp_context != NULL);
     assert(no_of_used_pdcp_contexts != NULL);
@@ -1367,18 +1375,18 @@ static int delete_context(pdcp_context_t * pdcp_context, int *no_of_used_pdcp_co
         pdcp_context->usage = PDCP_CONTEXT_MARKED_FOR_DELETION;
 
         // try to delete the context from SEC driver
-        ret = sec_delete_pdcp_context(pdcp_context->sec_ctx);
-        if (ret == SEC_PACKETS_IN_FLIGHT)
+        ret_code = sec_delete_pdcp_context(pdcp_context->sec_ctx);
+        if (ret_code == SEC_PACKETS_IN_FLIGHT)
         {
             test_printf("thread #%d:producer: delete PDCP context no %d -> packets in flight \n",
                     pdcp_context->thread_id, pdcp_context->id);
         }
-        else if (ret == SEC_LAST_PACKET_IN_FLIGHT)
+        else if (ret_code == SEC_LAST_PACKET_IN_FLIGHT)
         {
             test_printf("thread #%d:producer: delete PDCP context no %d -> last packet in flight \n",
                     pdcp_context->thread_id, pdcp_context->id);
         }
-        else if (ret == SEC_SUCCESS)
+        else if (ret_code == SEC_SUCCESS)
         {
             // context was successfully removed from SEC driver
             // do the same with the UA's context
@@ -1390,7 +1398,7 @@ static int delete_context(pdcp_context_t * pdcp_context, int *no_of_used_pdcp_co
         else
         {
             test_printf("thread #%d:producer: sec_delete_pdcp_context return error %d for PDCP context no %d \n",
-                    pdcp_context->thread_id, ret, pdcp_context->id);
+                    pdcp_context->thread_id, ret_code, pdcp_context->id);
             // the stub implementation of SEC driver should not return an error
             assert(0);
         }
@@ -1456,7 +1464,7 @@ static int delete_contexts(pdcp_context_t * pdcp_contexts, int *no_of_used_pdcp_
 
 static int start_sec_worker_threads(void)
 {
-    int ret = 0;
+    int ret_code = 0;
 
     // this scenario handles only 2 JRs and 2 worker threads
     assert (JOB_RING_NUMBER == 2);
@@ -1473,8 +1481,10 @@ static int start_sec_worker_threads(void)
     th_config[0].work_done = 0;
     th_config[0].should_exit = 0;
     th_config[0].core_cycles = 0;
-    ret = pthread_create(&threads[0], NULL, &pdcp_thread_routine, (void*)&th_config[0]);
-    assert(ret == 0);
+    th_config[0].rx_packets_per_ctx = PACKET_NUMBER_PER_CTX_DL;
+    th_config[0].tx_packets_per_ctx = PACKET_NUMBER_PER_CTX_UL;
+    ret_code = pthread_create(&threads[0], NULL, &pdcp_thread_routine, (void*)&th_config[0]);
+    assert(ret_code == 0);
 
     // start PDCP DL thread
     th_config[1].tid = 1;
@@ -1487,8 +1497,10 @@ static int start_sec_worker_threads(void)
     th_config[1].work_done = 0;
     th_config[1].should_exit = 0;
     th_config[1].core_cycles = 0;
-    ret = pthread_create(&threads[1], NULL, &pdcp_thread_routine, (void*)&th_config[1]);
-    assert(ret == 0);
+    th_config[1].rx_packets_per_ctx = PACKET_NUMBER_PER_CTX_UL;
+    th_config[1].tx_packets_per_ctx = PACKET_NUMBER_PER_CTX_DL;
+    ret_code = pthread_create(&threads[1], NULL, &pdcp_thread_routine, (void*)&th_config[1]);
+    assert(ret_code == 0);
 
     return 0;
 }
@@ -1496,7 +1508,7 @@ static int start_sec_worker_threads(void)
 static int stop_sec_worker_threads(void)
 {
     int i = 0;
-    int ret = 0;
+    int ret_code = 0;
 
     // this scenario handles only 2 JRs and 2 worker threads
     assert (JOB_RING_NUMBER == 2);
@@ -1512,10 +1524,10 @@ static int stop_sec_worker_threads(void)
     th_config[1].should_exit = 1;
 
     // wait for the threads to exit
-    for (i = 0; i < JOB_RING_NUMBER; i++)
+    for (i = 0; i < THREADS_NUMBER; i++)
     {
-        ret = pthread_join(threads[i], NULL);
-        assert(ret == 0);
+        ret_code = pthread_join(threads[i], NULL);
+        assert(ret_code == 0);
     }
 
     // double check that indeed the threads finished their work
@@ -1531,12 +1543,12 @@ static int stop_sec_worker_threads(void)
 static void* pdcp_thread_routine(void* config)
 {
     thread_config_t *th_config_local = NULL;
-    int ret = 0;
+    int ret_code = 0;
     int i = 0;
     unsigned int packets_received = 0;
     pdcp_context_t *pdcp_context;
-    int total_no_of_contexts_deleted = 0;
-    int no_of_contexts_deleted = 0;
+    //int total_no_of_contexts_deleted = 0;
+    //int no_of_contexts_deleted = 0;
     int total_no_of_contexts_created = 0;
     unsigned int total_packets_to_send = 0;
     unsigned int total_packets_sent = 0;
@@ -1545,6 +1557,8 @@ static void* pdcp_thread_routine(void* config)
     unsigned int ctx_packet_count = 0;
     struct timeval start_time;
     struct timeval end_time;
+    uint32_t start_cycles = 0;
+    uint32_t diff_cycles = 0;
 
     th_config_local = (thread_config_t*)config;
     assert(th_config_local != NULL);
@@ -1560,10 +1574,10 @@ static void* pdcp_thread_routine(void* config)
     // number of packets per each context
     while(total_no_of_contexts_created < th_config_local->no_of_pdcp_contexts_to_test)
     {
-        ret = get_free_pdcp_context(th_config_local->pdcp_contexts,
+        ret_code = get_free_pdcp_context(th_config_local->pdcp_contexts,
                 th_config_local->no_of_used_pdcp_contexts,
                 &pdcp_context);
-        assert(ret == 0);
+        assert(ret_code == 0);
 
         test_printf("thread #%d:producer: create pdcp context %d\n", th_config_local->tid, pdcp_context->id);
         pdcp_context->pdcp_ctx_cfg_data.notify_packet = &pdcp_ready_packet_handler;
@@ -1601,13 +1615,13 @@ static void* pdcp_thread_routine(void* config)
         pdcp_context->thread_id = th_config_local->tid;
 
         // create a SEC context in SEC driver
-        ret = sec_create_pdcp_context (job_ring_descriptors[th_config_local->producer_job_ring_id].job_ring_handle,
+        ret_code = sec_create_pdcp_context (job_ring_descriptors[th_config_local->producer_job_ring_id].job_ring_handle,
                 &pdcp_context->pdcp_ctx_cfg_data,
                 &pdcp_context->sec_ctx);
-        if (ret != SEC_SUCCESS)
+        if (ret_code != SEC_SUCCESS)
         {
             test_printf("thread #%d:producer: sec_create_pdcp_context return error %d for PDCP context no %d \n",
-                    th_config_local->tid, ret, pdcp_context->id);
+                    th_config_local->tid, ret_code, pdcp_context->id);
             assert(0);
         }
 
@@ -1620,8 +1634,8 @@ static void* pdcp_thread_routine(void* config)
     // 2. Send a number of packets on each of the PDCP contexts
     /////////////////////////////////////////////////////////////////////
 
-    total_packets_to_send = PDCP_CONTEXT_NUMBER * PACKET_NUMBER_PER_CTX;
-    total_packets_to_receive = PDCP_CONTEXT_NUMBER * PACKET_NUMBER_PER_CTX;
+    total_packets_to_send = PDCP_CONTEXT_NUMBER * th_config_local->tx_packets_per_ctx;
+    total_packets_to_receive = PDCP_CONTEXT_NUMBER * th_config_local->rx_packets_per_ctx;
 
     gettimeofday(&start_time, NULL);
     // Send a burst of packets for each context, until all the packets are sent to SEC
@@ -1649,35 +1663,36 @@ static void* pdcp_thread_routine(void* config)
                 // if SEC process packet returns that the producer JR is full, do some polling
                 // on the consumer JR until the producer JR has free entries.
                 do{
-                    uint32_t start_cycles = GET_ATBL();
-                    ret = sec_process_packet(pdcp_context->sec_ctx,
+                    start_cycles = GET_ATBL();
+                    ret_code = sec_process_packet(pdcp_context->sec_ctx,
                             in_packet,
                             out_packet,
                             (ua_context_handle_t)pdcp_context);
 
-                    uint32_t dummy = (GET_ATBL() - start_cycles);
-                    th_config_local->core_cycles += dummy;
+                    diff_cycles = (GET_ATBL() - start_cycles);
+                    th_config_local->core_cycles += diff_cycles;
 
                     profile_printf("thread #%d:ctx #%p:sec_process_packet cycles = %d\n",
-                            th_config_local->tid, pdcp_context, dummy);
+                            th_config_local->tid, pdcp_context, diff_cycles);
 
-                    if(ret == SEC_JR_IS_FULL)
+                    if(ret_code == SEC_JR_IS_FULL)
                     {
-                        usleep(1);
+                        //printf("thread #%d: jr full\n", th_config_local->tid);
                         // wait while the producer JR is empty, and in the mean time do some
                         // polling on the consumer JR -> retrieve only 5 notifications if available
-                        ret = get_results(th_config_local->consumer_job_ring_id,
+                        ret_code = get_results(th_config_local->consumer_job_ring_id,
                                 JOB_RING_POLL_LIMIT,
                                 &packets_received,
                                 &th_config_local->core_cycles,
                                 th_config_local->tid);
-                        assert(ret == 0);
+                        assert(ret_code == 0);
                         total_packets_received += packets_received;
+                        usleep(10);
                     }
-                    else if(ret != SEC_SUCCESS)
+                    else if(ret_code != SEC_SUCCESS)
                     {
                         test_printf("thread #%d:producer: sec_process_packet return error %d for PDCP context no %d \n",
-                                th_config_local->tid, ret, pdcp_context->id);
+                                th_config_local->tid, ret_code, pdcp_context->id);
                         assert(0);
                     }
                     else
@@ -1689,10 +1704,10 @@ static void* pdcp_thread_routine(void* config)
                 ctx_packet_count++;
             }
             total_packets_sent += ctx_packet_count;
-            usleep(5);
+            //usleep(5);
         }
     }
-//            usleep(10);
+    //        usleep(1000);
 //    }
 
     test_printf("thread #%d: polling until all contexts are deleted\n", th_config_local->tid);
@@ -1701,23 +1716,31 @@ static void* pdcp_thread_routine(void* config)
     do
     {
         // poll the consumer JR
-        ret = get_results(th_config_local->consumer_job_ring_id,
+        ret_code = get_results(th_config_local->consumer_job_ring_id,
         		          JOB_RING_POLL_UNLIMITED,
         		          &packets_received,
                           &th_config_local->core_cycles,
                           th_config_local->tid);
-        assert(ret == 0);
+        assert(ret_code == 0);
         total_packets_received += packets_received;
-        usleep(1);
+        /*printf("thread #%d: pkts to receive %d. packets received %d\n",
+                th_config_local->tid,
+                total_packets_to_receive, total_packets_received);
+        */
+        usleep(100);
 
     }while(total_packets_to_receive != total_packets_received);
+    /*printf("thread #%d: pkts to receive %d. packets received %d\n",
+            th_config_local->tid,
+           total_packets_to_receive, total_packets_received);
+    */
 
     gettimeofday(&end_time, NULL);
 
     printf("Sent %d packets. Received %d packets.\nStart Time %d sec %d usec."
             "End Time %d sec %d usec.\n",
-            total_packets_sent, total_packets_received, start_time.tv_sec, start_time.tv_usec, 
-            end_time.tv_sec, end_time.tv_usec);
+            total_packets_sent, total_packets_received, (int)start_time.tv_sec, (int)start_time.tv_usec, 
+            (int)end_time.tv_sec, (int)end_time.tv_usec);
 
     // signal to main thread that the work is done
     th_config_local->work_done = 1;
@@ -1728,11 +1751,11 @@ static void* pdcp_thread_routine(void* config)
     // did not finish its work
     while(th_config_local->should_exit == 0)
     {
-        ret = get_results(th_config_local->consumer_job_ring_id,
+        ret_code = get_results(th_config_local->consumer_job_ring_id,
         		          JOB_RING_POLL_UNLIMITED,
         		          &packets_received,
                           &th_config_local->core_cycles);
-        assert(ret == 0);
+        assert(ret_code == 0);
     }
 */
     test_printf("thread #%d: exit\n", th_config_local->tid);
@@ -1742,7 +1765,7 @@ static void* pdcp_thread_routine(void* config)
 static int setup_sec_environment(void)
 {
     int i = 0;
-    int ret = 0;
+    int ret_code = 0;
     time_t seconds;
 
     /* Get value from system clock and use it for seed generation  */
@@ -1753,10 +1776,10 @@ static int setup_sec_environment(void)
     memset (pdcp_ul_contexts, 0, sizeof(pdcp_context_t) * PDCP_CONTEXT_NUMBER);
 
     // map the physical memory
-    ret = dma_mem_setup();
-    if (ret != 0)
+    ret_code = dma_mem_setup();
+    if (ret_code != 0)
     {
-        test_printf("dma_mem_setup failed with ret = %d\n", ret);
+        test_printf("dma_mem_setup failed with ret_code = %d\n", ret_code);
         return 1;
     }
 	test_printf("dma_mem_setup: mapped virtual mem 0x%x to physical mem 0x%x\n", __dma_virt, DMA_MEM_PHYS);
@@ -1766,15 +1789,18 @@ static int setup_sec_environment(void)
         pdcp_dl_contexts[i].id = i;
         // allocate input buffers from memory zone DMA-accessible to SEC engine
         pdcp_dl_contexts[i].input_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT,
-                                                             sizeof(buffer_t) * PACKET_NUMBER_PER_CTX);
+                                                             sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_DL);
         // allocate output buffers from memory zone DMA-accessible to SEC engine
         pdcp_dl_contexts[i].output_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT,
-                                                              sizeof(buffer_t) * PACKET_NUMBER_PER_CTX);
+                                                              sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_DL);
 
         pdcp_dl_contexts[i].pdcp_ctx_cfg_data.cipher_key = dma_mem_memalign(BUFFER_ALIGNEMENT,
                                                                             MAX_KEY_LENGTH);
         pdcp_dl_contexts[i].pdcp_ctx_cfg_data.integrity_key = dma_mem_memalign(BUFFER_ALIGNEMENT,
                                                                                MAX_KEY_LENGTH);
+
+        pdcp_dl_contexts[i].no_of_buffers_to_process = PACKET_NUMBER_PER_CTX_DL;
+
         // validate that the address of the freshly allocated buffer falls in the second memory are.
         assert (pdcp_dl_contexts[i].input_buffers != NULL);
         assert (pdcp_dl_contexts[i].output_buffers != NULL);
@@ -1786,21 +1812,23 @@ static int setup_sec_environment(void)
         assert((dma_addr_t)pdcp_dl_contexts[i].pdcp_ctx_cfg_data.cipher_key >= DMA_MEM_SEC_DRIVER);
         assert((dma_addr_t)pdcp_dl_contexts[i].pdcp_ctx_cfg_data.integrity_key >= DMA_MEM_SEC_DRIVER);
 
-        memset(pdcp_dl_contexts[i].input_buffers, 0, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX);
-        memset(pdcp_dl_contexts[i].output_buffers, 0, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX);
+        memset(pdcp_dl_contexts[i].input_buffers, 0, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_DL);
+        memset(pdcp_dl_contexts[i].output_buffers, 0, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_DL);
 
         pdcp_ul_contexts[i].id = i + PDCP_CONTEXT_NUMBER;
         // allocate input buffers from memory zone DMA-accessible to SEC engine
         pdcp_ul_contexts[i].input_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT,
-                                                             sizeof(buffer_t) * PACKET_NUMBER_PER_CTX);
+                                                             sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_UL);
         // validate that the address of the freshly allocated buffer falls in the second memory are.
         pdcp_ul_contexts[i].output_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT, 
-                                                              sizeof(buffer_t) * PACKET_NUMBER_PER_CTX);
+                                                              sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_UL);
 
         pdcp_ul_contexts[i].pdcp_ctx_cfg_data.cipher_key = dma_mem_memalign(BUFFER_ALIGNEMENT,
                                                                             MAX_KEY_LENGTH);
         pdcp_ul_contexts[i].pdcp_ctx_cfg_data.integrity_key = dma_mem_memalign(BUFFER_ALIGNEMENT,
                                                                                MAX_KEY_LENGTH);
+        pdcp_ul_contexts[i].no_of_buffers_to_process = PACKET_NUMBER_PER_CTX_UL;
+
         // validate that the address of the freshly allocated buffer falls in the second memory are.
         assert (pdcp_ul_contexts[i].input_buffers != NULL);
         assert (pdcp_ul_contexts[i].output_buffers != NULL);
@@ -1813,8 +1841,8 @@ static int setup_sec_environment(void)
         assert((dma_addr_t)pdcp_ul_contexts[i].pdcp_ctx_cfg_data.integrity_key >= DMA_MEM_SEC_DRIVER);
 
 
-        memset(pdcp_ul_contexts[i].input_buffers, 0, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX);
-        memset(pdcp_ul_contexts[i].output_buffers, 0, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX);
+        memset(pdcp_ul_contexts[i].input_buffers, 0, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_UL);
+        memset(pdcp_ul_contexts[i].output_buffers, 0, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_UL);
     }
 
     //////////////////////////////////////////////////////////////////////////////
@@ -1831,10 +1859,10 @@ static int setup_sec_environment(void)
     sec_config_data.irq_coalescing_timer = IRQ_COALESCING_TIMER;
 #endif
 
-    ret = sec_init(&sec_config_data, JOB_RING_NUMBER, &job_ring_descriptors);
-    if (ret != SEC_SUCCESS)
+    ret_code = sec_init(&sec_config_data, JOB_RING_NUMBER, &job_ring_descriptors);
+    if (ret_code != SEC_SUCCESS)
     {
-        test_printf("sec_init::Error %d\n", ret);
+        test_printf("sec_init::Error %d\n", ret_code);
         return 1;
     }
     test_printf("thread main: initialized SEC user space driver\n");
@@ -1850,11 +1878,11 @@ static int setup_sec_environment(void)
 
 static int cleanup_sec_environment(void)
 {
-    int ret = 0, i;
+    int ret_code = 0, i;
 
     // release SEC driver
-    ret = sec_release();
-    if (ret != 0)
+    ret_code = sec_release();
+    if (ret_code != 0)
     {
         test_printf("sec_release returned error\n");
         return 1;
@@ -1863,22 +1891,22 @@ static int cleanup_sec_environment(void)
 
     for (i = 0; i < PDCP_CONTEXT_NUMBER; i++)
     {
-        dma_mem_free(pdcp_dl_contexts[i].input_buffers,  BUFFER_SIZE * PACKET_NUMBER_PER_CTX);
-        dma_mem_free(pdcp_dl_contexts[i].output_buffers,  BUFFER_SIZE * PACKET_NUMBER_PER_CTX);
+        dma_mem_free(pdcp_dl_contexts[i].input_buffers,  BUFFER_SIZE * PACKET_NUMBER_PER_CTX_DL);
+        dma_mem_free(pdcp_dl_contexts[i].output_buffers,  BUFFER_SIZE * PACKET_NUMBER_PER_CTX_DL);
 
         dma_mem_free(pdcp_dl_contexts[i].pdcp_ctx_cfg_data.cipher_key, MAX_KEY_LENGTH);
         dma_mem_free(pdcp_dl_contexts[i].pdcp_ctx_cfg_data.integrity_key, MAX_KEY_LENGTH);
 
-        dma_mem_free(pdcp_ul_contexts[i].input_buffers,  BUFFER_SIZE * PACKET_NUMBER_PER_CTX);
-        dma_mem_free(pdcp_ul_contexts[i].output_buffers,  BUFFER_SIZE * PACKET_NUMBER_PER_CTX);
+        dma_mem_free(pdcp_ul_contexts[i].input_buffers,  BUFFER_SIZE * PACKET_NUMBER_PER_CTX_UL);
+        dma_mem_free(pdcp_ul_contexts[i].output_buffers,  BUFFER_SIZE * PACKET_NUMBER_PER_CTX_UL);
 
         dma_mem_free(pdcp_ul_contexts[i].pdcp_ctx_cfg_data.cipher_key, MAX_KEY_LENGTH);
         dma_mem_free(pdcp_ul_contexts[i].pdcp_ctx_cfg_data.integrity_key, MAX_KEY_LENGTH);
 
     }
 	// unmap the physical memory
-	ret = dma_mem_release();
-	if (ret != 0)
+	ret_code = dma_mem_release();
+	if (ret_code != 0)
 	{
 		return 1;
 	}
@@ -1891,7 +1919,7 @@ static int cleanup_sec_environment(void)
 
 int main(void)
 {
-    int ret = 0;
+    int ret_code = 0;
     cpu_set_t cpu_mask; /* processor 0 */
 
     /* bind process to processor 0 */
@@ -1905,8 +1933,8 @@ int main(void)
     /////////////////////////////////////////////////////////////////////
     // 1. Initialize SEC environment
     /////////////////////////////////////////////////////////////////////
-    ret = setup_sec_environment();
-    if (ret != 0)
+    ret_code = setup_sec_environment();
+    if (ret_code != 0)
     {
         test_printf("setup_sec_environment returned error\n");
         return 1;
@@ -1915,8 +1943,8 @@ int main(void)
     /////////////////////////////////////////////////////////////////////
     // 2. Start worker threads
     /////////////////////////////////////////////////////////////////////
-    ret = start_sec_worker_threads();
-    if (ret != 0)
+    ret_code = start_sec_worker_threads();
+    if (ret_code != 0)
     {
         test_printf("start_sec_worker_threads returned error\n");
         return 1;
@@ -1925,8 +1953,8 @@ int main(void)
     /////////////////////////////////////////////////////////////////////
     // 3. Stop worker threads
     /////////////////////////////////////////////////////////////////////
-    ret = stop_sec_worker_threads();
-    if (ret != 0)
+    ret_code = stop_sec_worker_threads();
+    if (ret_code != 0)
     {
         test_printf("stop_sec_worker_threads returned error\n");
         return 1;
@@ -1935,8 +1963,8 @@ int main(void)
     /////////////////////////////////////////////////////////////////////
     // 4. Cleanup SEC environment
     /////////////////////////////////////////////////////////////////////
-    ret = cleanup_sec_environment();
-    if (ret != 0)
+    ret_code = cleanup_sec_environment();
+    if (ret_code != 0)
     {
         test_printf("cleanup_sec_environment returned error\n");
         return 1;
