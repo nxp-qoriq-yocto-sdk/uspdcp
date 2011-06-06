@@ -49,54 +49,11 @@ extern "C" {
 #include "fsl_sec.h"
 // for dma_mem library
 #include "compat.h"
+#include "test_sec_driver_benchmark.h"
 
 /*==================================================================================================
                                      LOCAL CONSTANTS
 ==================================================================================================*/
-
-#define PDCP_TEST_SNOW_F8_ENC   0
-#define PDCP_TEST_SNOW_F8_DEC   1
-#define PDCP_TEST_SNOW_F9_ENC   2
-#define PDCP_TEST_SNOW_F9_DEC   3
-#define PDCP_TEST_AES_CTR_ENC   4
-#define PDCP_TEST_AES_CTR_DEC   5
-#define PDCP_TEST_AES_CMAC_ENC  6
-#define PDCP_TEST_AES_CMAC_DEC  7
-
-//////////////////////////////////////////////////////////////////////////
-// !!!!!!!!!!!!!!!!!       IMPORTANT !!!!!!!!!!!!!!!!
-//Select one and only one algorithm at a time, from below
-//////////////////////////////////////////////////////////////////////////
-
-// Ciphering
-#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F8_ENC
-// Deciphering
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F8_DEC
-
-// Authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F9_ENC
-// Authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F9_DEC
-
-// Ciphering
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CTR_ENC
-// Deciphering
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CTR_DEC
-
-// Authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CMAC_ENC
-// Authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CMAC_DEC
-
-
-
-
-#define test_printf(format, ...)
-#define profile_printf(format, ...)
-//#define test_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__) 
-//#define profile_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__) 
-
-
 
 // Number of SEC JRs used by this test application
 // @note: Currently this test application supports only 2 JRs (not less, not more)
@@ -112,21 +69,21 @@ extern "C" {
 // Number of dedicated radio bearers per UE simulated
 #define DRB_PER_UE  8
 
-// The number of PDCP contexts used. Each DRB will have 2 PDCP contexts, one for each direction.
-#define PDCP_CONTEXT_NUMBER         (UE_NUMBER * DRB_PER_UE * 2)
-//#define PDCP_CONTEXT_NUMBER         1
-
 // The size of a PDCP input buffer.
 // Consider the size of the input and output buffers provided to SEC driver for processing identical.
 #define PDCP_BUFFER_SIZE   1050
 
+// The maximum number of packets processed on DL in a second.
+#define DOWNLINK_PPS        19000
+
+// The maximum number of packets processed on UL in a second.
+#define UPLINK_PPS          10000
+
 // The maximum number of packets processed per DL context
-//#define PACKET_NUMBER_PER_CTX_DL   19000
-#define PACKET_NUMBER_PER_CTX_DL   38
+#define PACKET_NUMBER_PER_CTX_DL    ((DOWNLINK_PPS) / (PDCP_CONTEXT_NUMBER))
 
 // The maximum number of packets processed per UL context
-//#define PACKET_NUMBER_PER_CTX_UL   10000
-#define PACKET_NUMBER_PER_CTX_UL   20
+#define PACKET_NUMBER_PER_CTX_UL    ((UPLINK_PPS) / (PDCP_CONTEXT_NUMBER))
 
 // The number of packets to send in a burst for each context
 #define PACKET_BURST_PER_CTX   1
@@ -139,8 +96,7 @@ extern "C" {
 #endif
 
 #define JOB_RING_POLL_UNLIMITED -1
-//#define JOB_RING_POLL_LIMIT      5
-#define JOB_RING_POLL_LIMIT      JOB_RING_POLL_UNLIMITED
+#define JOB_RING_POLL_LIMIT      5
 
 // Alignment for input/output packets allocated from DMA-memory zone
 #define BUFFER_ALIGNEMENT 32
@@ -281,20 +237,6 @@ static int get_free_pdcp_context(pdcp_context_t * pdcp_contexts,
                                  int * no_of_used_pdcp_contexts,
                                  pdcp_context_t ** pdcp_context);
 
-/** @brief Release a PDCP context in the pool of UA contexts.
- *  For simplicity, the pool is implemented as an array.*/
-static void release_pdcp_context(int * no_of_used_pdcp_contexts, pdcp_context_t * pdcp_context);
-
-/** @brief Release the PDCP input and output buffers in the pool of buffers
- *  of a certain context.
- *  For simplicity, the pool is implemented as an array and is defined per context.
- *
- *  If status is #SEC_STATUS_LAST_OVERDUE mark the context "can be deleted" */
-static int release_pdcp_buffers(pdcp_context_t * pdcp_context,
-                                sec_packet_t *in_packet,
-                                sec_packet_t *out_packet,
-                                sec_status_t status);
-
 /** @brief Get free PDCP input and output buffers from the pool of buffers
  *  of a certain context.
  *  For simplicity, the pool is implemented as an array and is defined per context. */
@@ -324,21 +266,6 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
                                       uint32_t status,
                                       uint32_t error_info);
 
-/** @brief Try to delete a context.
- *  - first try to delete the SEC context in SEC driver
- *  - if success is returned, free also the PDCP context of UA
- *  - if packets in flight is returned, mark the PDCP context of UA to be deleted later
- *    when all the responses were received.
- */
-static int delete_context(pdcp_context_t * pdcp_context, int *no_of_used_pdcp_contexts);
-
-/** @brief Try to delete all contexts not deleted yet.
- *  This function calls delete_context() for each context from the pool of contexts
- *  allocated to a worker thread.
- */
-static int delete_contexts(pdcp_context_t * pdcp_contexts,
-                           int *no_of_used_pdcp_contexts,
-                           int* contexts_deleted);
 /*==================================================================================================
                                         LOCAL MACROS
 ==================================================================================================*/
@@ -1062,103 +989,6 @@ static int get_free_pdcp_context(pdcp_context_t * pdcp_contexts,
     return 0;
 }
 
-static void release_pdcp_context(int * no_of_used_pdcp_contexts, pdcp_context_t * pdcp_context)
-{
-    assert(pdcp_context != NULL);
-    assert(no_of_used_pdcp_contexts != NULL);
-
-    test_printf("thread #%d:producer: release pdcp context id = %d\n", pdcp_context->thread_id, pdcp_context->id);
-
-    // there should be at least one pdcp context in the pool of contexts
-    assert(*no_of_used_pdcp_contexts > 0);
-    // decrement the number of used PDCP contexts
-    (*no_of_used_pdcp_contexts)--;
-
-    // the PDCP context is released only after all the buffers were received
-    // back from sec_driver
-    assert(pdcp_context->usage == PDCP_CONTEXT_USED || pdcp_context->usage == PDCP_CONTEXT_CAN_BE_DELETED);
-    assert(pdcp_context->no_of_used_buffers == pdcp_context->no_of_buffers_to_process);
-    assert(pdcp_context->no_of_buffers_processed == pdcp_context->no_of_buffers_to_process);
-
-    pdcp_context->usage = PDCP_CONTEXT_FREE;
-    pdcp_context->job_ring = NULL;
-    pdcp_context->sec_ctx = NULL;
-
-//    memset(pdcp_context->input_buffers, 0, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX);
-//    memset(pdcp_context->output_buffers, 0, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX);
-    pdcp_context->no_of_buffers_to_process = 0;
-    pdcp_context->no_of_buffers_processed = 0;
-    pdcp_context->no_of_used_buffers = 0;
-}
-
-static int release_pdcp_buffers(pdcp_context_t * pdcp_context,
-                                sec_packet_t *in_packet,
-                                sec_packet_t *out_packet,
-                                sec_status_t status)
-{
-    assert(pdcp_context != NULL);
-    assert(in_packet != NULL);
-    assert(out_packet != NULL);
-
-    // Validate the order of the buffers release
-    // The order in which the buffers are relased must be the same with the order
-    // in which the buffers were submitted to SEC driver for processing.
-//    assert(&pdcp_context->input_buffers[pdcp_context->no_of_buffers_processed].buffer[0] ==
-//            in_packet->address);
-//    assert(pdcp_context->input_buffers[pdcp_context->no_of_buffers_processed].offset ==
-//                in_packet->offset);
-//    assert(PDCP_BUFFER_SIZE == in_packet->length);
-
-//    assert(&pdcp_context->output_buffers[pdcp_context->no_of_buffers_processed].buffer[0] ==
-//            out_packet->address);
-//    assert(pdcp_context->output_buffers[pdcp_context->no_of_buffers_processed].offset ==
-//                    out_packet->offset);
-//    assert(PDCP_BUFFER_SIZE == out_packet->length);
-
-    // mark the input buffer free
-    assert(pdcp_context->input_buffers[pdcp_context->no_of_buffers_processed].usage == PDCP_BUFFER_USED);
-    pdcp_context->input_buffers[pdcp_context->no_of_buffers_processed].usage = PDCP_BUFFER_FREE;
-    pdcp_context->input_buffers[pdcp_context->no_of_buffers_processed].offset = 0;
-    memset(pdcp_context->input_buffers[pdcp_context->no_of_buffers_processed].buffer, 0, PDCP_BUFFER_SIZE);
-
-    // mark the output buffer free
-    assert(pdcp_context->output_buffers[pdcp_context->no_of_buffers_processed].usage == PDCP_BUFFER_USED);
-    pdcp_context->output_buffers[pdcp_context->no_of_buffers_processed].usage = PDCP_BUFFER_FREE;
-    pdcp_context->output_buffers[pdcp_context->no_of_buffers_processed].offset = 0;
-    memset(pdcp_context->output_buffers[pdcp_context->no_of_buffers_processed].buffer, 0, PDCP_BUFFER_SIZE);
-
-    //increment the number of buffers processed counter (which acts as a consumer index for the array of buffers)
-    pdcp_context->no_of_buffers_processed++;
-
-    // Mark the context to be deleted if the last overdue packet
-    // was received.
-    if (status == SEC_STATUS_LAST_OVERDUE)
-    {
-        assert(pdcp_context->usage == PDCP_CONTEXT_MARKED_FOR_DELETION ||
-        pdcp_context->usage == PDCP_CONTEXT_MARKED_FOR_DELETION_LAST_IN_FLIGHT_PACKET);
-
-        pdcp_context->usage = PDCP_CONTEXT_CAN_BE_DELETED;
-    }
-    else if (status == SEC_STATUS_OVERDUE)
-    {
-        // validate the UA's context's status
-        assert(pdcp_context->usage == PDCP_CONTEXT_MARKED_FOR_DELETION);
-    }
-    else
-    {
-        // the stub implementation does not return an error status
-        assert(status == SEC_STATUS_SUCCESS || status == SEC_STATUS_HFN_THRESHOLD_REACHED);
-        if (pdcp_context->usage == PDCP_CONTEXT_MARKED_FOR_DELETION &&
-            pdcp_context->no_of_buffers_processed == pdcp_context->no_of_buffers_to_process)
-        {
-            pdcp_context->usage = PDCP_CONTEXT_CAN_BE_DELETED;
-        }
-    }
-
-    return 0;
-
-}
-
 static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
                                 sec_packet_t **in_packet,
                                 sec_packet_t **out_packet)
@@ -1225,109 +1055,6 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
                                       uint32_t status,
                                       uint32_t error_info)
 {
-
-#if 0
-    uint32_t diff_cycles = 0;
-    int ret_code;
-    pdcp_context_t *pdcp_context = NULL;
-    int test_failed = 0;
-    uint32_t start_cycles = GET_ATBL();
-
-    // validate input params
-    assert(ua_ctx_handle != NULL);
-    assert(in_packet != NULL);
-    assert(out_packet != NULL);
-
-    assert(status != SEC_STATUS_ERROR);
-    if(status == SEC_STATUS_HFN_THRESHOLD_REACHED)
-    {
-        test_printf("HFN threshold reached for packet\n");
-    }
-
-    pdcp_context = (pdcp_context_t *)ua_ctx_handle;
-
-    test_printf("\nthread #%d:consumer: sec_callback called for context_id = %d, "
-            "no of buffers processed = %d, no of buffers to process = %d, "
-            "status = %d\n",
-            (pdcp_context->thread_id + 1)%2,
-            pdcp_context->id,
-            pdcp_context->no_of_buffers_processed + 1,
-            pdcp_context->no_of_buffers_to_process,
-            status);
-
-    assert(in_packet->length == sizeof(test_data_in) + PDCP_HEADER_LENGTH + in_packet->offset);
-#if (PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F9_ENC) || \
-    (PDCP_TEST_SCENARIO == PDCP_TEST_AES_CMAC_ENC)
-
-    // For SNOW F9 and AES CMAC, output data consists only of MAC-I code = 4 bytes
-    test_failed = (0 != memcmp(out_packet->address + out_packet->offset,
-                               test_data_out,
-                               sizeof(test_data_out)));
-
-#elif (PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F9_DEC) || \
-      (PDCP_TEST_SCENARIO == PDCP_TEST_AES_CMAC_DEC)
-      // Status must be SUCCESS. When MAC-I validation failed,
-      // status is set to #SEC_STATUS_HFN_THRESHOLD_REACHED. 
-      test_failed = (status == SEC_STATUS_HFN_THRESHOLD_REACHED || status == SEC_STATUS_ERROR);
-#else
-
-    assert(out_packet->length == sizeof(test_data_out) + PDCP_HEADER_LENGTH + out_packet->offset);
-    test_failed = (0 != memcmp(out_packet->address + out_packet->offset,
-                               test_pdcp_hdr,
-                               PDCP_HEADER_LENGTH) ||
-                   0 != memcmp(out_packet->address + out_packet->offset + PDCP_HEADER_LENGTH,
-                               test_data_out,
-                               sizeof(test_data_out)));
-#endif
-
-    if(test_failed)
-    {
-        test_printf("\nthread #%d:consumer: out packet INCORRECT!!!."
-               " out pkt= ",
-               (pdcp_context->thread_id + 1)%2);
-        int i;
-        for(i = 0; i <  out_packet->length; i++)
-        {
-            test_printf("%02x ", out_packet->address[i]);
-        }
-        test_printf("\n");
-        /*
-           test_printf("\nreference data: ");
-
-           for(i = 0; i <  job->out_packet->length; i++)
-           {
-           test_printf("%02x ", snow_f8_enc_data_out[i]);
-           }
-           test_printf("\n");
-           */
-        assert(0);
-
-    }
-    else
-    {
-        int i;
-        test_printf("\nthread #%d:consumer: packet CORRECT!!! out pkt = . ", (pdcp_context->thread_id + 1)%2);
-        for(i = 0; i <  out_packet->length; i++)
-        {
-//            test_printf("%02x ", out_packet->address[i]);
-        }
-        test_printf("\n");
-    }
-
-    // Buffers processing.
-    // In this test application we will release the input and output buffers
-    // Check also if all the buffers were received for a retiring context
-    // and if so mark it to be deleted
-    ret_code = release_pdcp_buffers(pdcp_context,
-                               (sec_packet_t*)in_packet,
-                               (sec_packet_t*)out_packet,
-                               status);
-    assert(ret_code == 0);
-
-    diff_cycles = (GET_ATBL() - start_cycles);
-    profile_printf("thread #%d:UA calback cycles = %d\n", th_config_local->tid, diff_cycles);
-
-#endif
     return SEC_RETURN_SUCCESS;
 }
 
@@ -1355,110 +1082,6 @@ static int get_results(uint8_t job_ring, int limit, uint32_t *packets_out, uint3
     // validate that number of packets notified does not exceed limit when limit is > 0.
     assert(!((limit > 0) && (*packets_out > limit)));
 
-    return 0;
-}
-
-static int delete_context(pdcp_context_t * pdcp_context, int *no_of_used_pdcp_contexts)
-{
-    int ret_code;
-
-    assert(pdcp_context != NULL);
-    assert(no_of_used_pdcp_contexts != NULL);
-
-    // Try to delete the context from SEC driver and also
-    // release the UA's context
-
-    // context is in use and it was not yet removed from SEC driver
-    if (pdcp_context->usage == PDCP_CONTEXT_USED)
-    {
-        // mark the context for deletion
-        pdcp_context->usage = PDCP_CONTEXT_MARKED_FOR_DELETION;
-
-        // try to delete the context from SEC driver
-        ret_code = sec_delete_pdcp_context(pdcp_context->sec_ctx);
-        if (ret_code == SEC_PACKETS_IN_FLIGHT)
-        {
-            test_printf("thread #%d:producer: delete PDCP context no %d -> packets in flight \n",
-                    pdcp_context->thread_id, pdcp_context->id);
-        }
-        else if (ret_code == SEC_LAST_PACKET_IN_FLIGHT)
-        {
-            test_printf("thread #%d:producer: delete PDCP context no %d -> last packet in flight \n",
-                    pdcp_context->thread_id, pdcp_context->id);
-        }
-        else if (ret_code == SEC_SUCCESS)
-        {
-            // context was successfully removed from SEC driver
-            // do the same with the UA's context
-            pdcp_context->usage = PDCP_CONTEXT_CAN_BE_DELETED;
-            release_pdcp_context(no_of_used_pdcp_contexts, pdcp_context);
-            // return 1 if context was deleted both in SEC driver and UA
-            return 1;
-        }
-        else
-        {
-            test_printf("thread #%d:producer: sec_delete_pdcp_context return error %d for PDCP context no %d \n",
-                    pdcp_context->thread_id, ret_code, pdcp_context->id);
-            // the stub implementation of SEC driver should not return an error
-            assert(0);
-        }
-    }
-    // if context was marked for deletion and the last overdue packet was
-    // received, we can release the context and reuse it
-    else if (pdcp_context->usage == PDCP_CONTEXT_CAN_BE_DELETED)
-    {
-        // all overdue packets were received and freed
-        // so we can reuse the context -> will be marked as free
-        release_pdcp_context(no_of_used_pdcp_contexts, pdcp_context);
-        // return 1 if context was deleted both in SEC driver and UA
-        return 1;
-    }
-    // if context was marked for deletion, wait for the last overdue
-    // packet to be received before deleting it.
-    else if (pdcp_context->usage == PDCP_CONTEXT_MARKED_FOR_DELETION)
-    {
-        // nothing to do here
-        // wait for the last overdue packet to be received
-    }
-    else if (pdcp_context->usage == PDCP_CONTEXT_MARKED_FOR_DELETION_LAST_IN_FLIGHT_PACKET)
-    {
-        // nothing to do here
-        // wait for the last packet to be received with status SUCCESS
-    }
-    else
-    {
-        // nothing to do here
-        // double check that the only possible value of usage on the else
-        // branch is PDCP_CONTEXT_FREE
-        assert(pdcp_context->usage == PDCP_CONTEXT_FREE);
-    }
-    // context was not deleted, it was marked for deletion
-    return 0;
-}
-
-static int delete_contexts(pdcp_context_t * pdcp_contexts, int *no_of_used_pdcp_contexts, int* contexts_deleted)
-{
-    int i;
-
-    assert(pdcp_contexts != NULL);
-    assert(no_of_used_pdcp_contexts != NULL);
-    assert(contexts_deleted != NULL);
-
-    *contexts_deleted = 0;
-
-    // check if there are used contexts
-    if (*no_of_used_pdcp_contexts == 0)
-    {
-        // all contexts are free, nothing to do here
-        return 0;
-    }
-
-    for (i = 0; i < PDCP_CONTEXT_NUMBER; i++)
-    {
-        // Try an delete the contexts and count the total number of contexts deleted.
-        // delete_context returns 0 if the context was not deleted, and 1 if it was deleted.
-        *contexts_deleted += delete_context(&pdcp_contexts[i], no_of_used_pdcp_contexts);
-    }
     return 0;
 }
 
@@ -1639,76 +1262,79 @@ static void* pdcp_thread_routine(void* config)
 
     gettimeofday(&start_time, NULL);
     // Send a burst of packets for each context, until all the packets are sent to SEC
-//    while(1)
-//    {
-    while(total_packets_to_send != total_packets_sent)
+#ifdef TEST_TYPE_INFINITE_LOOP
+    while(1)
     {
-        for(i = 0; i < PDCP_CONTEXT_NUMBER; i++)
+#endif
+        while(total_packets_to_send != total_packets_sent)
         {
-            pdcp_context = &th_config_local->pdcp_contexts[i];
-            ctx_packet_count = 0;
-
-            while(ctx_packet_count < PACKET_BURST_PER_CTX)
+            for(i = 0; i < PDCP_CONTEXT_NUMBER; i++)
             {
-                // for each context, send to SEC a fixed number of packets for processing
-                sec_packet_t *in_packet;
-                sec_packet_t *out_packet;
+                pdcp_context = &th_config_local->pdcp_contexts[i];
+                ctx_packet_count = 0;
 
-                // Get a free buffer, If none, then break the loop
-                if(get_free_pdcp_buffer(pdcp_context, &in_packet, &out_packet) != 0)
+                while(ctx_packet_count < PACKET_BURST_PER_CTX)
                 {
-                    break;
-                }
+                    // for each context, send to SEC a fixed number of packets for processing
+                    sec_packet_t *in_packet;
+                    sec_packet_t *out_packet;
 
-                // if SEC process packet returns that the producer JR is full, do some polling
-                // on the consumer JR until the producer JR has free entries.
-                do{
-                    start_cycles = GET_ATBL();
-                    ret_code = sec_process_packet(pdcp_context->sec_ctx,
-                            in_packet,
-                            out_packet,
-                            (ua_context_handle_t)pdcp_context);
-
-                    diff_cycles = (GET_ATBL() - start_cycles);
-                    th_config_local->core_cycles += diff_cycles;
-
-                    profile_printf("thread #%d:ctx #%p:sec_process_packet cycles = %d\n",
-                            th_config_local->tid, pdcp_context, diff_cycles);
-
-                    if(ret_code == SEC_JR_IS_FULL)
-                    {
-                        //printf("thread #%d: jr full\n", th_config_local->tid);
-                        // wait while the producer JR is empty, and in the mean time do some
-                        // polling on the consumer JR -> retrieve only 5 notifications if available
-                        ret_code = get_results(th_config_local->consumer_job_ring_id,
-                                JOB_RING_POLL_LIMIT,
-                                &packets_received,
-                                &th_config_local->core_cycles,
-                                th_config_local->tid);
-                        assert(ret_code == 0);
-                        total_packets_received += packets_received;
-                        usleep(10);
-                    }
-                    else if(ret_code != SEC_SUCCESS)
-                    {
-                        test_printf("thread #%d:producer: sec_process_packet return error %d for PDCP context no %d \n",
-                                th_config_local->tid, ret_code, pdcp_context->id);
-                        assert(0);
-                    }
-                    else
+                    // Get a free buffer, If none, then break the loop
+                    if(get_free_pdcp_buffer(pdcp_context, &in_packet, &out_packet) != 0)
                     {
                         break;
                     }
-                }while(1);
 
-                ctx_packet_count++;
+                    // if SEC process packet returns that the producer JR is full, do some polling
+                    // on the consumer JR until the producer JR has free entries.
+                    do{
+                        start_cycles = GET_ATBL();
+                        ret_code = sec_process_packet(pdcp_context->sec_ctx,
+                                in_packet,
+                                out_packet,
+                                (ua_context_handle_t)pdcp_context);
+
+                        diff_cycles = (GET_ATBL() - start_cycles);
+                        th_config_local->core_cycles += diff_cycles;
+
+                        profile_printf("thread #%d:ctx #%p:sec_process_packet cycles = %d\n",
+                                th_config_local->tid, pdcp_context, diff_cycles);
+
+                        if(ret_code == SEC_JR_IS_FULL)
+                        {
+                            //printf("thread #%d: jr full\n", th_config_local->tid);
+                            // wait while the producer JR is empty, and in the mean time do some
+                            // polling on the consumer JR -> retrieve all available notifications
+                            ret_code = get_results(th_config_local->consumer_job_ring_id,
+                                    JOB_RING_POLL_UNLIMITED,
+                                    &packets_received,
+                                    &th_config_local->core_cycles,
+                                    th_config_local->tid);
+                            assert(ret_code == 0);
+                            total_packets_received += packets_received;
+                            usleep(10);
+                        }
+                        else if(ret_code != SEC_SUCCESS)
+                        {
+                            test_printf("thread #%d:producer: sec_process_packet return error %d for PDCP context no %d \n",
+                                    th_config_local->tid, ret_code, pdcp_context->id);
+                            assert(0);
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }while(1);
+
+                    ctx_packet_count++;
+                }
+                total_packets_sent += ctx_packet_count;
             }
-            total_packets_sent += ctx_packet_count;
-            //usleep(5);
         }
+#ifdef TEST_TYPE_INFINITE_LOOP
+        usleep(1000);
     }
-    //        usleep(1000);
-//    }
+#endif
 
     test_printf("thread #%d: polling until all contexts are deleted\n", th_config_local->tid);
 

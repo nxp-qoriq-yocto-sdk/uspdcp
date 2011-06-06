@@ -237,6 +237,17 @@ static int sec_pdcp_context_create_descriptor(sec_context_t *ctx);
  */
 static int sec_pdcp_context_create_snow_cipher_descriptor(sec_context_t *ctx);
 
+/** @brief  Creates NULL ciphering descriptor as configured for this context.
+ * On PSC9132, will be used for PDCP data plane with NULL ciphering activated.
+ * On P2020 same functionality is obtained with memcpy.
+ *
+ * @param [in,out] ctx          SEC context
+ *
+ * @retval SEC_SUCCESS for success
+ * @retval other for error
+ */
+static int sec_pdcp_context_create_null_cipher_descriptor(sec_context_t *ctx);
+
 /** @brief  Creates AES CTR SEC descriptor as configured for this context.
  *
  * @param [in,out] ctx          SEC context
@@ -265,6 +276,17 @@ static int sec_pdcp_context_create_snow_auth_descriptor(sec_context_t *ctx);
  * @retval other for error
  */
 static int sec_pdcp_context_create_aes_auth_descriptor(sec_context_t *ctx);
+
+/** @brief  Creates NULL authentication descriptor as configured for this context.
+ * On PSC9132, will be used for PDCP control plane with NULL ciphering activated.
+ * On P2020 same functionality is obtained with memcpy.
+ *
+ * @param [in,out] ctx          SEC context
+ *
+ * @retval SEC_SUCCESS for success
+ * @retval other for error
+ */
+static int sec_pdcp_context_create_null_auth_descriptor(sec_context_t *ctx);
 
 /** @brief  Updates a SEC descriptor for processing a PDCP packet
  * with SNOW F8 or AES CTR. Both algorithms use an identical way 
@@ -305,6 +327,34 @@ static int sec_pdcp_context_update_snow_f9_descriptor(sec_job_t *job, sec_descri
  * @retval other for error
  */
 static int sec_pdcp_context_update_aes_cmac_descriptor(sec_job_t *job, sec_descriptor_t *descriptor);
+
+/** @brief  Updates a SEC descriptor for processing a PDCP packet
+ * with NULL authentication protocol (EIA0).
+ * @note Not used on P2020 because EIA0/EEA0 is simulated with memcpy. Will be used on PSC9132.
+ * Set in descriptor pointers to:
+ * input data, output data, ciphering information, etc.
+ *
+ * @param [in,out] job          SEC job
+ * @param [in,out] descriptor   SEC descriptor
+ *
+ * @retval SEC_SUCCESS for success
+ * @retval other for error
+ */
+static int sec_pdcp_context_update_null_auth_descriptor(sec_job_t *job, sec_descriptor_t *descriptor);
+
+/** @brief  Updates a SEC descriptor for processing a PDCP packet
+ * with NULL ciphering protocol (EEA0).
+ * @note Not used on P2020 because EIA0/EEA0 is simulated with memcpy. Will be used on PSC9132.
+ * Set in descriptor pointers to:
+ * input data, output data, ciphering information, etc.
+ *
+ * @param [in,out] job          SEC job
+ * @param [in,out] descriptor   SEC descriptor
+ *
+ * @retval SEC_SUCCESS for success
+ * @retval other for error
+ */
+static int sec_pdcp_context_update_null_cipher_descriptor(sec_job_t *job, sec_descriptor_t *descriptor);
 
 /** @brief  Updates the template Initialization Vector required by SEC to
  * run SNOW F8 / SNOW F9 / AES CTR algorithms for a PDCP packet.
@@ -506,6 +556,14 @@ static int sec_pdcp_context_create_aes_cipher_descriptor(sec_context_t *ctx)
     return SEC_SUCCESS;
 }
 
+static int sec_pdcp_context_create_null_cipher_descriptor(sec_context_t *ctx)
+{
+    // Set pointer to the function that will be called to
+    // update the SEC descriptor for each packet.
+    ctx->update_crypto_descriptor = sec_pdcp_context_update_null_cipher_descriptor;
+
+    return SEC_SUCCESS;
+}
 static int sec_pdcp_context_create_snow_auth_descriptor(sec_context_t *ctx)
 {
     int ret = SEC_SUCCESS;
@@ -516,7 +574,7 @@ static int sec_pdcp_context_create_snow_auth_descriptor(sec_context_t *ctx)
     ret = sec_pdcp_create_snow_f9_descriptor(ctx);
     SEC_ASSERT(ret == SEC_SUCCESS, ret, "Failed to create SNOW F9 descriptor");
 
-    // Set pointer to the function that will be called to 
+    // Set pointer to the function that will be called to
     // update the SEC descriptor for each packet.
     ctx->update_auth_descriptor = sec_pdcp_context_update_snow_f9_descriptor;
 
@@ -565,6 +623,15 @@ static int sec_pdcp_context_create_aes_auth_descriptor(sec_context_t *ctx)
     return SEC_SUCCESS;
 }
 
+static int sec_pdcp_context_create_null_auth_descriptor(sec_context_t *ctx)
+{
+    // Set pointer to the function that will be called to 
+    // update the SEC descriptor for each packet.
+    ctx->update_crypto_descriptor = sec_pdcp_context_update_null_auth_descriptor;
+
+    return SEC_SUCCESS;
+}
+
 static int sec_pdcp_context_create_descriptor(sec_context_t *ctx)
 {
     int ret = SEC_SUCCESS;
@@ -582,6 +649,10 @@ static int sec_pdcp_context_create_descriptor(sec_context_t *ctx)
     {
         ret = sec_pdcp_context_create_aes_cipher_descriptor(ctx);
     }
+    else if(ctx->pdcp_crypto_info->cipher_algorithm == SEC_ALG_NULL)
+    {
+        ret = sec_pdcp_context_create_null_cipher_descriptor(ctx);
+    }
 
     // If control plane context, configure authentication descriptor
     if (ctx->pdcp_crypto_info->user_plane == PDCP_CONTROL_PLANE)
@@ -593,6 +664,10 @@ static int sec_pdcp_context_create_descriptor(sec_context_t *ctx)
         else if (ctx->pdcp_crypto_info->integrity_algorithm == SEC_ALG_AES)
         {
             ret = sec_pdcp_context_create_aes_auth_descriptor(ctx);
+        }
+        else if(ctx->pdcp_crypto_info->integrity_algorithm == SEC_ALG_NULL)
+        {
+            ret = sec_pdcp_context_create_null_auth_descriptor(ctx);
         }
     }
     return ret;
@@ -1005,6 +1080,16 @@ static int sec_pdcp_context_update_aes_cmac_descriptor(sec_job_t *job, sec_descr
     descriptor->ptr[6].ptr = PHYS_ADDR_LO(phys_addr);
 
     return ret;
+}
+
+static int sec_pdcp_context_update_null_auth_descriptor(sec_job_t *job, sec_descriptor_t *descriptor)
+{
+    return SEC_SUCCESS;
+}
+
+static int sec_pdcp_context_update_null_cipher_descriptor(sec_job_t *job, sec_descriptor_t *descriptor)
+{
+    return SEC_SUCCESS;
 }
 
 static void sec_pdcp_update_iv_template(sec_crypto_pdb_t *sec_pdb,

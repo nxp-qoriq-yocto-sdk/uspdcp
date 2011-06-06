@@ -178,6 +178,13 @@ struct sec_context_t
     /** SEC 3.1 generates only 8 bytes MAC-I. SEC generates here the MAC-I. 
      * Later the driver will copy it to output packet. */
     sec_mac_i_t *mac_i;
+    /** Flag set to #TRUE if this context is configured with NULL crypto (PDCP data plane context) or
+     *  with NULL crypto + NULL authentication (PDCP control plane context). Set to #FALSE otherwise.
+     */
+    uint8_t is_null_algo;
+    /** Is set to value #TRUE for packets that must be sent to SEC twice
+     * (control-plane packets) and value #FALSE otherwise. */
+    uint8_t double_pass;
     /** Validation pattern at end of structure. */
     uint32_t end_pattern;
 }__CACHELINE_ALIGNED;

@@ -52,14 +52,16 @@ extern "C" {
                                      LOCAL CONSTANTS
 ==================================================================================================*/
 
-#define PDCP_TEST_SNOW_F8_ENC   0
-#define PDCP_TEST_SNOW_F8_DEC   1
-#define PDCP_TEST_SNOW_F9_ENC   2
-#define PDCP_TEST_SNOW_F9_DEC   3
-#define PDCP_TEST_AES_CTR_ENC   4
-#define PDCP_TEST_AES_CTR_DEC   5
-#define PDCP_TEST_AES_CMAC_ENC  6
-#define PDCP_TEST_AES_CMAC_DEC  7
+#define PDCP_TEST_SNOW_F8_ENC           0
+#define PDCP_TEST_SNOW_F8_DEC           1
+#define PDCP_TEST_SNOW_F9_ENC           2
+#define PDCP_TEST_SNOW_F9_DEC           3
+#define PDCP_TEST_AES_CTR_ENC           4
+#define PDCP_TEST_AES_CTR_DEC           5
+#define PDCP_TEST_AES_CMAC_ENC          6
+#define PDCP_TEST_AES_CMAC_DEC          7
+#define PDCP_TEST_DATA_PLANE_NULL_ALGO  8
+#define PDCP_TEST_CTRL_PLANE_NULL_ALGO  9
 
 //////////////////////////////////////////////////////////////////////////
 // !!!!!!!!!!!!!!!!!       IMPORTANT !!!!!!!!!!!!!!!!
@@ -67,7 +69,7 @@ extern "C" {
 //////////////////////////////////////////////////////////////////////////
 
 // Ciphering
-#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F8_ENC
+//#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F8_ENC
 // Deciphering
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F8_DEC
 
@@ -86,11 +88,15 @@ extern "C" {
 // Authentication
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CMAC_DEC
 
+// Test data plane PDCP with NULL-crypto(EEA0) algorithm set
+#define PDCP_TEST_SCENARIO  PDCP_TEST_DATA_PLANE_NULL_ALGO
 
+// Test control plane PDCP with NULL-crypto(EEA0)
+// and NULL-authentication(EIA0) algorithms set
+//#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_NULL_ALGO
 
-
-#define test_printf(format, ...)
-//#define test_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__) 
+//#define test_printf(format, ...)
+#define test_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__)
 
 
 
@@ -660,7 +666,6 @@ static uint8_t aes_cmac_dec_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
 
 static uint8_t aes_cmac_auth_dec_key[] = {0xd3,0xc5,0xd5,0x92,0x32,0x7f,0xb1,0x1c,
                                           0x40,0x35,0xc6,0x68,0x0a,0xf8,0xc6,0xd1};
-    
 // PDCP header
 static uint8_t aes_cmac_dec_pdcp_hdr[] = { 0x48};
 
@@ -680,6 +685,42 @@ static uint32_t aes_cmac_dec_hfn = 0x1CC52CD;
 
 // HFN threshold
 static uint32_t aes_cmac_dec_hfn_threshold = 0xFF00000;
+
+//////////////////////////////////////////////////////////////////////////////
+// PDCP_TEST_DATA_PLANE_NULL_ALGO
+//////////////////////////////////////////////////////////////////////////////
+#elif PDCP_TEST_SCENARIO == PDCP_TEST_DATA_PLANE_NULL_ALGO
+
+
+// Length of PDCP header
+#define PDCP_HEADER_LENGTH 1
+/*
+static uint8_t aes_cmac_dec_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
+                                    0x4E,0xA5,0xF1,0x45,0x10,0x10,0xD8,0x52};
+
+static uint8_t aes_cmac_auth_dec_key[] = {0xd3,0xc5,0xd5,0x92,0x32,0x7f,0xb1,0x1c,
+                                          0x40,0x35,0xc6,0x68,0x0a,0xf8,0xc6,0xd1};
+  */
+// PDCP header
+static uint8_t null_crypto_pdcp_hdr[] = { 0x48};
+
+// PDCP payload not encrypted
+static uint8_t null_crypto_data_in[] = {0x45,0x83,0xd5,0xaf,0xe0,0x82,0xae,
+                                         // The MAC-I from packet
+                                         0xb9,0x37,0x87,0xe6, 0xb9,0x37,0x87,0xe6,0xb9,0x37,0x87,0xe6,0xb9,0x37,0x87,0xe6, 0xff};
+
+// PDCP payload encrypted
+static uint8_t null_crypto_data_out[] = {0x45,0x83,0xd5,0xaf,0xe0,0x82,0xae,
+                                          0xb9,0x37,0x87,0xe6, 0xb9,0x37,0x87,0xe6,0xb9,0x37,0x87,0xe6,0xb9,0x37,0x87,0xe6, 0xff};
+
+// Radio bearer id
+static uint8_t null_crypto_bearer = 0x1a;
+
+// Start HFN
+static uint32_t null_crypto_hfn = 0x1CC52CD;
+
+// HFN threshold
+static uint32_t null_crypto_hfn_threshold = 0xFF00000;
 #else
 #error "Unsuported test scenario!"
 #endif
@@ -886,6 +927,31 @@ static uint32_t aes_cmac_dec_hfn_threshold = 0xFF00000;
 #define test_integrity_algorithm SEC_ALG_AES
 #define test_hfn                aes_cmac_dec_hfn
 #define test_hfn_threshold      aes_cmac_dec_hfn_threshold
+
+//////////////////////////////////////////////////////////////////////////////
+// PDCP_TEST_DATA_PLANE_NULL_ALGO
+//////////////////////////////////////////////////////////////////////////////
+#elif PDCP_TEST_SCENARIO == PDCP_TEST_DATA_PLANE_NULL_ALGO
+
+#define test_crypto_key         NULL
+#define test_crypto_key_len     0
+
+#define test_auth_key           NULL
+#define test_auth_key_len       0
+
+#define test_data_in            null_crypto_data_in
+#define test_data_out           null_crypto_data_out
+
+#define test_pdcp_hdr           null_crypto_pdcp_hdr
+#define test_bearer             null_crypto_bearer
+#define test_sn_size            SEC_PDCP_SN_SIZE_12
+#define test_user_plane         PDCP_DATA_PLANE
+#define test_packet_direction   PDCP_DOWNLINK
+#define test_protocol_direction PDCP_DECAPSULATION
+#define test_cipher_algorithm   SEC_ALG_NULL
+#define test_integrity_algorithm SEC_ALG_NULL
+#define test_hfn                null_crypto_hfn
+#define test_hfn_threshold      null_crypto_hfn_threshold
 #else
 #error "Unsuported test scenario!"
 #endif

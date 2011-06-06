@@ -220,6 +220,18 @@ static void sec_handle_c_plane_packet(sec_job_ring_t *job_ring,
  */
 static void sec_buffer_c_plane_packet(sec_job_ring_t *job_ring,
                                       sec_job_t *job);
+
+/** @brief On P2020 it is required to implement EEA0/EIA0 algorithms,
+ * that is NULL crypto and NULL authentication with a memcpy-based mechanism.
+ *
+ * @note: TODO when migrating to PSC9132: remove this function!!
+ *
+ * @param [in,out]  job     The job pointing to input/output packets
+ *
+ * @retval SEC_SUCCESS for success
+ * @retval other for error
+ */
+static int sec_process_packet_with_null_algo(sec_job_t *job);
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
@@ -294,7 +306,10 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
 
     // compute the number of jobs available in the job ring based on the
     // producer and consumer index values.
+
     number_of_jobs_available = SEC_JOB_RING_NUMBER_OF_ITEMS(SEC_JOB_RING_SIZE, job_ring->pidx, job_ring->cidx);
+    SEC_DEBUG("Job Ring %p pi %d ci %d. Jobs submitted %d",
+            job_ring, job_ring->pidx, job_ring->cidx, number_of_jobs_available);
 
     jobs_no_to_notify = (limit < 0 || limit > number_of_jobs_available) ? number_of_jobs_available : limit;
 
@@ -427,7 +442,7 @@ static int sec_process_pdcp_c_plane_packets(sec_job_ring_t *job_ring)
     {
         // check if the Job Ring is full
         if(SEC_JOB_RING_IS_FULL(job_ring->pidx, job_ring->cidx,
-                    SEC_JOB_RING_SIZE, SEC_JOB_RING_HW_SIZE))
+                    SEC_JOB_RING_SIZE, SEC_JOB_RING_HW_SIZE + 1))
         {
             return SEC_JR_IS_FULL;
         }
@@ -534,7 +549,7 @@ static void sec_handle_c_plane_packet(sec_job_ring_t *job_ring,
     {
         if(job->is_integrity_algo == TRUE)
         {
-            if(job->double_pass == TRUE)
+            if(sec_context->double_pass == TRUE)
             {
                 SEC_DEBUG("Copy MAC-I into input buffer");
                 // for double pass c-plane packets copy generated MAC-I code into input packet:
@@ -562,7 +577,7 @@ static void sec_handle_c_plane_packet(sec_job_ring_t *job_ring,
         // On decapsulation we run first confidentiality algorithm
         if(job->is_integrity_algo == FALSE)
         {
-            if(job->double_pass == TRUE)
+            if(sec_context->double_pass == TRUE)
             {
                 // do not notify packet now
                 *notify_pkt = FALSE;
@@ -615,6 +630,37 @@ static void sec_buffer_c_plane_packet(sec_job_ring_t *job_ring,
 
     // increment the producer index for the current job ring
     c_plane_fifo->pidx = FIFO_CIRCULAR_COUNTER(c_plane_fifo->pidx, FIFO_CAPACITY);
+}
+
+static int sec_process_packet_with_null_algo(sec_job_t *job)
+{
+    assert(job != NULL);
+    assert(job->in_packet != NULL);
+    assert(job->out_packet != NULL);
+
+    SEC_ASSERT(job->in_packet->address != NULL,
+            SEC_INVALID_INPUT_PARAM,
+            "NULL address field specified for input packet");
+
+    SEC_ASSERT(job->out_packet->address != NULL,
+            SEC_INVALID_INPUT_PARAM,
+            "NULL address field specified for output packet");
+
+    SEC_ASSERT(job->in_packet->length - job->in_packet->offset ==
+               job->out_packet->length - job->out_packet->offset,
+               SEC_INVALID_INPUT_PARAM,
+               "Length and offset for input packet mistmatch with those for output packet");
+
+    // Copy input packet into output packet.
+    // This is the implementation for NULL-crypto / NULL-authentication on SEC 3.1
+    memcpy(job->out_packet->address + job->out_packet->offset,
+           job->in_packet->address + job->in_packet->offset,
+           job->in_packet->length - job->in_packet->offset);
+
+    // Now simulate that the SEC engine marked this packet as processed.
+    // Required to see the packet as DONE from sec_poll.
+    job->descr->hdr |=  SEC_DESC_HDR_DONE;
+    return SEC_SUCCESS;
 }
 /*==================================================================================================
                                      GLOBAL FUNCTIONS
@@ -850,9 +896,27 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
         return SEC_INVALID_INPUT_PARAM;
     }
 
+    // On SEC 3.1 all packets belonging to PDCP control-plane conetxts that have configured both
+    // integrity check and confidentiality algorithms will be double-passed through SEC engine.
+    ctx->double_pass = (ctx->pdcp_crypto_info->user_plane == PDCP_CONTROL_PLANE) &&
+                       ((ctx->pdcp_crypto_info->integrity_algorithm != SEC_ALG_NULL) &&
+                        (ctx->pdcp_crypto_info->cipher_algorithm != SEC_ALG_NULL));
+
+    ctx->is_null_algo = FALSE;
+
+    if((ctx->pdcp_crypto_info->user_plane == PDCP_CONTROL_PLANE &&
+        ctx->pdcp_crypto_info->integrity_algorithm == SEC_ALG_NULL &&
+        ctx->pdcp_crypto_info->cipher_algorithm == SEC_ALG_NULL) ||
+       (ctx->pdcp_crypto_info->user_plane == PDCP_DATA_PLANE &&
+        ctx->pdcp_crypto_info->cipher_algorithm == SEC_ALG_NULL))
+    {
+        ctx->is_null_algo = TRUE;
+        SEC_DEBUG("Context %p user plane = %d configured with NULL algorithm",
+                ctx, ctx->pdcp_crypto_info->user_plane);
+    }
+
     // provide to UA a SEC ctx handle
 	*sec_ctx_handle = (sec_context_handle_t)ctx;
-
     return SEC_SUCCESS;
 }
 
@@ -1079,10 +1143,15 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
     job_ring = (sec_job_ring_t *)sec_context->jr_handle;
     ASSERT(job_ring != NULL);
 
+    SEC_DEBUG("Job Ring %p pi %d ci %d before sending packet",
+            job_ring, job_ring->pidx, job_ring->cidx);
+
     // check if the Job Ring is full
     if(SEC_JOB_RING_IS_FULL(job_ring->pidx, job_ring->cidx,
-                            SEC_JOB_RING_SIZE, SEC_JOB_RING_HW_SIZE))
+                            SEC_JOB_RING_SIZE, SEC_JOB_RING_HW_SIZE + 1))
     {
+        SEC_DEBUG("Job Ring %p is full. Processing control-plane internal FIFO",
+                job_ring);
         // check control-plane internal fifo for work to do
         ret = sec_process_pdcp_c_plane_packets(job_ring);
         SEC_ASSERT_CONT(ret == SEC_SUCCESS,
@@ -1106,20 +1175,13 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
             sec_context->pdcp_crypto_info->cipher_algorithm,
             sec_context->pdcp_crypto_info->integrity_algorithm);
 
-
-    // On SEC 3.1 all packets belonging to PDCP control-plane conetxts that have configured both 
-    // integrity check and confidentiality algorithms will be double-passed through SEC engine.
-    job->double_pass = (sec_context->pdcp_crypto_info->user_plane == PDCP_CONTROL_PLANE) &&
-                       ((sec_context->pdcp_crypto_info->integrity_algorithm != SEC_ALG_NULL) && 
-                       ( sec_context->pdcp_crypto_info->cipher_algorithm != SEC_ALG_NULL));
-
     job->is_integrity_algo = (sec_context->pdcp_crypto_info->user_plane == PDCP_CONTROL_PLANE) && 
-        ((job->double_pass == FALSE && sec_context->pdcp_crypto_info->integrity_algorithm != SEC_ALG_NULL) ||
-         (job->double_pass == TRUE && sec_context->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION) );
+        ((sec_context->double_pass == FALSE && sec_context->pdcp_crypto_info->integrity_algorithm != SEC_ALG_NULL) ||
+         (sec_context->double_pass == TRUE && sec_context->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION) );
 
     SEC_DEBUG("jr pi=%d,packet addr %p,packet double-pass = %d,is_integrity_algo = %d",
             job_ring->pidx,
-            job->in_packet, job->double_pass, job->is_integrity_algo);
+            job->in_packet, sec_context->double_pass, job->is_integrity_algo);
 
     // update descriptor with pointers to input/output data and pointers to crypto information
     ASSERT(job->descr != NULL);
@@ -1143,7 +1205,21 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
     // GCC's builtins offers full memory barrier, use it here.
 
     atomic_synchronize();
-    hw_enqueue_packet_on_job_ring(job_ring, job->descr_phys_addr);
+
+    // On SEC 3.1 there is no hardware support for NULL-crypto and NULL-auth.
+    // Need to simulate this with memcpy.
+    // TODO: remove this 'if'statement on 9132(SEC 4.1 knows about NULL-algo).
+    if(sec_context->is_null_algo == FALSE)
+    {
+        hw_enqueue_packet_on_job_ring(job_ring, job->descr_phys_addr);
+    }
+    else
+    {
+        ret = sec_process_packet_with_null_algo(job);
+        SEC_ASSERT(ret == SEC_SUCCESS, ret,
+               "Failed to process packet with NULL crypto / "
+               "NULL authentication algorithms");
+    }
 
     // Check control-plane internal queue for packets that need be sent to SEC
     // for second processing step.
