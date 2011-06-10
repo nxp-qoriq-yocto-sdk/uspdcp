@@ -60,6 +60,12 @@ extern "C" {
 /** Max length of a string describing a ::sec_status_t value or a ::sec_return_code_t value */
 #define MAX_STRING_REPRESENTATION_LENGTH    50
 
+/** Command that is used by SEC user space driver and SEC kernel driver
+ *  to signal a request from the former to the later to do a SEC engine reset.
+ *  @note   Need to be kept in synch with #SEC_UIO_RESET_SEC_ENGINE_CMD from
+ *          linux-2.6/drivers/crypto/talitos.c ! */
+#define UIO_RESET_SEC_ENGINE_CMD            3
+
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
 ==================================================================================================*/
@@ -148,11 +154,24 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
                                  uint32_t *packets_no);
 
 /** @brief Poll the HW for already processed jobs in the JR
- * and silently discard the available jobs.
+ * and silently discard the available jobs or notify them to UA
+ * with indicated error code.
+ * In case packets belonging to a retiring SEC context are notified,
+ * the last two packets on that context are notified having status set to
+ * #SEC_STATUS_OVERDUE and #SEC_STATUS_LAST_OVERDUE respectively.
  *
- * @param [in,out]  job_ring    The job ring to poll.
+ * @param [in,out]  job_ring        The job ring to poll.
+ * @param [in]  do_notify           Can be #TRUE or #FALSE. Indicates if packets are to be discarded
+ *                                  or notified to UA with given error_code.
+ * @param [in]  status              The status code.
+ * @param [in]  error_code          The detailed SEC error code.
+ * @param [out] notified_packets    Number of notified packets. Can be NULL if do_notify is #FALSE
  */
-static void hw_flush_job_ring(sec_job_ring_t *job_ring);
+static void hw_flush_job_ring(sec_job_ring_t *job_ring,
+                              uint32_t do_notify,
+                              sec_status_t status,
+                              uint32_t error_code,
+                              uint32_t *notified_packets);
 
 /** @brief Flush job rings of any processed packets.
  * The processed packets are silently dropped,
@@ -232,6 +251,33 @@ static void sec_buffer_c_plane_packet(sec_job_ring_t *job_ring,
  * @retval other for error
  */
 static int sec_process_packet_with_null_algo(sec_job_t *job);
+
+/** @brief Handle packet that generated error in SEC engine.
+ * Identify the exact type of error and handle the error.
+ * Depending on the error type, the job ring could be reset.
+ * All packets that are submitted for processing on this job ring
+ * are notified to User Application with error status and detailed error code.
+ *
+ * @param [in]  job_ring            Job ring
+ * @param [in]  sec_error_code      Error code read from job ring's Channel Status Register
+ * @param [out] notified_packets    Number of notified packets. Can be NULL if do_notify is #FALSE
+ * @param [out] do_driver_shutdown  If set to #TRUE, then UA is returned code #SEC_PROCESSING_ERROR
+ *                                  which is indication that UA must call sec_release() after this.
+ */
+static void sec_handle_packet_error(sec_job_ring_t *job_ring,
+                                    uint32_t sec_error_code,
+                                    uint32_t *notified_packets,
+                                    uint32_t *do_driver_shutdown);
+
+/** @brief Request to SEC kernel driver to reset SEC engine.
+ *  Use UIO to communicate with SEC kernel driver: write command
+ *  value that indicates a reset action into UIO file descriptor
+ *  of this job ring.
+ *  After SEC device reset, SEC user space driver will need a shutdown.
+ * @param [in]  job_ring     Job ring
+ */
+static void sec_reset_sec_engine(sec_job_ring_t *job_ring);
+
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
@@ -249,13 +295,23 @@ static void enable_irq()
 }
 #endif
 
-static void hw_flush_job_ring(sec_job_ring_t * job_ring)
+static void hw_flush_job_ring(sec_job_ring_t * job_ring,
+                              uint32_t do_notify,
+                              sec_status_t status,
+                              uint32_t error_code,
+                              uint32_t *notified_packets)
 {
-    sec_context_t * sec_context;
-    sec_job_t *job;
-    int jobs_no_to_discard = 0;
-    int discarded_packets_no = 0;
-    int number_of_jobs_available = 0;
+    sec_context_t *sec_context = NULL;
+    sec_job_t *job = NULL;
+    sec_job_t saved_job;
+    sec_status_t new_status;
+    int32_t jobs_no_to_discard = 0;
+    int32_t discarded_packets_no = 0;
+    int32_t number_of_jobs_available = 0;
+    int ret;
+
+    SEC_DEBUG("Flushing job ring %d with packet status = %d and SEC error code = 0x%x",
+              job_ring->jr_id, status, error_code);
 
     // compute the number of jobs available in the job ring based on the
     // producer and consumer index values.
@@ -265,19 +321,81 @@ static void hw_flush_job_ring(sec_job_ring_t * job_ring)
 
     // Discard all jobs
     jobs_no_to_discard = number_of_jobs_available;
+    *notified_packets = 0;
 
+    SEC_DEBUG("Job ring id %d: Discarding %d packets pidx = %d. cidx = %d",
+              job_ring->jr_id, jobs_no_to_discard, job_ring->pidx, job_ring->cidx);
+
+    // If function was called because an error happened on the job ring,
+    // then most likely the job ring is halted and it will not accept any more jobs.
+    // Still, used a job ring state to reflect that job ring is in flush/reset process.
+    // This way the UA will not be able to submit new jobs until reset/flush is over.
     while(jobs_no_to_discard > discarded_packets_no)
     {
         // get the first un-notified job from the job ring
         job = &job_ring->jobs[job_ring->cidx];
         sec_context = job->sec_context;
 
-        // consume processed packet for this sec context
-        CONTEXT_CONSUME_PACKET(sec_context);
         discarded_packets_no++;
 
-        // increment the consumer index for the current job ring
+        if(do_notify == TRUE)
+        {
+            // copy into a temporary job the fields from the job we need to raise callback
+            // this is done to free the slot before the callback is called,
+            // which we cannot control in terms of how much processing it will do.
+            saved_job.in_packet = job->in_packet;
+            saved_job.out_packet = job->out_packet;
+            saved_job.ua_handle = job->ua_handle;
+        }
+
+        // Now increment the consumer index for the current job ring,
+        // AFTER saving job in temporary location!
+        // Increment the consumer index for the current job ring
         job_ring->cidx = SEC_CIRCULAR_COUNTER(job_ring->cidx, SEC_JOB_RING_SIZE);
+
+        if(do_notify == TRUE)
+        {
+            new_status = status;
+            // If context is retiring, set a suggestive status for the packets notified to UA.
+            // Doesn't matter if the status is overwritten here, if UA deleted the context,
+            // it does not care about any other packet status.
+            if(sec_context->state == SEC_CONTEXT_RETIRING)
+            {
+                // at this point, PI per context is frozen, context is retiring,
+                // no more packets can be submitted for it.
+                new_status = (CONTEXT_GET_PACKETS_NO(sec_context) > 1) ?
+                    SEC_STATUS_OVERDUE : SEC_STATUS_LAST_OVERDUE;
+            }
+
+            // call the callback
+            ret = sec_context->notify_packet_cbk(saved_job.in_packet,
+                    saved_job.out_packet,
+                    saved_job.ua_handle,
+                    new_status,
+                    error_code);
+
+            // consume processed packet for this sec context
+            CONTEXT_CONSUME_PACKET(sec_context);
+
+            // UA requested to exit
+            if (ret == SEC_RETURN_STOP)
+            {
+                ASSERT(notified_packets != NULL);
+                *notified_packets = discarded_packets_no;
+                return;
+            }
+        }
+        else
+        {
+            // consume processed packet for this sec context
+            CONTEXT_CONSUME_PACKET(sec_context);
+        }
+    }
+
+    if(do_notify == TRUE)
+    {
+        ASSERT(notified_packets != NULL);
+        *notified_packets = discarded_packets_no;
     }
 }
 
@@ -291,11 +409,14 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
 
     int32_t jobs_no_to_notify = 0; // the number of done jobs to notify to UA
     sec_status_t status = SEC_STATUS_SUCCESS;
-    int32_t notified_packets_no = 0;
-    int32_t number_of_jobs_available = 0;
-    uint32_t error_code = 0;
+    uint32_t notified_packets_no = 0;
+    uint32_t error_packets_no = 0;
+    uint32_t number_of_jobs_available = 0;
+    uint32_t sec_error_code = 0;
     int ret = 0;
     uint8_t notify_pkt = TRUE;
+    uint32_t do_driver_shutdown = FALSE;
+
     
 
     // Compute the number of notifications that need to be raised to UA
@@ -321,16 +442,21 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
         // check if job is DONE
         if(!hw_job_is_done(job->descr))
         {
-            // check if job generated error
-            error_code = hw_job_ring_error(job_ring);
-            if (error_code)
+            // check if any job generated error, not only this job.
+            sec_error_code = hw_job_ring_error(job_ring);
+            if (sec_error_code)
             {
-                SEC_ERROR("Packet at cidx %d generated error 0x%x on job ring with id %d", 
-                          job_ring->cidx,
-                          error_code,
-                          job_ring->jr_id);
-                // TODO: flush jobs from JR, with error code set to callback
-                return SEC_INVALID_INPUT_PARAM;
+
+                SEC_ERROR("Packet at cidx %d generated error 0x%x on job ring with id %d\n",
+                          job_ring->cidx, sec_error_code, job_ring->jr_id);
+
+                // flush jobs from JR, with error code set to callback
+                sec_handle_packet_error(job_ring, sec_error_code, &error_packets_no, &do_driver_shutdown);
+
+                notified_packets_no += error_packets_no;
+                *packets_no = notified_packets_no;
+
+                return ((do_driver_shutdown == TRUE) ? SEC_PROCESSING_ERROR : SEC_PACKET_PROCESSING_ERROR);
             }
             else
             {
@@ -362,7 +488,15 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
             }
         }
 
-        // increment the consumer index for the current job ring
+        // copy into a temporary job the fields from the job we need to raise callback
+        // this is done to free the slot before the callback is called,
+        // which we cannot control in terms of how much processing it will do.
+        saved_job.in_packet = job->in_packet;
+        saved_job.out_packet = job->out_packet;
+        saved_job.ua_handle = job->ua_handle;
+
+        // now increment the consumer index for the current job ring,
+        // AFTER saving job in temporary location!
         job_ring->cidx = SEC_CIRCULAR_COUNTER(job_ring->cidx, SEC_JOB_RING_SIZE);
 
         // If context is retiring, set a suggestive status for the packets notified to UA.
@@ -376,14 +510,8 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
                      SEC_STATUS_OVERDUE : SEC_STATUS_LAST_OVERDUE;
         }
 
-        // copy into a temporary job the fields from the job we need to raise callback
-        // this is done to free the slot before the callback is called, 
-        // which we cannot control in terms of how much processing it will do.
-        saved_job.in_packet = job->in_packet;
-        saved_job.out_packet = job->out_packet;
-        saved_job.ua_handle = job->ua_handle;
 
-        // call the calback
+        // call the callback
         ret = sec_context->notify_packet_cbk(saved_job.in_packet,
                                              saved_job.out_packet,
                                              saved_job.ua_handle,
@@ -421,7 +549,7 @@ static void flush_job_rings()
         // packets are processed by SEC on this job ring.
         while(job_ring->pidx != job_ring->cidx)
         {
-            hw_flush_job_ring(job_ring);
+            hw_flush_job_ring(job_ring, FALSE, 0, 0, NULL);
         }
     }
 }
@@ -661,6 +789,144 @@ static int sec_process_packet_with_null_algo(sec_job_t *job)
     // Required to see the packet as DONE from sec_poll.
     job->descr->hdr |=  SEC_DESC_HDR_DONE;
     return SEC_SUCCESS;
+}
+
+static void sec_handle_packet_error(sec_job_ring_t *job_ring,
+                                    uint32_t sec_error_code,
+                                    uint32_t *notified_packets,
+                                    uint32_t *do_driver_shutdown)
+{
+    int ret;
+    int reset_cont_job_ring = FALSE;
+
+    ASSERT(notified_packets != NULL);
+
+    // Job ring will be restarted, change its state so that
+    // no new packets can be submitted by UA on this job ring.
+    job_ring->jr_state = SEC_JOB_RING_STATE_RESET;
+    *do_driver_shutdown = FALSE;
+
+    if(sec_error_code & SEC_REG_CSR_LO_DOF)
+    {
+        // Write 1 to DOF bit
+        hw_job_ring_clear_error(job_ring, SEC_REG_CSR_LO_DOF);
+        // Channel is halted and we must restart it
+        reset_cont_job_ring = TRUE;
+        SEC_DEBUG("DOF error on job ring with id %d", job_ring->jr_id);
+    }
+    if(sec_error_code & SEC_REG_CSR_LO_SOF)
+    {
+        // Write 1 to SOF bit
+        hw_job_ring_clear_error(job_ring, SEC_REG_CSR_LO_SOF);
+        // Channel not halted, can continue processing.
+        SEC_DEBUG("SOF error on job ring with id %d", job_ring->jr_id);
+    }
+    if(sec_error_code & SEC_REG_CSR_LO_MDTE)
+    {
+        // Channel is halted and we must restart it
+        reset_cont_job_ring = TRUE;
+        SEC_DEBUG("MDTE error on job ring with id %d", job_ring->jr_id);
+    }
+
+    if(sec_error_code & SEC_REG_CSR_LO_IDH)
+    {
+        // Channel is halted and we must restart it
+        reset_cont_job_ring = TRUE;
+        SEC_DEBUG("IDH error on job ring with id %d", job_ring->jr_id);
+    }
+
+    if(sec_error_code & SEC_REG_CSR_LO_EU)
+    {
+        // Channel is halted and we must restart it
+        // Must clear the error source in the EU that produced the error.
+        reset_cont_job_ring = TRUE;
+        // TODO: must clear EU error!!!
+        SEC_DEBUG("EU error on job ring with id %d", job_ring->jr_id);
+    }
+    if(sec_error_code & SEC_REG_CSR_LO_WDT)
+    {
+        // Channel is halted and we must restart it
+        reset_cont_job_ring = TRUE;
+        SEC_DEBUG("WDT error on job ring with id %d", job_ring->jr_id);
+    }
+    if(sec_error_code & SEC_REG_CSR_LO_SGML)
+    {
+        // Channel is halted and we must restart it
+        reset_cont_job_ring = TRUE;
+        SEC_DEBUG("SGML error on job ring with id %d", job_ring->jr_id);
+    }
+    if(sec_error_code & SEC_REG_CSR_LO_RSI)
+    {
+        // No action required, as per SEC 3.1 Block Guide
+        SEC_DEBUG("RSI error on job ring with id %d", job_ring->jr_id);
+    }
+    if(sec_error_code & SEC_REG_CSR_LO_RSG)
+    {
+        // No action required, as per SEC 3.1 Block Guide
+        SEC_DEBUG("RSG error on job ring with id %d", job_ring->jr_id);
+    }
+
+
+    // Flush the channel no matter the error type.
+    // Notify all submitted jobs to UA, setting corresponding error cause
+    hw_flush_job_ring(job_ring,
+                      TRUE, // notify packets to UA
+                      SEC_STATUS_ERROR, // the status to be set for each packet when notified to UA
+                      sec_error_code,
+                      notified_packets);
+
+    // Reset job ring if required
+    if(reset_cont_job_ring == TRUE)
+    {
+        SEC_DEBUG("Error on job ring with id %d requires reset + continue action", job_ring->jr_id);
+
+        // Reset job ring using 'continue' method: configuration registers and
+        // already submitted jobs are kept and job ring can continue processing.
+        ret = hw_reset_and_continue_job_ring(job_ring);
+        if(ret != 0)
+        {
+            SEC_DEBUG("Failed to reset and continue for job ring with id %d."
+                      "Sending request to SEC kernel driver to reset SEC engine!",
+                      job_ring->jr_id);
+
+            // Use UIO control to communicate with SEC kernel driver
+            // and ask to reset SEC engine.
+            sec_reset_sec_engine(job_ring);
+
+            // Driver shutdown is required. UA MUST call sec_release().
+            // UA must call sec_init() again if wishes to use driver again.
+            *do_driver_shutdown = TRUE;
+        }
+        else
+        {
+            // Job ring can be used again by UA
+            job_ring->jr_state = SEC_JOB_RING_STATE_STARTED;
+        }
+    }
+    else
+    {
+        // Job ring can be used again by UA
+        job_ring->jr_state = SEC_JOB_RING_STATE_STARTED;
+    }
+}
+
+static void sec_reset_sec_engine(sec_job_ring_t *job_ring)
+{
+    int uio_command = 0;
+    int ret;
+
+    // Use UIO file descriptor we have for this job ring.
+    // Writing a command code to this file descriptor will make the
+    // SEC kernel driver reset SEC engine.
+    uio_command = UIO_RESET_SEC_ENGINE_CMD;
+
+    ret = write(job_ring->uio_fd,
+                &uio_command,
+                sizeof(uio_command));
+
+    SEC_ASSERT_RET_VOID(ret == sizeof(uio_command),
+                        "Failed to request SEC engine restart through UIO control."
+                        "Reset SEC driver!");
 }
 /*==================================================================================================
                                      GLOBAL FUNCTIONS
@@ -1119,6 +1385,7 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
                SEC_DRIVER_RELEASE_IN_PROGRESS : SEC_DRIVER_NOT_INITALIZED,
                "Driver release is in progress or driver not initialized");
 
+
     // Validate input arguments
     SEC_ASSERT(sec_ctx_handle != NULL, SEC_INVALID_INPUT_PARAM, "sec_ctx_handle is NULL");
     SEC_ASSERT(in_packet != NULL, SEC_INVALID_INPUT_PARAM, "in_packet is NULL");
@@ -1142,6 +1409,12 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
 
     job_ring = (sec_job_ring_t *)sec_context->jr_handle;
     ASSERT(job_ring != NULL);
+
+    // Check job ring state
+    SEC_ASSERT(job_ring->jr_state == SEC_JOB_RING_STATE_STARTED,
+               SEC_JOB_RING_RESET_IN_PROGRESS,
+               "Job ring with id %d is currently resetting. "
+               "Can use it again after reset is over(when sec_poll function/s return)", job_ring->jr_id);
 
     SEC_DEBUG("Job Ring %p pi %d ci %d before sending packet",
             job_ring, job_ring->pidx, job_ring->cidx);

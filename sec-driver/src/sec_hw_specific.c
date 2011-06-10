@@ -128,22 +128,62 @@ int hw_shutdown_job_ring(sec_job_ring_t *job_ring)
 {
     unsigned int timeout = SEC_TIMEOUT;
     int usleep_interval = 10;
+    int i = 0;
 
     ASSERT(job_ring->register_base_addr != NULL);
 
-    // Ask the SEC hw to reset this job ring
-    out_be32(job_ring->register_base_addr + SEC_REG_CCCR(job_ring), SEC_REG_CCCR_VAL_RESET);
-
-    // Loop until the SEC engine has finished the job ring reset
-    while ((in_be32(job_ring->register_base_addr + SEC_REG_CCCR(job_ring)) & SEC_REG_CCCR_VAL_RESET) && --timeout)
+    // Reset job ring by setting the Reset(R) bit.
+    // Values set for job ring registers will NOT be kept.
+    // Better to reset twice because sometimes some registers
+    // are not cleared, like it happens in case of resetting with CON bit.
+    for(i = 0; i < 2; i++)
     {
-        usleep(usleep_interval);
+        // Ask the SEC hw to reset this job ring
+        out_be32(job_ring->register_base_addr + SEC_REG_CCCR(job_ring), SEC_REG_CCCR_VAL_RESET);
+
+        // Loop until the SEC engine has finished the job ring reset
+        while ((in_be32(job_ring->register_base_addr + SEC_REG_CCCR(job_ring)) & SEC_REG_CCCR_VAL_RESET) && --timeout)
+        {
+            usleep(usleep_interval);
+        }
+
+        if (timeout == 0)
+        {
+            SEC_ERROR("Failed to reset hw job ring with id  %d\n", job_ring->jr_id);
+            return -1;
+        }
     }
+    return 0;
+}
 
-    if (timeout == 0)
+int hw_reset_and_continue_job_ring(sec_job_ring_t *job_ring)
+{
+    unsigned int timeout = SEC_TIMEOUT;
+    int usleep_interval = 10;
+    int i = 0;
+
+    ASSERT(job_ring->register_base_addr != NULL);
+
+    // Reset job ring by setting the Continue(CON) bit.
+    // Values set for job ring registers will NOT be kept.
+    // Need to reset twice because sometimes the error field
+    // in CSR is not cleared after first reset!
+    for(i = 0; i < 2; i++)
     {
-        SEC_ERROR("Failed to reset hw job ring with id  %d\n", job_ring->jr_id);
-        return -1;
+        // Ask the SEC hw to reset this job ring
+        out_be32(job_ring->register_base_addr + SEC_REG_CCCR(job_ring), SEC_REG_CCCR_VAL_CONTINUE);
+
+        // Loop until the SEC engine has finished the job ring reset
+        while ((in_be32(job_ring->register_base_addr + SEC_REG_CCCR(job_ring)) & SEC_REG_CCCR_VAL_CONTINUE) && --timeout)
+        {
+            usleep(usleep_interval);
+        }
+
+        if (timeout == 0)
+        {
+            SEC_ERROR("Failed to reset and continue for hw job ring with id  %d\n", job_ring->jr_id);
+            return -1;
+        }
     }
     return 0;
 }

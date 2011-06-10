@@ -88,9 +88,12 @@ typedef enum sec_return_code_e
                                          #SEC_STATUS_LAST_OVERDUE.
                                          Can be returned by sec_delete_pdcp_context().*/
     SEC_PROCESSING_ERROR,            /*< Indicates a SEC processing error occurred on a Job Ring which requires a 
-                                         SEC user space driver shutdown. Call sec_get_last_error() to obtain specific
-                                         error code, as reported by SEC device.
+                                         SEC user space driver shutdown. Can be returned from sec_poll() or sec_poll_job_ring().
+                                         Call sec_get_last_error() to obtain specific error code, as reported by SEC device. 
                                          Then the only other API that can be called after this error is sec_release(). */
+    SEC_PACKET_PROCESSING_ERROR,     /*< Indicates a SEC packet processing error occurred on a Job Ring.
+                                         Can be returned from sec_poll() or sec_poll_job_ring().
+                                         The driver was able to reset job ring and job ring can be used like in a normal case. */
     SEC_JR_RESET_FAILED,             /*< Job Ring reset failed. */
     SEC_JR_IS_FULL,                  /*< Job Ring is full. There is no more room in the JR for new packets.
                                          This can happen if the packet RX rate is higher than SEC's capacity. */
@@ -98,6 +101,9 @@ typedef enum sec_return_code_e
                                          creation/deletion, packets processing or polling is allowed.*/
     SEC_DRIVER_ALREADY_INITALIZED,   /*< SEC driver is already initialized. */
     SEC_DRIVER_NOT_INITALIZED,       /*< SEC driver is NOT initialized. */
+    SEC_JOB_RING_RESET_IN_PROGRESS,  /*< Job ring is resetting due to a per-packet SEC processing error #SEC_PACKET_PROCESSING_ERROR.
+                                         Reset is finished when sec_poll() or sec_poll_job_ring() return.
+                                         Then the job ring can be used again. */
     SEC_DRIVER_NO_FREE_CONTEXTS,     /*< There are no more free contexts. Considering increasing the
                                          maximum number of contexts: #SEC_MAX_PDCP_CONTEXTS.*/
 }sec_return_code_t;
@@ -449,6 +455,8 @@ sec_return_code_t sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle);
  * @retval #SEC_SUCCESS                     for successful execution.
  * @retval #SEC_PROCESSING_ERROR            indicates a fatal execution error that requires a SEC user space driver shutdown.
  *                                          Call sec_get_last_error() to obtain specific error code, as reported by SEC device.
+ * @retval #SEC_PACKET_PROCESSING_ERROR     indicates a SEC packet processing error occurred on a Job Ring.
+ *                                          The driver was able to reset job ring and job ring can be used like in a normal case.
  * @retval #SEC_DRIVER_RELEASE_IN_PROGRESS  is returned if SEC driver release is in progress
  * @retval #SEC_INVALID_INPUT_PARAM         is returned if limit == 0 or weight == 0 or
  *                                          limit <= weight or weight > #SEC_JOB_RING_SIZE
@@ -485,6 +493,8 @@ sec_return_code_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
  * @retval #SEC_SUCCESS                    for successful execution.
  * @retval #SEC_PROCESSING_ERROR           indicates a fatal execution error that requires a SEC user space driver shutdown.
  *                                         Call sec_get_last_error() to obtain specific error code, as reported by SEC device.
+ * @retval #SEC_PACKET_PROCESSING_ERROR    indicates a SEC packet processing error occurred on a Job Ring.
+ *                                         The driver was able to reset job ring and job ring can be used like in a normal case.
  * @retval #SEC_DRIVER_RELEASE_IN_PROGRESS is returned if SEC driver release is in progress
  */
 sec_return_code_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle,
@@ -539,6 +549,9 @@ sec_return_code_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle,
  * @retval #SEC_CONTEXT_MARKED_FOR_DELETION is returned if the SEC context was marked for deletion.
  * @retval #SEC_PROCESSING_ERROR            indicates a fatal execution error that requires a SEC user space driver shutdown.
  *                                          Call sec_get_last_error() to obtain specific error code, as reported by SEC device.
+ * @retval #SEC_JOB_RING_RESET_IN_PROGRESS  indicates job ring is resetting due to a per-packet SEC processing error #SEC_PACKET_PROCESSING_ERROR.
+ *                                          Reset is finished when sec_poll() or sec_poll_job_ring() return.
+ *                                          Then, sec_process_packet() can be called again.
  * @retval >0 in case of error
  */
 sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,

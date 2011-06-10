@@ -69,7 +69,7 @@ extern "C" {
 //////////////////////////////////////////////////////////////////////////
 
 // Ciphering
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F8_ENC
+#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F8_ENC
 // Deciphering
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F8_DEC
 
@@ -89,7 +89,7 @@ extern "C" {
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CMAC_DEC
 
 // Test data plane PDCP with NULL-crypto(EEA0) algorithm set
-#define PDCP_TEST_SCENARIO  PDCP_TEST_DATA_PLANE_NULL_ALGO
+//#define PDCP_TEST_SCENARIO  PDCP_TEST_DATA_PLANE_NULL_ALGO
 
 // Test control plane PDCP with NULL-crypto(EEA0)
 // and NULL-authentication(EIA0) algorithms set
@@ -122,7 +122,7 @@ extern "C" {
 // from a minimum to a maximum value.
 //#define MAX_PACKET_NUMBER_PER_CTX   10
 //TODO: increase back number of packets per context
-#define MAX_PACKET_NUMBER_PER_CTX   1
+#define MAX_PACKET_NUMBER_PER_CTX   10
 #define MIN_PACKET_NUMBER_PER_CTX   1
 
 #ifdef SEC_HW_VERSION_4_4
@@ -171,7 +171,7 @@ typedef struct buffer_s
 typedef struct pdcp_context_s
 {
     // the status of this context: free or used
-    pdcp_context_usage_t usage;
+    volatile pdcp_context_usage_t usage;
     // handle to the SEC context (from SEC driver) associated to this PDCP context
     sec_context_handle_t sec_ctx;
     // configuration data for this context
@@ -1089,7 +1089,9 @@ static int release_pdcp_buffers(pdcp_context_t * pdcp_context,
     else
     {
         // the stub implementation does not return an error status
-        assert(status == SEC_STATUS_SUCCESS || status == SEC_STATUS_HFN_THRESHOLD_REACHED);
+        assert(status == SEC_STATUS_SUCCESS ||
+               status == SEC_STATUS_HFN_THRESHOLD_REACHED ||
+               status == SEC_STATUS_ERROR );
         if (pdcp_context->usage == PDCP_CONTEXT_MARKED_FOR_DELETION &&
             pdcp_context->no_of_buffers_processed == pdcp_context->no_of_buffers_to_process)
         {
@@ -1176,7 +1178,6 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
     assert(in_packet != NULL);
     assert(out_packet != NULL);
 
-    assert(status != SEC_STATUS_ERROR);
     if(status == SEC_STATUS_HFN_THRESHOLD_REACHED)
     {
         test_printf("HFN threshold reached for packet\n");
@@ -1186,12 +1187,28 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
 
     test_printf("\nthread #%d:consumer: sec_callback called for context_id = %d, "
             "no of buffers processed = %d, no of buffers to process = %d, "
-            "status = %d\n",
+            "status = %d, SEC error = 0x%x\n",
             (pdcp_context->thread_id + 1)%2,
             pdcp_context->id,
             pdcp_context->no_of_buffers_processed + 1,
             pdcp_context->no_of_buffers_to_process,
-            status);
+            status,
+            error_info);
+
+    if(error_info != 0)
+    {
+        // Buffers processing.
+        // In this test application we will release the input and output buffers
+        // Check also if all the buffers were received for a retiring context
+        // and if so mark it to be deleted
+        ret = release_pdcp_buffers(pdcp_context,
+                (sec_packet_t*)in_packet,
+                (sec_packet_t*)out_packet,
+                status);
+        assert(ret == 0);
+        return SEC_RETURN_SUCCESS;
+
+    }
 
     assert(in_packet->length == sizeof(test_data_in) + PDCP_HEADER_LENGTH + in_packet->offset);
 #if (PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F9_ENC) || \
@@ -1273,11 +1290,26 @@ static int get_results(uint8_t job_ring, int limit, uint32_t *packets_out)
     assert(packets_out != NULL);
 
     ret = sec_poll_job_ring(job_ring_descriptors[job_ring].job_ring_handle, limit, packets_out);
+    if(ret == SEC_PROCESSING_ERROR)
+    {
+        test_printf("sec_poll_job_ring:: Returned SEC_PROCESSING_ERROR on Job Ring %d. "
+                    "Need to call sec_release() ! \n", job_ring);
+        assert(ret != SEC_PROCESSING_ERROR);
+    }
     if (ret != SEC_SUCCESS)
     {
-        test_printf("sec_poll_job_ring::Error %d when polling for SEC results on Job Ring %d \n", ret, job_ring);
-        return 1;
+        if(ret == SEC_PACKET_PROCESSING_ERROR)
+        {
+            test_printf("sec_poll_job_ring::Error %d when polling for SEC results on Job Ring %d.\n"
+                        "Job ring restarted and can be used normally again.\n", ret, job_ring);
+        }
+        else
+        {
+            test_printf("sec_poll_job_ring::Error %d when polling for SEC results on Job Ring %d \n", ret, job_ring);
+            return 1;
+        }
     }
+
     // validate that number of packets notified does not exceed limit when limit is > 0.
     assert(!((limit > 0) && (*packets_out > limit)));
 
@@ -1546,24 +1578,34 @@ static void* pdcp_thread_routine(void* config)
         {
             // if SEC process packet returns that the producer JR is full, do some polling
             // on the consumer JR until the producer JR has free entries.
-            while (sec_process_packet(pdcp_context->sec_ctx,
-                                     in_packet,
-                                     out_packet,
-                                     (ua_context_handle_t)pdcp_context) == SEC_JR_IS_FULL)
+            do
             {
-            	// wait while the producer JR is empty, and in the mean time do some
-                // polling on the consumer JR -> retrieve only 5 notifications if available
-                ret = get_results(th_config_local->consumer_job_ring_id,
-                		          JOB_RING_POLL_LIMIT,
-                		          &packets_received);
-                assert(ret == 0);
-            };
-            if (ret != SEC_SUCCESS)
-            {
-                test_printf("thread #%d:producer: sec_process_packet return error %d for PDCP context no %d \n",
-                        th_config_local->tid, ret, pdcp_context->id);
-                assert(0);
-            }
+                ret = sec_process_packet(pdcp_context->sec_ctx,
+                        in_packet,
+                        out_packet,
+                        (ua_context_handle_t)pdcp_context);
+
+                if(ret == SEC_JR_IS_FULL || ret == SEC_JOB_RING_RESET_IN_PROGRESS)
+                {
+                    // wait while the producer JR is empty, and in the mean time do some
+                    // polling on the consumer JR -> retrieve only 5 notifications if available
+                    ret = get_results(th_config_local->consumer_job_ring_id,
+                            JOB_RING_POLL_LIMIT,
+                            &packets_received);
+                    //assert(ret == 0);
+
+                    usleep(10);
+                }else if (ret != SEC_SUCCESS)
+                {
+                    test_printf("thread #%d:producer: sec_process_packet return error %d for PDCP context no %d \n",
+                            th_config_local->tid, ret, pdcp_context->id);
+                    assert(0);
+                }
+                else
+                {
+                    break;
+                }
+            }while(1);
         }
 
 
@@ -1600,6 +1642,8 @@ static void* pdcp_thread_routine(void* config)
                               &no_of_contexts_deleted);
         assert(ret == 0);
         total_no_of_contexts_deleted += no_of_contexts_deleted;
+        usleep(10);
+
     }while(total_no_of_contexts_deleted < total_no_of_contexts_created);
 
 

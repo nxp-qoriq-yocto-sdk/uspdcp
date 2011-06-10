@@ -169,6 +169,12 @@ extern "C" {
  * @note Applies only to data plane packets!*/
 #define PDCP_HEADER_GET_D_C(hdr)((hdr)[0] >> 7)
 
+
+/** Used only for testing! Simulates that the first 2 packets
+ *  submitted to SEC have an invalid descriptor header.
+ *  This will generate an IDH error. */
+//#define SEC_SIMULATE_PACKET_PROCESSING_ERROR
+
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
 ==================================================================================================*/
@@ -681,8 +687,24 @@ static int sec_pdcp_context_update_snow_f8_aes_ctr_descriptor(sec_job_t *job, se
     uint8_t pdcp_hdr_len = 0;
     dma_addr_t phys_addr = 0;
 
+#ifdef SEC_SIMULATE_PACKET_PROCESSING_ERROR
+    static int counter = 0;
+
     // Configure SEC descriptor header for crypto operation
-    descriptor->hdr = sec_pdb->crypto_hdr;
+    if(counter < 2)
+    {
+        descriptor->hdr = 0;
+    }
+    else
+    {
+#endif
+        descriptor->hdr = sec_pdb->crypto_hdr;
+#ifdef SEC_SIMULATE_PACKET_PROCESSING_ERROR
+    }
+    counter++;
+#endif
+
+
     //descriptor->hdr_lo = 0;
 
     // update the remaining 7 dwords

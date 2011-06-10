@@ -82,6 +82,12 @@ struct sec_job_t
                                             Set to #FALSE for crypto algorithm. */
 }__CACHELINE_ALIGNED;
 
+/** Lists the possible states for a job ring. */
+typedef enum sec_job_ring_state_e
+{
+    SEC_JOB_RING_STATE_STARTED, /*< Job ring is initialized */
+    SEC_JOB_RING_STATE_RESET,   /*< Job ring reset is in progress */
+}sec_job_ring_state_t;
 
 /** SEC Job Ring */
 struct sec_job_ring_t
@@ -108,7 +114,8 @@ struct sec_job_ring_t
                                             this job ring are mapped to an alternate 4k page.*/
     volatile void *register_base_addr;  /*< Base address for SEC's register memory for this job ring.
                                             @note On SEC 3.1 all channels share the same register address space,
-                                                  so this member will have the exact same value for all og them. */
+                                                  so this member will have the exact same value for all of them. */
+    volatile sec_job_ring_state_t jr_state; /*< The state of this job ring */
 	sec_contexts_pool_t ctx_pool;       /*< Pool of SEC contexts */
 }__CACHELINE_ALIGNED;
 /*==============================================================================

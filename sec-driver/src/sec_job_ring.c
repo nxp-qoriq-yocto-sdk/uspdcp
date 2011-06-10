@@ -141,6 +141,8 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
 
     }
 
+    job_ring->jr_state = SEC_JOB_RING_STATE_STARTED;
+
     return SEC_SUCCESS;
 }
 

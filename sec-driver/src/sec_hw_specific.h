@@ -136,6 +136,9 @@
 
 /* Job ring reset */
 #define SEC_REG_CCCR_VAL_RESET      0x1
+/* Job ring continue. Do same operations as for reset
+but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. */
+#define SEC_REG_CCCR_VAL_CONTINUE   0x2
 /* Extended address enable (36bit) */
 #define SEC_REG_VAL_CCCR_LO_EAE     0x20
 /* Enable done writeback */
@@ -183,18 +186,16 @@
 
 #define SEC_REG_CSR_ERROR_MASK  0xFFFF /* Extract error field from CSR */
 
+/* Specific error codes */
 #define SEC_REG_CSR_LO_DOF    0x8000 /* double FF write oflow error */
 #define SEC_REG_CSR_LO_SOF    0x4000 /* single FF write oflow error */
 #define SEC_REG_CSR_LO_MDTE   0x2000 /* master data transfer error */
-#define SEC_REG_CSR_LO_SGDLZ  0x1000 /* s/g data len zero error */
-#define SEC_REG_CSR_LO_FPZ    0x0800 /* fetch ptr zero error */
 #define SEC_REG_CSR_LO_IDH    0x0400 /* illegal desc hdr error */
-#define SEC_REG_CSR_LO_IEU    0x0200 /* invalid EU error */
 #define SEC_REG_CSR_LO_EU     0x0100 /* EU error detected */
-#define SEC_REG_CSR_LO_GB     0x0080 /* gather boundary error */
-#define SEC_REG_CSR_LO_GRL    0x0040 /* gather return/length error */
-#define SEC_REG_CSR_LO_SB     0x0020 /* scatter boundary error */
-#define SEC_REG_CSR_LO_SRL    0x0010 /* scatter return/length error */
+#define SEC_REG_CSR_LO_WDT    0x0080 /* watchdog timeout */
+#define SEC_REG_CSR_LO_SGML   0x0040 /* scatter/gather length mismatch error */
+#define SEC_REG_CSR_LO_RSI    0x0020 /* RAID size incorrect error */
+#define SEC_REG_CSR_LO_RSG    0x0010 /* RAID scatter/gather error */
 
 
 
@@ -328,6 +329,11 @@
 /** Return 0 if no error generated on this job ring.
  * Return non-zero if error. */
 #define hw_job_ring_error(jr) (in_be32((jr)->register_base_addr + SEC_REG_CSR_LO(jr)) & SEC_REG_CSR_ERROR_MASK)
+
+ /** Some error types require that the same error bit is set to 1 to clear the error source.
+  * Use this macro for this purpose.
+  */
+#define hw_job_ring_clear_error(jr, value) (setbits32((jr)->register_base_addr + SEC_REG_CSR_LO(jr), (value)))
 
 /*****************************************************************
  * Macros manipulating SEC registers for a job ring/channel
@@ -478,9 +484,21 @@ int hw_reset_job_ring(sec_job_ring_t *job_ring);
  * @param [in] job_ring     The job ring
  *
  * @retval 0 for success
- * @retval other for error
+ * @retval -1 in case job ring reset failed
  */
 int hw_shutdown_job_ring(sec_job_ring_t *job_ring);
+
+/** @brief Reset and continue for a job ring/channel in SEC device.
+ * Write configuration register/s to reset some settings for a job ring
+ * but still continue processing. FIFO with all already submitted jobs
+ * will be kept.
+ *
+ * @param [in] job_ring     The job ring
+ *
+ * @retval 0 for success
+ * @retval -1 in case job ring reset and continue failed
+ */
+int hw_reset_and_continue_job_ring(sec_job_ring_t *job_ring);
 
 
 /*============================================================================*/
