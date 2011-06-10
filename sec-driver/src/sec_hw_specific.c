@@ -72,9 +72,71 @@ extern "C" {
                                  LOCAL FUNCTION PROTOTYPES
 ==================================================================================================*/
 
+/** @brief Identify the SEC descriptor that generated an error
+ * on this job ring. Also identify the exact EU that generated the error.
+ *
+ * @param [in]  job_ring        The job ring
+ */
+static void hw_handle_eu_error(sec_job_ring_t *job_ring);
+
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
+static void hw_handle_eu_error(sec_job_ring_t *job_ring)
+{
+    int i;
+    struct sec_job_t *job = NULL;
+    dma_addr_t current_desc_phys_addr;
+
+    // First read job ring register to get current descriptor,
+    // that is also the one that generated the error.
+    current_desc_phys_addr = hw_get_current_descriptor(job_ring);
+
+    // Now search the job ring for the descriptor
+    for(i = 0; i < SEC_JOB_RING_SIZE; i++)
+    {
+        if(job_ring->jobs[i].descr_phys_addr == current_desc_phys_addr)
+        {
+            job = &(job_ring->jobs[i]);
+            break;
+        }
+    }
+
+    // No descriptor found in the job ring, should not happen!
+    if(job == NULL)
+    {
+        SEC_ERROR("Cannot find in job ring the descriptor with physical address 0x%x\n"
+                  "which generated error on job ring id %d",
+                  current_desc_phys_addr, job_ring->jr_id);
+        return;
+    }
+
+    // Read descriptor header and identify the EU(Execution Unit)
+    // that generated the error.
+    switch (job->descr->hdr & SEC_DESC_HDR_SEL0_MASK)
+    {
+        case SEC_DESC_HDR_EU_SEL0_AESU:
+            SEC_ERROR("Job ring %d generated error in AESU Execution Unit."
+                      "AESU ISR hi = 0x%08x. AESU ISR lo = 0x%08x",
+                      job_ring->jr_id,
+                      in_be32(job_ring->register_base_addr + SEC_REG_AESU_ISR),
+                      in_be32(job_ring->register_base_addr + SEC_REG_AESU_ISR_LO));
+            break;
+        case SEC_DESC_HDR_EU_SEL0_STEU:
+            SEC_ERROR("Job ring %d generated error in STEU Execution Unit."
+                      "STEU ISR hi = 0x%08x. STEU ISR lo = 0x%08x",
+                      job_ring->jr_id,
+                      in_be32(job_ring->register_base_addr + SEC_REG_STEU_ISR),
+                      in_be32(job_ring->register_base_addr + SEC_REG_STEU_ISR_LO));
+            break;
+        default:
+            SEC_ERROR("Job ring %d generated error in EU that is not used by SEC user space driver!"
+                      "Descriptor header = 0x%x",
+                      job_ring->jr_id,
+                      job->descr->hdr);
+            break;
+    }
+}
 
 /*==================================================================================================
                                      GLOBAL FUNCTIONS
@@ -186,6 +248,80 @@ int hw_reset_and_continue_job_ring(sec_job_ring_t *job_ring)
         }
     }
     return 0;
+}
+
+void hw_handle_job_ring_error(sec_job_ring_t *job_ring,
+                              uint32_t error_code,
+                              uint32_t *reset_required)
+{
+    uint32_t sec_error_code = sec_error_code = hw_job_ring_error(job_ring);
+
+    // Check that the error code first read from SEC's job ring registers
+    // is the same with the one we've just read now.
+    ASSERT(sec_error_code == error_code);
+    ASSERT(reset_required != NULL);
+
+    if(sec_error_code & SEC_REG_CSR_LO_DOF)
+    {
+        // Write 1 to DOF bit
+        hw_job_ring_clear_error(job_ring, SEC_REG_CSR_LO_DOF);
+        // Channel is halted and we must restart it
+        *reset_required = TRUE;
+        SEC_ERROR("DOF error on job ring with id %d", job_ring->jr_id);
+    }
+    if(sec_error_code & SEC_REG_CSR_LO_SOF)
+    {
+        // Write 1 to SOF bit
+        hw_job_ring_clear_error(job_ring, SEC_REG_CSR_LO_SOF);
+        // Channel not halted, can continue processing.
+        SEC_ERROR("SOF error on job ring with id %d", job_ring->jr_id);
+    }
+    if(sec_error_code & SEC_REG_CSR_LO_MDTE)
+    {
+        // Channel is halted and we must restart it
+        *reset_required = TRUE;
+        SEC_ERROR("MDTE error on job ring with id %d", job_ring->jr_id);
+    }
+
+    if(sec_error_code & SEC_REG_CSR_LO_IDH)
+    {
+        // Channel is halted and we must restart it
+        *reset_required = TRUE;
+        SEC_ERROR("IDH error on job ring with id %d", job_ring->jr_id);
+    }
+
+    if(sec_error_code & SEC_REG_CSR_LO_EU)
+    {
+        // Channel is halted and we must restart it
+        // Must clear the error source in the EU that produced the error.
+        *reset_required = TRUE;
+        SEC_ERROR("EU error on job ring with id %d", job_ring->jr_id);
+
+        // Identify the exact EU error
+        hw_handle_eu_error(job_ring);
+    }
+    if(sec_error_code & SEC_REG_CSR_LO_WDT)
+    {
+        // Channel is halted and we must restart it
+        *reset_required = TRUE;
+        SEC_ERROR("WDT error on job ring with id %d", job_ring->jr_id);
+    }
+    if(sec_error_code & SEC_REG_CSR_LO_SGML)
+    {
+        // Channel is halted and we must restart it
+        *reset_required = TRUE;
+        SEC_ERROR("SGML error on job ring with id %d", job_ring->jr_id);
+    }
+    if(sec_error_code & SEC_REG_CSR_LO_RSI)
+    {
+        // No action required, as per SEC 3.1 Block Guide
+        SEC_ERROR("RSI error on job ring with id %d", job_ring->jr_id);
+    }
+    if(sec_error_code & SEC_REG_CSR_LO_RSG)
+    {
+        // No action required, as per SEC 3.1 Block Guide
+        SEC_ERROR("RSG error on job ring with id %d", job_ring->jr_id);
+    }
 }
 /*================================================================================================*/
 

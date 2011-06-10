@@ -181,6 +181,21 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 #define SEC_REG_CSR_OFFSET_LO   0x0114
 
 /*****************************************************************
+ * CDPR(Current Descriptor Pointer Register) offset
+ *****************************************************************/
+
+/**  Offset to higher 32 bits of CDPR register for a job ring */
+#define SEC_REG_CDPR(jr)        (CHAN_BASE(jr) +  SEC_REG_CDPR_OFFSET_HI)
+/**  Offset to lower 32 bits of CDPR register for a job ring */
+#define SEC_REG_CDPR_LO(jr)     (CHAN_BASE(jr) +  SEC_REG_CDPR_OFFSET_LO)
+
+
+/**  Offset to higher 32 bits of CDPR */
+#define SEC_REG_CDPR_OFFSET_HI  0x0140
+/**  Offset to lower 32 bits of CDPR */
+#define SEC_REG_CDPR_OFFSET_LO  0x0144
+
+/*****************************************************************
  * CSR(Channel Status Register) values
  *****************************************************************/
 
@@ -210,6 +225,15 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 #define SEC_REG_STEU_IMR_LO     0xD03C
 
 /*****************************************************************
+ * STEU ISR (Interrupt Status Register) offset.
+ * STEU is execution unit implementing SNOW F8 and F9.
+ *****************************************************************/
+
+/**  Offset to higher 32 bits of STEU ISR */
+#define SEC_REG_STEU_ISR        0xD030
+/**  Offset to lower 32 bits of STEU ISR */
+#define SEC_REG_STEU_ISR_LO     0xD034
+/*****************************************************************
  * STEU IMR (Interrupt Mask Register) values
  * STEU is execution unit implementing SNOW F8 and F9.
  *****************************************************************/
@@ -228,6 +252,15 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 /**  Offset to lower 32 bits of AESU SR */
 #define SEC_REG_AESU_SR_LO      0x402C
 
+/*****************************************************************
+ * AESU ISR (Interrupt Status Register) offset.
+ * AESU is execution unit implementing AES CTR and AES CMAC.
+ *****************************************************************/
+
+/**  Offset to higher 32 bits of AESU ISR */
+#define SEC_REG_AESU_ISR        0x4030
+/**  Offset to lower 32 bits of AESU ISR */
+#define SEC_REG_AESU_ISR_LO     0x4034
 /*****************************************************************
  * AESU IMR (Interrupt Mask Register) offset.
  * AESU is execution unit implementing AES CTR and AES CMAC.
@@ -275,6 +308,10 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 /** Determines the processing type. Inbound means decrypting packets */
 #define SEC_DESC_HDR_DIR_INBOUND    0x00000002
 
+
+/** Mask used to extract primary EU configuration from SEC descriptor header */
+#define SEC_DESC_HDR_SEL0_MASK          0xf0000000
+
 /*****************************************************************
  * SNOW descriptor configuration
  *****************************************************************/
@@ -296,7 +333,7 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
  * AES descriptor configuration
  *****************************************************************/
 
-/**  Select STEU execution unit, the one implementing AES */
+/**  Select AESU execution unit, the one implementing AES */
 #define SEC_DESC_HDR_EU_SEL0_AESU           0x60000000
 /** Mode data used to program AESU execution unit for AES CTR processing */
 #define SEC_DESC_HDR_MODE0_AESU_CTR         0x00600000
@@ -334,6 +371,15 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
   * Use this macro for this purpose.
   */
 #define hw_job_ring_clear_error(jr, value) (setbits32((jr)->register_base_addr + SEC_REG_CSR_LO(jr), (value)))
+
+
+/** Read pointer to current descriptor that is beeing processed on a job ring. */
+#if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
+#define hw_get_current_descriptor(jr) ((dma_addr_t)((in_be32((jr)->register_base_addr + SEC_REG_CDPR(jr)) << 32)  |  \
+                                                    (in_be32((jr)->register_base_addr + SEC_REG_CDPR_LO(jr)))))
+#else
+#define hw_get_current_descriptor(jr) ((dma_addr_t) (in_be32((jr)->register_base_addr + SEC_REG_CDPR_LO(jr))))
+#endif
 
 /*****************************************************************
  * Macros manipulating SEC registers for a job ring/channel
@@ -500,6 +546,17 @@ int hw_shutdown_job_ring(sec_job_ring_t *job_ring);
  */
 int hw_reset_and_continue_job_ring(sec_job_ring_t *job_ring);
 
+/** @brief Handle a job ring/channel error in SEC device.
+ * Identify the error type and clear error bits if required.
+ * Return information if job ring must be restarted.
+ *
+ * @param [in]  job_ring        The job ring
+ * @param [in]  sec_error_code  The job ring's error code as first read from SEC engine
+ * @param [out] reset_required  If set to #TRUE, the job ring must be reset.
+ */
+void hw_handle_job_ring_error(sec_job_ring_t *job_ring,
+                              uint32_t sec_error_code,
+                              uint32_t *reset_required);
 
 /*============================================================================*/
 

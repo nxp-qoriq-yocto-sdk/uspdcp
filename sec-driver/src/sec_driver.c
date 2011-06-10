@@ -277,7 +277,6 @@ static void sec_handle_packet_error(sec_job_ring_t *job_ring,
  * @param [in]  job_ring     Job ring
  */
 static void sec_reset_sec_engine(sec_job_ring_t *job_ring);
-
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
@@ -797,7 +796,7 @@ static void sec_handle_packet_error(sec_job_ring_t *job_ring,
                                     uint32_t *do_driver_shutdown)
 {
     int ret;
-    int reset_cont_job_ring = FALSE;
+    uint32_t reset_cont_job_ring = FALSE;
 
     ASSERT(notified_packets != NULL);
 
@@ -806,66 +805,9 @@ static void sec_handle_packet_error(sec_job_ring_t *job_ring,
     job_ring->jr_state = SEC_JOB_RING_STATE_RESET;
     *do_driver_shutdown = FALSE;
 
-    if(sec_error_code & SEC_REG_CSR_LO_DOF)
-    {
-        // Write 1 to DOF bit
-        hw_job_ring_clear_error(job_ring, SEC_REG_CSR_LO_DOF);
-        // Channel is halted and we must restart it
-        reset_cont_job_ring = TRUE;
-        SEC_DEBUG("DOF error on job ring with id %d", job_ring->jr_id);
-    }
-    if(sec_error_code & SEC_REG_CSR_LO_SOF)
-    {
-        // Write 1 to SOF bit
-        hw_job_ring_clear_error(job_ring, SEC_REG_CSR_LO_SOF);
-        // Channel not halted, can continue processing.
-        SEC_DEBUG("SOF error on job ring with id %d", job_ring->jr_id);
-    }
-    if(sec_error_code & SEC_REG_CSR_LO_MDTE)
-    {
-        // Channel is halted and we must restart it
-        reset_cont_job_ring = TRUE;
-        SEC_DEBUG("MDTE error on job ring with id %d", job_ring->jr_id);
-    }
-
-    if(sec_error_code & SEC_REG_CSR_LO_IDH)
-    {
-        // Channel is halted and we must restart it
-        reset_cont_job_ring = TRUE;
-        SEC_DEBUG("IDH error on job ring with id %d", job_ring->jr_id);
-    }
-
-    if(sec_error_code & SEC_REG_CSR_LO_EU)
-    {
-        // Channel is halted and we must restart it
-        // Must clear the error source in the EU that produced the error.
-        reset_cont_job_ring = TRUE;
-        // TODO: must clear EU error!!!
-        SEC_DEBUG("EU error on job ring with id %d", job_ring->jr_id);
-    }
-    if(sec_error_code & SEC_REG_CSR_LO_WDT)
-    {
-        // Channel is halted and we must restart it
-        reset_cont_job_ring = TRUE;
-        SEC_DEBUG("WDT error on job ring with id %d", job_ring->jr_id);
-    }
-    if(sec_error_code & SEC_REG_CSR_LO_SGML)
-    {
-        // Channel is halted and we must restart it
-        reset_cont_job_ring = TRUE;
-        SEC_DEBUG("SGML error on job ring with id %d", job_ring->jr_id);
-    }
-    if(sec_error_code & SEC_REG_CSR_LO_RSI)
-    {
-        // No action required, as per SEC 3.1 Block Guide
-        SEC_DEBUG("RSI error on job ring with id %d", job_ring->jr_id);
-    }
-    if(sec_error_code & SEC_REG_CSR_LO_RSG)
-    {
-        // No action required, as per SEC 3.1 Block Guide
-        SEC_DEBUG("RSG error on job ring with id %d", job_ring->jr_id);
-    }
-
+    // Analyze the SEC error on this job ring
+    // and see if a job ring reset is required.
+    hw_handle_job_ring_error(job_ring, sec_error_code, &reset_cont_job_ring);
 
     // Flush the channel no matter the error type.
     // Notify all submitted jobs to UA, setting corresponding error cause
@@ -928,6 +870,7 @@ static void sec_reset_sec_engine(sec_job_ring_t *job_ring)
                         "Failed to request SEC engine restart through UIO control."
                         "Reset SEC driver!");
 }
+
 /*==================================================================================================
                                      GLOBAL FUNCTIONS
 ==================================================================================================*/
