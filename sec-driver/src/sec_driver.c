@@ -66,6 +66,43 @@ extern "C" {
  *          linux-2.6/drivers/crypto/talitos.c ! */
 #define UIO_RESET_SEC_ENGINE_CMD            3
 
+/** Define an invalid value for a pthread key. */
+#define SEC_PTHREAD_KEY_INVALID     ((pthread_key_t)(~0))
+
+
+/**  Macro for the initialization of the g_sec_errno thread-local key. */
+#define SEC_INIT_ERRNO_KEY() \
+    do{ \
+        if(pthread_key_create(&g_sec_errno, NULL) != 0) \
+        { \
+            g_sec_errno = SEC_PTHREAD_KEY_INVALID; \
+            SEC_ERROR("Error creating pthread key for g_sec_errno"); \
+            return SEC_INVALID_INPUT_PARAM; \
+        } \
+    }while(0)
+
+/** Macro for the destruction of the g_sec_errno thread-local. */
+#define SEC_DELETE_ERRNO_KEY() \
+    do{ \
+        if(g_sec_errno != SEC_PTHREAD_KEY_INVALID) \
+        { \
+            SEC_ASSERT(pthread_key_delete(g_sec_errno) == 0, \
+                       SEC_INVALID_INPUT_PARAM, \
+                       "Error deleting pthread key g_sec_errno"); \
+        } \
+    }while(0)
+
+/** Macro for setting the g_sec_errno thread-local variable.
+ *
+ * The thread-local stored value will not be the actual error code, but the address of g_sec_errno_value.
+ *
+ * @param errno_value    The value to be set into the thread-local errno key.
+ */
+#define SEC_ERRNO_SET(errno_value) \
+    g_sec_errno_value = errno_value; \
+    pthread_setspecific(g_sec_errno, &g_sec_errno_value)
+
+
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
 ==================================================================================================*/
@@ -104,15 +141,41 @@ static unsigned int g_last_jr_assigned = 0;
 /* Global context pool */
 static sec_contexts_pool_t g_ctx_pool;
 
-/** String representation for values from  ::sec_status_t */
+
+/** String representation for values from  ::sec_status_t
+ * @note Order of values from g_status_string MUST match the same order
+ *       used to define status values in ::sec_status_t ! */
 static const char g_status_string[][MAX_STRING_REPRESENTATION_LENGTH] =
 {
+    {"SEC_STATUS_SUCCESS"},
+    {"SEC_STATUS_ERROR"},
+    {"SEC_STATUS_OVERDUE"},
+    {"SEC_STATUS_LAST_OVERDUE"},
+    {"SEC_STATUS_HFN_THRESHOLD_REACHED"},
+    {"SEC_STATUS_MAC_I_CHECK_FAILED"},
     {"Not defined"},
 };
 
-/** String representation for values from  ::sec_return_code_t */
-static const char g_return_code_string[][MAX_STRING_REPRESENTATION_LENGTH] =
+/** String representation for values from  ::sec_return_code_t
+ * @note Order of values from g_return_code_descriptions MUST match the same order
+ *       used to define return code values in ::sec_return_code_t ! */
+static const char g_return_code_descriptions[][MAX_STRING_REPRESENTATION_LENGTH] =
 {
+    {"SEC_SUCCESS"},
+    {"SEC_INVALID_INPUT_PARAM"},
+    {"SEC_CONTEXT_MARKED_FOR_DELETION"},
+    {"SEC_OUT_OF_MEMORY"},
+    {"SEC_PACKETS_IN_FLIGHT"},
+    {"SEC_LAST_PACKET_IN_FLIGHT"},
+    {"SEC_PROCESSING_ERROR"},
+    {"SEC_PACKET_PROCESSING_ERROR"},
+    {"SEC_JR_RESET_FAILED"},
+    {"SEC_JR_IS_FULL"},
+    {"SEC_DRIVER_RELEASE_IN_PROGRESS"},
+    {"SEC_DRIVER_ALREADY_INITALIZED"},
+    {"SEC_DRIVER_NOT_INITALIZED"},
+    {"SEC_JOB_RING_RESET_IN_PROGRESS"},
+    {"SEC_DRIVER_NO_FREE_CONTEXTS"},
     {"Not defined"},
 };
 /*==================================================================================================
@@ -126,6 +189,14 @@ static const char g_return_code_string[][MAX_STRING_REPRESENTATION_LENGTH] =
 void* g_dma_mem_start = NULL;
 /** Current address for unused DMA-able memory area configured by UA */
 void* g_dma_mem_free = NULL;
+/** A key used to access the SEC driver's errno variable on a thread-local basis.
+ * The SEC driver uses this variable similar to libc's errno for
+ * passing error codes to the User Application. */
+pthread_key_t g_sec_errno = SEC_PTHREAD_KEY_INVALID;
+/** Global storage for error codes returned by SEC engine.
+ * @see the 'man 3 pthread_setspecific' page for further details on thread locals.
+ */
+uint32_t g_sec_errno_value = SEC_SUCCESS;
 
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
@@ -445,6 +516,9 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
             sec_error_code = hw_job_ring_error(job_ring);
             if (sec_error_code)
             {
+                // Set errno value to the error code returned by SEC engine.
+                // Errno value is thread-local.
+                SEC_ERRNO_SET(sec_error_code);
 
                 SEC_ERROR("Packet at cidx %d generated error 0x%x on job ring with id %d\n",
                           job_ring->cidx, sec_error_code, job_ring->jr_id);
@@ -902,6 +976,22 @@ sec_return_code_t sec_init(const sec_config_t *sec_config_data,
                 SEC_INVALID_INPUT_PARAM,
                 "Configured memory is not cacheline aligned");
 
+    // Initialize per-thread-local errno variable
+
+    // Delete the Errno Key here _ONLY_ if it has a valid value.
+    // When sec_init is called the first time by the User Application the errno key has an invalid
+    // value (SEC_PTHREAD_KEY_INVALID) and no delete will be made.
+    // When sec_init is called the second, third etc. time by the User Application, the errno key
+    // has a valid value (from the previous sec_init calls) and it is deleted here to be reinitialized later.
+    // The errno key is not deleted in sec_release because User might want to invoke sec_get_last_error()
+    // after the execution of sec_release.
+    SEC_DELETE_ERRNO_KEY();
+
+    // Initialize the errno thread-local key
+    SEC_INIT_ERRNO_KEY();
+
+    // Fosr start, set errno with success value 0
+    SEC_ERRNO_SET(SEC_SUCCESS);
 
     g_job_rings_no = job_rings_no;
     memset(g_job_rings, 0, sizeof(g_job_rings));
@@ -1447,20 +1537,27 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
 
 uint32_t sec_get_last_error(void)
 {
-    // stub function
-    return 0;
+    void * ret = NULL;
+
+    ret = pthread_getspecific(g_sec_errno);
+    SEC_ASSERT(ret != NULL, 0, "Using non initialized pthread key for local errno!");
+    return *(uint32_t*)ret;
 }
 
 const char* sec_get_status_message(sec_status_t status)
 {
-    // TODO: to be implemented
-    return g_status_string[0];
+    SEC_ASSERT(status < SEC_STATUS_MAX_VALUE,
+               g_status_string[SEC_STATUS_MAX_VALUE],
+               "Provided invalid value for status argument");
+    return g_status_string[status];
 }
 
-const char* sec_get_error_message(sec_return_code_t error)
+const char* sec_get_error_message(sec_return_code_t return_code)
 {
-    // TODO: to be implemented
-    return g_return_code_string[0];
+    SEC_ASSERT(return_code < SEC_RETURN_CODE_MAX_VALUE,
+               g_return_code_descriptions[SEC_RETURN_CODE_MAX_VALUE],
+               "Provided invalid value for return_code argument");
+    return g_return_code_descriptions[return_code];
 }
 
 

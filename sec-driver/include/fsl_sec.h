@@ -89,10 +89,11 @@ typedef enum sec_return_code_e
                                          Can be returned by sec_delete_pdcp_context().*/
     SEC_PROCESSING_ERROR,            /*< Indicates a SEC processing error occurred on a Job Ring which requires a 
                                          SEC user space driver shutdown. Can be returned from sec_poll() or sec_poll_job_ring().
-                                         Call sec_get_last_error() to obtain specific error code, as reported by SEC device. 
+                                         Call sec_get_last_error() to obtain specific error code, as reported by SEC device.
                                          Then the only other API that can be called after this error is sec_release(). */
     SEC_PACKET_PROCESSING_ERROR,     /*< Indicates a SEC packet processing error occurred on a Job Ring.
                                          Can be returned from sec_poll() or sec_poll_job_ring().
+                                         Call sec_get_last_error() to obtain specific error code, as reported by SEC device.
                                          The driver was able to reset job ring and job ring can be used like in a normal case. */
     SEC_JR_RESET_FAILED,             /*< Job Ring reset failed. */
     SEC_JR_IS_FULL,                  /*< Job Ring is full. There is no more room in the JR for new packets.
@@ -106,6 +107,10 @@ typedef enum sec_return_code_e
                                          Then the job ring can be used again. */
     SEC_DRIVER_NO_FREE_CONTEXTS,     /*< There are no more free contexts. Considering increasing the
                                          maximum number of contexts: #SEC_MAX_PDCP_CONTEXTS.*/
+    /* END OF VALID VALUES */
+
+    SEC_RETURN_CODE_MAX_VALUE,       /*< Invalid value for return code. It is used to mark the end of the return code values.
+                                         @note ALL new return code values MUST be added before #SEC_RETURN_CODE_MAX_VALUE! */
 }sec_return_code_t;
 
 /** Status codes indicating SEC processing result for each packet, 
@@ -125,6 +130,11 @@ typedef enum sec_status_e
     SEC_STATUS_HFN_THRESHOLD_REACHED,   /*< Indicates HFN reached the threshold configured for the SEC context. Keys must be
                                             renegotiated at earliest convenience. */
     SEC_STATUS_MAC_I_CHECK_FAILED,      /*< Integrity check failed for this packet. */
+
+    /* END OF VALID VALUES */
+
+    SEC_STATUS_MAX_VALUE,               /*< Invalid value for status. It is used to mark the end of the status values.
+                                            @note ALL new status values MUST be added before #SEC_STATUS_MAX_VALUE! */
 }sec_status_t;
 
 /** Return codes for User Application registered callback sec_out_cbk. 
@@ -570,6 +580,7 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
  * @note After an API returns #SEC_PROCESSING_ERROR code, besides calling sec_get_last_error()
  * the only other valid API to call is sec_release().
  *
+ * @retval 0 if local-per-thread error variable is not initialized.
  * @retval Returns specific error code, as reported by SEC device.
  *         On SEC 3.1, the error is extracted from Channel Status Register (CSR), bits [32:63].
  *         On SEC 4.4, the error is extracted from Job Ring Interrupt Status Register (JRINT), bits [0:32].
@@ -586,10 +597,10 @@ const char* sec_get_status_message(sec_status_t status);
 
 /** @brief Return string representation for an error code.
  *
- * @param [in] error   The error code.
+ * @param [in] return_code   The error code.
  * @retval string representation
  */
-const char* sec_get_error_message(sec_return_code_t error);
+const char* sec_get_error_message(sec_return_code_t return_code);
 
 /*================================================================================================*/
 
