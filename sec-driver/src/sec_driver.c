@@ -60,11 +60,6 @@ extern "C" {
 /** Max length of a string describing a ::sec_status_t value or a ::sec_return_code_t value */
 #define MAX_STRING_REPRESENTATION_LENGTH    50
 
-/** Command that is used by SEC user space driver and SEC kernel driver
- *  to signal a request from the former to the later to do a SEC engine reset.
- *  @note   Need to be kept in synch with #SEC_UIO_RESET_SEC_ENGINE_CMD from
- *          linux-2.6/drivers/crypto/talitos.c ! */
-#define UIO_RESET_SEC_ENGINE_CMD            3
 
 /** Define an invalid value for a pthread key. */
 #define SEC_PTHREAD_KEY_INVALID     ((pthread_key_t)(~0))
@@ -339,15 +334,6 @@ static void sec_handle_packet_error(sec_job_ring_t *job_ring,
                                     uint32_t sec_error_code,
                                     uint32_t *notified_packets,
                                     uint32_t *do_driver_shutdown);
-
-/** @brief Request to SEC kernel driver to reset SEC engine.
- *  Use UIO to communicate with SEC kernel driver: write command
- *  value that indicates a reset action into UIO file descriptor
- *  of this job ring.
- *  After SEC device reset, SEC user space driver will need a shutdown.
- * @param [in]  job_ring     Job ring
- */
-static void sec_reset_sec_engine(sec_job_ring_t *job_ring);
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
@@ -360,7 +346,7 @@ static void enable_irq()
     for (i = 0; i < g_job_rings_no; i++)
     {
         job_ring = &g_job_rings[i];
-        hw_enable_done_irq_on_job_ring(job_ring);
+        uio_job_ring_enable_irqs(job_ring);
     }
 }
 #endif
@@ -907,7 +893,7 @@ static void sec_handle_packet_error(sec_job_ring_t *job_ring,
 
             // Use UIO control to communicate with SEC kernel driver
             // and ask to reset SEC engine.
-            sec_reset_sec_engine(job_ring);
+            uio_reset_sec_engine(job_ring);
 
             // Driver shutdown is required. UA MUST call sec_release().
             // UA must call sec_init() again if wishes to use driver again.
@@ -926,24 +912,7 @@ static void sec_handle_packet_error(sec_job_ring_t *job_ring,
     }
 }
 
-static void sec_reset_sec_engine(sec_job_ring_t *job_ring)
-{
-    int uio_command = 0;
-    int ret;
 
-    // Use UIO file descriptor we have for this job ring.
-    // Writing a command code to this file descriptor will make the
-    // SEC kernel driver reset SEC engine.
-    uio_command = UIO_RESET_SEC_ENGINE_CMD;
-
-    ret = write(job_ring->uio_fd,
-                &uio_command,
-                sizeof(uio_command));
-
-    SEC_ASSERT_RET_VOID(ret == sizeof(uio_command),
-                        "Failed to request SEC engine restart through UIO control."
-                        "Reset SEC driver!");
-}
 
 /*==================================================================================================
                                      GLOBAL FUNCTIONS
@@ -1383,17 +1352,17 @@ sec_return_code_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle,
 #if SEC_NOTIFICATION_TYPE == SEC_NOTIFICATION_TYPE_NAPI
     if (limit < 0)
     {
-        hw_enable_done_irq_on_job_ring(job_ring);
+        uio_job_ring_enable_irqs(job_ring);
     }
     else if (notified_packets_no < limit)
     {
-        hw_enable_done_irq_on_job_ring(job_ring);
+        uio_job_ring_enable_irqs(job_ring);
     }
 #endif
 
 #if SEC_NOTIFICATION_TYPE == SEC_NOTIFICATION_TYPE_IRQ
     // Always enable IRQ generation when in pure IRQ mode
-    hw_enable_done_irq_on_job_ring(job_ring);
+    uio_job_ring_enable_irqs(job_ring);
 
 #endif
     return SEC_SUCCESS;

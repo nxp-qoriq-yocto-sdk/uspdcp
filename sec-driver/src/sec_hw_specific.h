@@ -385,26 +385,6 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
  * Macros manipulating SEC registers for a job ring/channel
  *****************************************************************/
 
-/** @brief Enable DONE IRQ generation for a job ring/channel in SEC device.
- *
- * @note This function is used in NAPI and pure IRQ functioning modes.
- *       In pure polling mode DONE IRQ generation is NOT enabled at job ring level!
- *
- * Configuration is done at SEC engine controller level (on SEC 3.1).
- * At job ring level the interrupts are always generated but can be
- * masked out at controller level.
- *
- * @param [in] job_ring     The job ring
- */
-#define hw_enable_done_irq_on_job_ring(job_ring) \
-{\
-    uint32_t reg_val = 0; \
-\
-    reg_val = SEC_REG_SET_VAL_IER_DONE((job_ring)->jr_id); \
-    /* Configure interrupt generation at controller level, in SEC hw */ \
-    setbits32((job_ring)->register_base_addr + SEC_REG_IER , reg_val); \
-}
-
 /** @brief Enqueue descriptor into a job ring's FIFO.
  * A descriptor points to an input packet to be processed as well as
  * to an output packet where SEC will write processing result.

@@ -441,6 +441,19 @@ sec_return_code_t sec_config_uio_job_ring(sec_job_ring_t *job_ring)
 
     return SEC_SUCCESS; 
 }
+
+int sec_uio_send_command(sec_job_ring_t *job_ring, int32_t uio_command)
+{
+    int ret;
+
+    // Use UIO file descriptor we have for this job ring.
+    // Writing a command code to this file descriptor will make the
+    // SEC kernel driver execute the desired command.
+    ret = write(job_ring->uio_fd,
+                &uio_command,
+                sizeof(uio_command));
+    return ret;
+}
 /*================================================================================================*/
 
 #ifdef __cplusplus

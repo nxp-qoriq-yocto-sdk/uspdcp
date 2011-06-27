@@ -91,6 +91,23 @@ int sec_configure(int job_ring_number, struct sec_job_ring_t *job_rings);
  */
 sec_return_code_t sec_config_uio_job_ring(struct sec_job_ring_t *job_ring);
 
+/** @brief Uses UIO control to send commands to SEC kernel driver.
+ * The mechanism is to write a command word into the file descriptor
+ * that the user-space driver obtained for each user-space SEC job ring.
+ * Both user-space driver and kernel driver must have the same understanding
+ * about the command codes.
+ *
+ * @param [in]  job_ring            Job ring
+ * @param [in]  uio_command         Command word
+ *
+ * @retval Result of write operation on the job ring's UIO file descriptor.
+ *         Should be sizeof(int) for success operations.
+ *         Other values can be returned and used, if desired to add special
+ *         meaning to return values, but this has to be programmed in SEC
+ *         kernel driver as well. No special return values are used at this time.
+ */
+int sec_uio_send_command(sec_job_ring_t *job_ring, int32_t uio_command);
+
 /*================================================================================================*/
 
 

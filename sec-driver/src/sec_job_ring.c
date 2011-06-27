@@ -40,6 +40,7 @@ extern "C" {
 #include "sec_job_ring.h"
 #include "sec_utils.h"
 #include "sec_hw_specific.h"
+#include "sec_config.h"
 
 // For definition of sec_vtop and sec_ptov macros
 #include "alu_mem_management.h"
@@ -47,6 +48,27 @@ extern "C" {
 /*==================================================================================================
                                      LOCAL DEFINES
 ==================================================================================================*/
+/** Command that is used by SEC user space driver and SEC kernel driver
+ *  to signal a request from the former to the later to disable job DONE
+ *  and error IRQs on a certain job ring.
+ *  The configuration is done at SEC Controller's level.
+ *  @note   Need to be kept in synch with #SEC_UIO_DISABLE_IRQ_CMD from
+ *          linux-2.6/drivers/crypto/talitos.c ! */
+#define SEC_UIO_DISABLE_IRQ_CMD     0
+
+/** Command that is used by SEC user space driver and SEC kernel driver
+ *  to signal a request from the former to the later to enable job DONE
+ *  and error IRQs on a certain job ring.
+ *  The configuration is done at SEC Controller's level.
+ *  @note   Need to be kept in synch with #SEC_UIO_ENABLE_IRQ_CMD from
+ *          linux-2.6/drivers/crypto/talitos.c ! */
+#define SEC_UIO_ENABLE_IRQ_CMD      1
+
+/** Command that is used by SEC user space driver and SEC kernel driver
+ *  to signal a request from the former to the later to do a SEC engine reset.
+ *  @note   Need to be kept in synch with #SEC_UIO_RESET_SEC_ENGINE_CMD from
+ *          linux-2.6/drivers/crypto/talitos.c ! */
+#define SEC_UIO_RESET_SEC_ENGINE_CMD    3
 
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
@@ -102,14 +124,14 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
     if(startup_work_mode == SEC_STARTUP_INTERRUPT_MODE)
     {
         SEC_INFO("Enabling DONE IRQ generation on job ring with id %d", job_ring->jr_id);
-        hw_enable_done_irq_on_job_ring(job_ring);
+        uio_job_ring_enable_irqs(job_ring);
     }
 #endif
 
 #if SEC_NOTIFICATION_TYPE == SEC_NOTIFICATION_TYPE_IRQ
     // When SEC US driver works in pure interrupt mode, IRQ's are always enabled.
     SEC_INFO("Enabling DONE IRQ generation on job ring with id %d", job_ring->jr_id);
-    hw_enable_done_irq_on_job_ring(job_ring);
+    uio_job_ring_enable_irqs(job_ring);
 #endif
 
     // Memory area must start from cacheline-aligned boundary.
@@ -164,6 +186,33 @@ int shutdown_job_ring(sec_job_ring_t * job_ring)
     return SEC_SUCCESS;
 }
 
+void uio_reset_sec_engine(sec_job_ring_t *job_ring)
+{
+    int ret;
+
+    // Use UIO file descriptor we have for this job ring.
+    // Writing a command code to this file descriptor will make the
+    // SEC kernel driver reset SEC engine.
+    ret = sec_uio_send_command(job_ring, SEC_UIO_RESET_SEC_ENGINE_CMD);
+    SEC_ASSERT_RET_VOID(ret == sizeof(int),
+                        "Failed to request SEC engine restart through UIO control."
+                        "Reset SEC driver!");
+}
+
+void uio_job_ring_enable_irqs(sec_job_ring_t *job_ring)
+{
+    int ret;
+
+    // Use UIO file descriptor we have for this job ring.
+    // Writing a command code to this file descriptor will make the
+    // SEC kernel driver enable DONE and Error IRQs for this job ring,
+    // at Controller level.
+    ret = sec_uio_send_command(job_ring, SEC_UIO_ENABLE_IRQ_CMD);
+    SEC_ASSERT_RET_VOID(ret == sizeof(int),
+                        "Failed to request SEC engine to enable job done and "
+                        "error IRQs through UIO control. Job ring id %d. Reset SEC driver!",
+                        job_ring->jr_id);
+}
 /*================================================================================================*/
 
 #ifdef __cplusplus

@@ -154,6 +154,25 @@ int init_job_ring(struct sec_job_ring_t *job_ring, void **dma_mem, int startup_w
  */
 int shutdown_job_ring(struct sec_job_ring_t *job_ring);
 
+/** @brief Request to SEC kernel driver to reset SEC engine.
+ *  Use UIO to communicate with SEC kernel driver: write command
+ *  value that indicates a reset action into UIO file descriptor
+ *  of this job ring.
+ *  After SEC device reset, SEC user space driver will need a shutdown.
+ *
+ * @param [in]  job_ring     Job ring
+ */
+void uio_reset_sec_engine(sec_job_ring_t *job_ring);
+
+/** @brief Request to SEC kernel driver to enable job DONE and
+ *  error interrupts on this job ring.
+ *  Use UIO to communicate with SEC kernel driver: write command
+ *  value that indicates an IRQ enable action into UIO file descriptor
+ *  of this job ring.
+ *
+ * @param [in]  job_ring     Job ring
+ */
+void uio_job_ring_enable_irqs(sec_job_ring_t *job_ring);
 /*============================================================================*/
 
 
