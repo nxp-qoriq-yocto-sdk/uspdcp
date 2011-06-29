@@ -478,9 +478,13 @@ typedef struct sec_crypto_pdb_s
     uint32_t hfn_mask;      /*< Mask applied on IV to extract HFN */
     uint32_t sn_mask;       /*< Mask applied on PDCP header to extract SN */
     uint8_t sns;            /*< SN Short. Is set to 1 if short sequence number is used:
-                                - 5 bit for c-plane and 7 bit for d-plane.
+                                - 5 bit for PDCP c-plane and 7 bit for PDCP d-plane.
                                 Is set to 0 if long SN is used:
-                                - 12 bit for d-plane */
+                                - 12 bit for PDCP d-plane */
+    uint8_t pdcp_hdr_len;   /*< Length in bytes for PDCP header. */
+    uint8_t is_inbound;     /*< Is #TRUE for inbound data flows(performing decapsulation on packets)
+                                and #FALSE for outbound data flows(performing encapsulation on packets). */
+
 }sec_crypto_pdb_t;
 /*==============================================================================
                                  CONSTANTS

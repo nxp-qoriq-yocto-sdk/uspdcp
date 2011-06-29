@@ -684,7 +684,6 @@ static int sec_pdcp_context_update_snow_f8_aes_ctr_descriptor(sec_job_t *job, se
     int ret = SEC_SUCCESS;
     sec_crypto_pdb_t *sec_pdb = &job->sec_context->crypto_desc_pdb;
     const sec_pdcp_context_info_t *ua_crypto_info = job->sec_context->pdcp_crypto_info;
-    uint8_t pdcp_hdr_len = 0;
     dma_addr_t phys_addr = 0;
 
 #ifdef SEC_SIMULATE_PACKET_PROCESSING_ERROR
@@ -763,15 +762,12 @@ static int sec_pdcp_context_update_snow_f8_aes_ctr_descriptor(sec_job_t *job, se
               *((uint32_t*)(ua_crypto_info->cipher_key) + 2),
               *((uint32_t*)(ua_crypto_info->cipher_key) + 3));
 
-    // calculate PDCP header length
-    pdcp_hdr_len = sec_pdb->sns ? PDCP_HEADER_LENGTH_SHORT : PDCP_HEADER_LENGTH_LONG;
-
     //////////////////////////////////////////////////////////////
     // set input buffer
     //////////////////////////////////////////////////////////////
 
-    phys_addr = sec_vtop(job->in_packet->address) + job->in_packet->offset + pdcp_hdr_len;
-    descriptor->ptr[3].len = job->in_packet->length - job->in_packet->offset - pdcp_hdr_len;
+    phys_addr = sec_vtop(job->in_packet->address) + job->in_packet->offset + sec_pdb->pdcp_hdr_len;
+    descriptor->ptr[3].len = job->in_packet->length - job->in_packet->offset - sec_pdb->pdcp_hdr_len;
     // no s/g
     descriptor->ptr[3].j_extent = 0;
 #if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
@@ -794,14 +790,14 @@ static int sec_pdcp_context_update_snow_f8_aes_ctr_descriptor(sec_job_t *job, se
 
     memcpy(job->out_packet->address + job->out_packet->offset, 
            job->in_packet->address + job->in_packet->offset,
-           pdcp_hdr_len);
+           sec_pdb->pdcp_hdr_len);
 
     //////////////////////////////////////////////////////////////
     // set output buffer
     //////////////////////////////////////////////////////////////
 
-    phys_addr = sec_vtop(job->out_packet->address) + job->out_packet->offset + pdcp_hdr_len;
-    descriptor->ptr[4].len = job->out_packet->length - job->out_packet->offset - pdcp_hdr_len;
+    phys_addr = sec_vtop(job->out_packet->address) + job->out_packet->offset + sec_pdb->pdcp_hdr_len;
+    descriptor->ptr[4].len = job->out_packet->length - job->out_packet->offset - sec_pdb->pdcp_hdr_len;
     // no s/g
     descriptor->ptr[4].j_extent = 0;
 #if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
@@ -827,7 +823,6 @@ static int sec_pdcp_context_update_snow_f9_descriptor(sec_job_t *job, sec_descri
     sec_crypto_pdb_t *sec_pdb = &job->sec_context->crypto_desc_pdb;
     const sec_pdcp_context_info_t *ua_crypto_info = job->sec_context->pdcp_crypto_info;
     dma_addr_t phys_addr = 0;
-    int is_inbound = FALSE;
 
     // Configure SEC descriptor header for integrity check operation
     descriptor->hdr = sec_pdb->auth_hdr;
@@ -863,14 +858,12 @@ static int sec_pdcp_context_update_snow_f9_descriptor(sec_job_t *job, sec_descri
     descriptor->iv[1] = sec_pdb->iv_template[PDCP_INTEGRITY_IV_POS + 1];
     descriptor->iv[2] = 0;
 
-    is_inbound = ((descriptor->hdr & SEC_DESC_HDR_DIR_INBOUND) == SEC_DESC_HDR_DIR_INBOUND);
-    
     // For C-plane inbound, set in IV MAC-I extracted from last 4 bytes of input packet.
     // Sec engine to check against generated MAC-I.
-    descriptor->iv[3] = is_inbound ? (*(uint32_t*)(job->in_packet->address +
-                                                   job->in_packet->length -
-                                                   PDCP_MAC_I_LENGTH))
-                                   : 0;
+    descriptor->iv[3] = sec_pdb->is_inbound ? (*(uint32_t*)(job->in_packet->address +
+                                                            job->in_packet->length -
+                                                            PDCP_MAC_I_LENGTH))
+                                            : 0;
 
     descriptor->iv[4] = 0; 
 
@@ -921,8 +914,8 @@ static int sec_pdcp_context_update_snow_f9_descriptor(sec_job_t *job, sec_descri
     // Integrity check is performed on both PDCP header + PDCP payload
     phys_addr = sec_vtop(job->in_packet->address) + job->in_packet->offset;
 
-    descriptor->ptr[3].len =  is_inbound ? job->in_packet->length - job->in_packet->offset - PDCP_MAC_I_LENGTH
-                                         : job->in_packet->length - job->in_packet->offset;
+    descriptor->ptr[3].len =  sec_pdb->is_inbound ? job->in_packet->length - job->in_packet->offset - PDCP_MAC_I_LENGTH
+                                                  : job->in_packet->length - job->in_packet->offset;
     // no s/g
     descriptor->ptr[3].j_extent = 0;
 #if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
@@ -937,7 +930,7 @@ static int sec_pdcp_context_update_snow_f9_descriptor(sec_job_t *job, sec_descri
               *((uint32_t*)(job->in_packet->address + job->in_packet->offset)),
               *((uint32_t*)(job->in_packet->address+job->in_packet->offset) + 1),
               *((uint32_t*)(job->in_packet->address+job->in_packet->offset)+ 2),
-              *((uint32_t*)(job->in_packet->address+job->in_packet->offset) + 3));
+             *((uint32_t*)(job->in_packet->address+job->in_packet->offset) + 3));
     //////////////////////////////////////////////////////////////
     // next 2 pointers unused
     //////////////////////////////////////////////////////////////
@@ -952,7 +945,7 @@ static int sec_pdcp_context_update_snow_f9_descriptor(sec_job_t *job, sec_descri
     // For inbound packets generated MAC-I needs to be checked against
     // MAC-I from input packet. For SNOW F9, SEC 3.1 knows to do that automatically.
 #ifndef PDCP_TEST_SNOW_F9_ONLY
-    if(is_inbound)
+    if(sec_pdb->is_inbound)
     {
         memset(&(descriptor->ptr[6]), 0, 2 * sizeof(struct sec_ptr));
     }
@@ -982,7 +975,6 @@ static int sec_pdcp_context_update_aes_cmac_descriptor(sec_job_t *job, sec_descr
     sec_crypto_pdb_t *sec_pdb = &job->sec_context->crypto_desc_pdb;
     const sec_pdcp_context_info_t *ua_crypto_info = job->sec_context->pdcp_crypto_info;
     dma_addr_t phys_addr = 0;
-    int is_inbound = FALSE;
 
     // Configure SEC descriptor header for integrity check operation
     descriptor->hdr = sec_pdb->auth_hdr;
@@ -1008,9 +1000,6 @@ static int sec_pdcp_context_update_aes_cmac_descriptor(sec_job_t *job, sec_descr
                                 &job->job_status,
                                 PDCP_INTEGRITY_IV_POS);
 
-    // Is inbound or outbound?
-    is_inbound = ((descriptor->hdr & SEC_DESC_HDR_DIR_INBOUND) == SEC_DESC_HDR_DIR_INBOUND);
-   
     // No need to configure MAC-I received for inbound packets, because SEC 3.1
     // cannot do MAC-I automatic validation as it does not support MAC-I codes less than 8 bytes.
     
@@ -1056,8 +1045,10 @@ static int sec_pdcp_context_update_aes_cmac_descriptor(sec_job_t *job, sec_descr
     // Integrity check is performed on both PDCP header + PDCP payload
     phys_addr = sec_vtop(job->in_packet->address) + job->in_packet->offset - PDCP_AES_CMAC_IV_LENGTH;
 
-    descriptor->ptr[3].len =  is_inbound ? job->in_packet->length - job->in_packet->offset - PDCP_MAC_I_LENGTH + PDCP_AES_CMAC_IV_LENGTH
-                                         : job->in_packet->length - job->in_packet->offset + PDCP_AES_CMAC_IV_LENGTH;
+    descriptor->ptr[3].len =  sec_pdb->is_inbound ? (job->in_packet->length - job->in_packet->offset -
+                                                     PDCP_MAC_I_LENGTH + PDCP_AES_CMAC_IV_LENGTH)
+                                                  : (job->in_packet->length - job->in_packet->offset +
+                                                     PDCP_AES_CMAC_IV_LENGTH);
 
     // no s/g
     descriptor->ptr[3].j_extent = 0;
@@ -1187,6 +1178,9 @@ static void sec_pdcp_create_pdb(sec_context_t *ctx)
 
     // SNS = 1 if short SN is used
     sec_pdb->sns = (ctx->pdcp_crypto_info->sn_size ==  SEC_PDCP_SN_SIZE_12) ? 0 : 1;
+    sec_pdb->pdcp_hdr_len = (ctx->pdcp_crypto_info->sn_size ==  SEC_PDCP_SN_SIZE_12) ?
+                             PDCP_HEADER_LENGTH_LONG : PDCP_HEADER_LENGTH_SHORT;
+    sec_pdb->is_inbound = (ctx->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION) ? FALSE : TRUE;
 }
 
 /*==================================================================================================
