@@ -109,14 +109,6 @@ typedef struct sec_contexts_pool_s
 
 }sec_contexts_pool_t;
 
-
-/** MAC-I, encapsulated in a structure to ensure cacheline-alignment.*/
-typedef struct sec_mac_i_s
-{
-    uint8_t code[SEC_3_1_MAC_I_REQUIRED_LEN];
-}__CACHELINE_ALIGNED sec_mac_i_t;
-
-
 /** The declaration of a SEC context structure. */
 struct sec_context_t
 {
@@ -175,9 +167,6 @@ struct sec_context_t
     /** Function used to update an authentication descriptor for a packet
      * belonging to this context. */
     sec_update_descriptor update_auth_descriptor;
-    /** SEC 3.1 generates only 8 bytes MAC-I. SEC generates here the MAC-I. 
-     * Later the driver will copy it to output packet. */
-    sec_mac_i_t *mac_i;
     /** Flag set to #TRUE if this context is configured with NULL crypto (PDCP data plane context) or
      *  with NULL crypto + NULL authentication (PDCP control plane context). Set to #FALSE otherwise.
      */

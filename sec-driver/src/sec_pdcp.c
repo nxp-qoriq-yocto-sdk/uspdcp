@@ -756,7 +756,7 @@ static int sec_pdcp_context_update_snow_f8_aes_ctr_descriptor(sec_job_t *job, se
     // pointer to cipher key
     descriptor->ptr[2].ptr = PHYS_ADDR_LO(phys_addr);
     
-    SEC_DEBUG("Cipher key (hex)= %x %x %x %x", 
+    SEC_DEBUG("Cipher key (hex)= [%x %x %x %x]",
               *(uint32_t*)(ua_crypto_info->cipher_key),
               *((uint32_t*)(ua_crypto_info->cipher_key) + 1),
               *((uint32_t*)(ua_crypto_info->cipher_key) + 2),
@@ -777,7 +777,7 @@ static int sec_pdcp_context_update_snow_f8_aes_ctr_descriptor(sec_job_t *job, se
     // pointer to input buffer. Skip UA offset and PDCP header
     descriptor->ptr[3].ptr = PHYS_ADDR_LO(phys_addr);
 
-    SEC_DEBUG("PDCP IN packet (len = %d bytes) (hex) = %x %x %x %x...", 
+    SEC_DEBUG("PDCP IN packet (len = %d bytes) (hex) = [%x %x %x %x]",
               descriptor->ptr[3].len,
               *((uint32_t*)(job->in_packet->address + job->in_packet->offset)),
               *((uint32_t*)(job->in_packet->address+job->in_packet->offset) + 1),
@@ -824,6 +824,12 @@ static int sec_pdcp_context_update_snow_f9_descriptor(sec_job_t *job, sec_descri
     const sec_pdcp_context_info_t *ua_crypto_info = job->sec_context->pdcp_crypto_info;
     dma_addr_t phys_addr = 0;
 
+    // Depending on direction: encapsulation or decapsulation,
+    // figure out where is stored the data that must be authenticated:
+    // in input packet or in output packet.
+    const sec_packet_t *auth_packet = (job->sec_context->double_pass == TRUE &&
+                                       sec_pdb->is_inbound) ? job->out_packet : job->in_packet;
+
     // Configure SEC descriptor header for integrity check operation
     descriptor->hdr = sec_pdb->auth_hdr;
     //descriptor->hdr_lo = 0;
@@ -850,7 +856,7 @@ static int sec_pdcp_context_update_snow_f9_descriptor(sec_job_t *job, sec_descri
 #endif
     // update IV based on SN
     sec_pdcp_update_iv_template(sec_pdb,
-                                job->in_packet->address + job->in_packet->offset, // PDCP header pointer
+                                auth_packet->address + auth_packet->offset, // PDCP header pointer
                                 &job->job_status,
                                 PDCP_INTEGRITY_IV_POS);
 
@@ -858,15 +864,19 @@ static int sec_pdcp_context_update_snow_f9_descriptor(sec_job_t *job, sec_descri
     descriptor->iv[1] = sec_pdb->iv_template[PDCP_INTEGRITY_IV_POS + 1];
     descriptor->iv[2] = 0;
 
-    // For C-plane inbound, set in IV MAC-I extracted from last 4 bytes of input packet.
-    // Sec engine to check against generated MAC-I.
-    descriptor->iv[3] = sec_pdb->is_inbound ? (*(uint32_t*)(job->in_packet->address +
-                                                            job->in_packet->length -
+    // For C-plane inbound, set in IV MAC-I extracted from last 4 bytes of output packet.
+    // outbound:
+    //      - input packet contains plain-text data + plain-text MAC-I
+    //      - output packet contains encrypted data + encrypted MAC-I
+    // inbound:
+    //      - input packet contains encrypted data + encrypted MAC-I
+    //      - output packet contains decrypted data + decrypted MAC-I
+    // On inbound, SEC engine to check against generated MAC-I.
+    descriptor->iv[3] = sec_pdb->is_inbound ? (*(uint32_t*)(auth_packet->address +
+                                                            auth_packet->length -
                                                             PDCP_MAC_I_LENGTH))
                                             : 0;
-
     descriptor->iv[4] = 0; 
-
     descriptor->iv[5] = sec_pdb->iv_template[PDCP_INTEGRITY_IV_POS + 2];
 
 #if defined(PDCP_TEST_SNOW_F9_ONLY)
@@ -878,8 +888,10 @@ static int sec_pdcp_context_update_snow_f9_descriptor(sec_job_t *job, sec_descri
     descriptor->iv[5] = 0x397E8FD; 
 #endif
 
-    SEC_DEBUG("\nIV[0] = 0x%x\n IV[1] = 0x%x\n IV[2] = 0x%x\n IV[3] = 0x%x\n IV[4] = 0x%x\n IV[5] = 0x%x",
-              descriptor->iv[0], descriptor->iv[1], descriptor->iv[2], descriptor->iv[3],
+    SEC_DEBUG("\nIV[0] = 0x%x\n IV[1] = 0x%x\n IV[2] = 0x%x\n"
+              "IV[3] = 0x%x\n IV[4] = 0x%x\n IV[5] = 0x%x",
+              descriptor->iv[0], descriptor->iv[1],
+              descriptor->iv[2], descriptor->iv[3],
               descriptor->iv[4], descriptor->iv[5]);
 
     // set pointer to IV
@@ -901,7 +913,7 @@ static int sec_pdcp_context_update_snow_f9_descriptor(sec_job_t *job, sec_descri
     // pointer to auth key
     descriptor->ptr[2].ptr = PHYS_ADDR_LO(phys_addr);
 
-    SEC_DEBUG("Auth key (hex)= %x %x %x %x", 
+    SEC_DEBUG("Auth key (hex)= [%x %x %x %x]",
               *(uint32_t*)(ua_crypto_info->integrity_key),
               *((uint32_t*)(ua_crypto_info->integrity_key) + 1),
               *((uint32_t*)(ua_crypto_info->integrity_key) + 2),
@@ -912,10 +924,21 @@ static int sec_pdcp_context_update_snow_f9_descriptor(sec_job_t *job, sec_descri
     //////////////////////////////////////////////////////////////
 
     // Integrity check is performed on both PDCP header + PDCP payload
-    phys_addr = sec_vtop(job->in_packet->address) + job->in_packet->offset;
+    // inbound: do F9 on out packet = decrypted packet
+    // outbound: do F9 on in packet = plain text packet
+    phys_addr = sec_vtop(auth_packet->address) + auth_packet->offset;
 
-    descriptor->ptr[3].len =  sec_pdb->is_inbound ? job->in_packet->length - job->in_packet->offset - PDCP_MAC_I_LENGTH
-                                                  : job->in_packet->length - job->in_packet->offset;
+    // The input and output packets must have a length that allows the driver to
+    // add as trailer 4 bytes for generated MAC-I, besides offset + PDCP header + PDCP payload.
+    // However, in case of single-pass c-plane packets - where only authentication is done,
+    // on the outbound direction, the authenticated packet(input packet) already has the
+    // length adjusted, no need to modify it.
+    descriptor->ptr[3].len = auth_packet->length - auth_packet->offset - PDCP_MAC_I_LENGTH;
+    if(job->sec_context->double_pass == FALSE && !sec_pdb->is_inbound)
+    {
+        descriptor->ptr[3].len += PDCP_MAC_I_LENGTH;
+    }
+
     // no s/g
     descriptor->ptr[3].j_extent = 0;
 #if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
@@ -925,12 +948,12 @@ static int sec_pdcp_context_update_snow_f9_descriptor(sec_job_t *job, sec_descri
     // pointer to input buffer. Skip UA offset and PDCP header
     descriptor->ptr[3].ptr = PHYS_ADDR_LO(phys_addr);
     
-    SEC_DEBUG("PDCP IN packet (len = %d bytes) (hex) = %x %x %x %x...",
+    SEC_DEBUG("PDCP IN packet (len = %d bytes) (hex) = [%x %x %x %x]",
               descriptor->ptr[3].len,
-              *((uint32_t*)(job->in_packet->address + job->in_packet->offset)),
-              *((uint32_t*)(job->in_packet->address+job->in_packet->offset) + 1),
-              *((uint32_t*)(job->in_packet->address+job->in_packet->offset)+ 2),
-             *((uint32_t*)(job->in_packet->address+job->in_packet->offset) + 3));
+              *((uint32_t*)(auth_packet->address + auth_packet->offset)),
+              *((uint32_t*)(auth_packet->address + auth_packet->offset) + 1),
+              *((uint32_t*)(auth_packet->address + auth_packet->offset)+ 2),
+              *((uint32_t*)(auth_packet->address + auth_packet->offset) + 3));
     //////////////////////////////////////////////////////////////
     // next 2 pointers unused
     //////////////////////////////////////////////////////////////
@@ -944,6 +967,13 @@ static int sec_pdcp_context_update_snow_f9_descriptor(sec_job_t *job, sec_descri
     // MAC-I needs be generated only for outbound packets.
     // For inbound packets generated MAC-I needs to be checked against
     // MAC-I from input packet. For SNOW F9, SEC 3.1 knows to do that automatically.
+
+    // TODO: seems that double-pass c-plane with SNOW F9 does not work unless
+    // the mac-i generated code is written as output by SEC engine.
+    // To be investigated at a later time.
+    // However this is not a problem, since the mac_i code can be generated and
+    // written by SEC engine, as SEC engine does the MAC-I validation in hw.
+/*
 #ifndef PDCP_TEST_SNOW_F9_ONLY
     if(sec_pdb->is_inbound)
     {
@@ -951,9 +981,10 @@ static int sec_pdcp_context_update_snow_f9_descriptor(sec_job_t *job, sec_descri
     }
     else
 #endif
+        */
     {
         // Generated MAC-I (4 byte).
-        phys_addr = sec_vtop(job->sec_context->mac_i);
+        phys_addr = sec_vtop(job->mac_i);
         // first 4 bytes are filled with zero-s. last 4 bytes contain the MAC-I
         descriptor->ptr[6].len = 2 * PDCP_MAC_I_LENGTH; 
         // no s/g
@@ -976,6 +1007,12 @@ static int sec_pdcp_context_update_aes_cmac_descriptor(sec_job_t *job, sec_descr
     const sec_pdcp_context_info_t *ua_crypto_info = job->sec_context->pdcp_crypto_info;
     dma_addr_t phys_addr = 0;
 
+    // Depending on direction: encapsulation or decapsulation,
+    // figure out where is stored the data that must be authenticated:
+    // in input packet or in output packet.
+    const sec_packet_t *auth_packet = (job->sec_context->double_pass == TRUE &&
+                                       sec_pdb->is_inbound) ? job->out_packet : job->in_packet;
+
     // Configure SEC descriptor header for integrity check operation
     descriptor->hdr = sec_pdb->auth_hdr;
     //descriptor->hdr_lo = 0;
@@ -996,7 +1033,7 @@ static int sec_pdcp_context_update_aes_cmac_descriptor(sec_job_t *job, sec_descr
 
     // update IV based on SN
     sec_pdcp_update_iv_template(sec_pdb,
-                                job->in_packet->address + job->in_packet->offset, // PDCP header pointer
+                                auth_packet->address + auth_packet->offset, // PDCP header pointer
                                 &job->job_status,
                                 PDCP_INTEGRITY_IV_POS);
 
@@ -1019,7 +1056,7 @@ static int sec_pdcp_context_update_aes_cmac_descriptor(sec_job_t *job, sec_descr
     // pointer to auth key
     descriptor->ptr[2].ptr = PHYS_ADDR_LO(phys_addr);
 
-    SEC_DEBUG("Auth key (hex) = %x %x %x %x",
+    SEC_DEBUG("Auth key (hex) = [%x %x %x %x]",
               *(uint32_t*)(ua_crypto_info->integrity_key),
               *((uint32_t*)(ua_crypto_info->integrity_key) + 1),
               *((uint32_t*)(ua_crypto_info->integrity_key) + 2),
@@ -1035,20 +1072,28 @@ static int sec_pdcp_context_update_aes_cmac_descriptor(sec_job_t *job, sec_descr
     // before the PDCP header.
 
     // configure first word of initialisation vector
-    uint32_t* temp = (uint32_t*)(job->in_packet->address + job->in_packet->offset - PDCP_AES_CMAC_IV_LENGTH);
+    uint32_t* temp = (uint32_t*)(auth_packet->address + auth_packet->offset - PDCP_AES_CMAC_IV_LENGTH);
     *temp = sec_pdb->iv_template[PDCP_INTEGRITY_IV_POS];
 
     // configure second word of initialisation vector
-    temp = (uint32_t*)(job->in_packet->address + job->in_packet->offset - PDCP_AES_CMAC_IV_LENGTH / 2);
+    temp = (uint32_t*)(auth_packet->address + auth_packet->offset - PDCP_AES_CMAC_IV_LENGTH / 2);
     *temp = sec_pdb->iv_template[PDCP_INTEGRITY_IV_POS + 1];
 
     // Integrity check is performed on both PDCP header + PDCP payload
-    phys_addr = sec_vtop(job->in_packet->address) + job->in_packet->offset - PDCP_AES_CMAC_IV_LENGTH;
+    phys_addr = sec_vtop(auth_packet->address) + auth_packet->offset - PDCP_AES_CMAC_IV_LENGTH;
 
-    descriptor->ptr[3].len =  sec_pdb->is_inbound ? (job->in_packet->length - job->in_packet->offset -
-                                                     PDCP_MAC_I_LENGTH + PDCP_AES_CMAC_IV_LENGTH)
-                                                  : (job->in_packet->length - job->in_packet->offset +
-                                                     PDCP_AES_CMAC_IV_LENGTH);
+    descriptor->ptr[3].len = auth_packet->length - auth_packet->offset -
+                             PDCP_MAC_I_LENGTH + PDCP_AES_CMAC_IV_LENGTH;
+
+    // The input and output packets must have a length that allows the driver to
+    // add as trailer 4 bytes for generated MAC-I, besides offset + PDCP header + PDCP payload.
+    // However, in case of single-pass c-plane packets - where only authentication is done,
+    // on the outbound direction, the authenticated packet(input packet) already has the
+    // length adjusted, no need to modify it.
+    if(job->sec_context->double_pass == FALSE && !sec_pdb->is_inbound)
+    {
+        descriptor->ptr[3].len += PDCP_MAC_I_LENGTH;
+    }
 
     // no s/g
     descriptor->ptr[3].j_extent = 0;
@@ -1060,12 +1105,12 @@ static int sec_pdcp_context_update_aes_cmac_descriptor(sec_job_t *job, sec_descr
     descriptor->ptr[3].ptr = PHYS_ADDR_LO(phys_addr);
     
     // Print also 4 bytes of IV prepended to the PDCP packet (hdr + payload)
-    SEC_DEBUG("PDCP IN packet + IV (len = %d bytes) (hex) = %x %x %x %x...",
+    SEC_DEBUG("PDCP IN packet + IV (len = %d bytes) (hex) = [%x %x %x %x]",
               descriptor->ptr[3].len,
-              *((uint32_t*)(job->in_packet->address + job->in_packet->offset) - 2),
-              *((uint32_t*)(job->in_packet->address+job->in_packet->offset) - 1),
-              *((uint32_t*)(job->in_packet->address+job->in_packet->offset)),
-              *((uint32_t*)(job->in_packet->address+job->in_packet->offset) + 1));
+              *((uint32_t*)(auth_packet->address + auth_packet->offset) - 2),
+              *((uint32_t*)(auth_packet->address + auth_packet->offset) - 1),
+              *((uint32_t*)(auth_packet->address + auth_packet->offset)),
+              *((uint32_t*)(auth_packet->address + auth_packet->offset) + 1));
     
     //////////////////////////////////////////////////////////////
     // next 2 pointers unused
@@ -1078,7 +1123,7 @@ static int sec_pdcp_context_update_aes_cmac_descriptor(sec_job_t *job, sec_descr
     //////////////////////////////////////////////////////////////
 
     // Generated MAC-I (4 byte)
-    phys_addr = sec_vtop(job->sec_context->mac_i);
+    phys_addr = sec_vtop(job->mac_i);
 
     // If no size is given for output data = MAC-I, then SEC engine generates by default
     // a 16 byte MAC-I. Configure for 8 byte MAC-I.
@@ -1119,9 +1164,9 @@ static void sec_pdcp_update_iv_template(sec_crypto_pdb_t *sec_pdb,
     // When testing only SNOW F9 encapsulation/decapsulation (not PDCP control plane,
     // which means SNOW F8 + SNOW F9), use an artificial SN, as extracted from test vector
     seq_no = 1;
-#warning "F9 only!!!"
+#warning "F9 only !!!"
 #elif defined(PDCP_TEST_AES_CMAC_ONLY)
-#warning "AES CMAC only!!!"
+#warning "AES CMAC only !!!"
     seq_no = 20;
 #else
     // extract sequence number from PDCP header located in input packet

@@ -66,6 +66,12 @@
                          STRUCTURES AND OTHER TYPEDEFS
 ==============================================================================*/
 
+/** MAC-I, encapsulated in a structure to ensure cacheline-alignment.*/
+typedef struct sec_mac_i_s
+{
+    volatile uint8_t code[SEC_3_1_MAC_I_REQUIRED_LEN];
+}__CACHELINE_ALIGNED sec_mac_i_t;
+
 /** SEC job */
 struct sec_job_t
 {
@@ -75,10 +81,12 @@ struct sec_job_t
     const sec_packet_t *in_packet;      /*< Input packet */
     const sec_packet_t *out_packet;     /*< Output packet */
     ua_context_handle_t ua_handle;      /*< UA handle for the context this packet belongs to */
+    sec_mac_i_t *mac_i;                 /*< SEC 3.1 generates only 8 bytes MAC-I. SEC generates here the MAC-I.
+                                            Later the driver will copy it to packet, as necessary. */
     sec_status_t job_status;            /*< Processing status for the packet indicated by this job.
                                             Is required for indication that HFN reached threshold.
                                             TODO: remove this field when migrating on 9132!*/
-    uint8_t is_integrity_algo;          /*< Is set to value #TRUE for jobs with integrity algorithm configured.
+    volatile uint8_t is_integrity_algo; /*< Is set to value #TRUE for jobs with integrity algorithm configured.
                                             Set to #FALSE for crypto algorithm. */
 }__CACHELINE_ALIGNED;
 
@@ -92,11 +100,11 @@ typedef enum sec_job_ring_state_e
 /** SEC Job Ring */
 struct sec_job_ring_t
 {
-    volatile uint32_t cidx;                 /*< Consumer index for job ring (jobs array).
-                                            @note: cidx and pidx are accessed from different threads.
-                                            Place the cidx and pidx inside the structure so that
-                                            they lay on different cachelines, to avoid false 
-                                            sharing between threads when the threads run on different cores! */
+    volatile uint32_t cidx;                    /*< Consumer index for job ring (jobs array).
+                                                   @note: cidx and pidx are accessed from different threads.
+                                                   Place the cidx and pidx inside the structure so that
+                                                   they lay on different cachelines, to avoid false 
+                                                   sharing between threads when the threads run on different cores! */
     struct sec_job_t jobs[SEC_JOB_RING_SIZE];  /*< Ring of jobs. The same ring is used for
                                                    input jobs and output jobs because SEC engine writes 
                                                    back output indication in input job.
@@ -106,17 +114,17 @@ struct sec_job_ring_t
     struct fifo_t pdcp_c_plane_fifo;           /*< Ring of PDCP control plane packets that must be sent 
                                                    a second time to SEC for processing */
 
-    volatile uint32_t pidx;             /*< Producer index for job ring (jobs array) */
-    uint32_t uio_fd;                    /*< The file descriptor used for polling from user space
-                                            for interrupts notifications */
-    uint32_t jr_id;                     /*< Job ring id */
-    uint32_t alternate_register_range;  /*< Can be #TRUE or #FALSE. Indicates if the registers for 
-                                            this job ring are mapped to an alternate 4k page.*/
-    volatile void *register_base_addr;  /*< Base address for SEC's register memory for this job ring.
-                                            @note On SEC 3.1 all channels share the same register address space,
-                                                  so this member will have the exact same value for all of them. */
+    volatile uint32_t pidx;                 /*< Producer index for job ring (jobs array) */
+    uint32_t uio_fd;                        /*< The file descriptor used for polling from user space
+                                                for interrupts notifications */
+    uint32_t jr_id;                         /*< Job ring id */
+    uint32_t alternate_register_range;      /*< Can be #TRUE or #FALSE. Indicates if the registers for 
+                                                this job ring are mapped to an alternate 4k page.*/
+    volatile void *register_base_addr;      /*< Base address for SEC's register memory for this job ring.
+                                                @note On SEC 3.1 all channels share the same register address space,
+                                                      so this member will have the exact same value for all of them. */
     volatile sec_job_ring_state_t jr_state; /*< The state of this job ring */
-	sec_contexts_pool_t ctx_pool;       /*< Pool of SEC contexts */
+	sec_contexts_pool_t ctx_pool;           /*< Pool of SEC contexts */
 }__CACHELINE_ALIGNED;
 /*==============================================================================
                                  CONSTANTS

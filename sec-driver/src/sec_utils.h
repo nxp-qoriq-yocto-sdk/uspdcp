@@ -225,6 +225,8 @@
 //////////////////////////////////////////////////////////////////////////////
 // Precompilation that enable us to test SNOW F9 or AES CMAC only,
 // without doing F8+F9, which is what PDCP control plane really does.
+// When selecting PDCP_TEST_SNOW_F9_ONLY do not activate PDCP_TEST_AES_CMAC_ONLY,
+// and viceversa.
 //////////////////////////////////////////////////////////////////////////////
 //#define PDCP_TEST_SNOW_F9_ONLY
 //#define PDCP_TEST_AES_CMAC_ONLY

@@ -147,6 +147,7 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
     job_ring->descriptors = *dma_mem;
     memset(job_ring->descriptors, 0, SEC_JOB_RING_SIZE * sizeof(struct sec_descriptor_t));
     *dma_mem += SEC_JOB_RING_SIZE * sizeof(struct sec_descriptor_t);
+
     // TODO: check that we do not use more DMA mem than actually allocated/reserved for us by User App.
     // Options: 
     // - check if used more than #SEC_DMA_MEMORY_SIZE and/or
@@ -161,6 +162,23 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
         // Obtain and store the physical address for a job descriptor        
         job_ring->jobs[i].descr_phys_addr = sec_vtop(&job_ring->descriptors[i]);
 
+        SEC_ASSERT ((dma_addr_t)*dma_mem % CACHE_LINE_SIZE == 0,
+                SEC_INVALID_INPUT_PARAM,
+                "Current jobs[i]->mac_i [i=%d] position is not cacheline aligned.", i);
+
+        // Allocate DMA-capable memory where SEC 3.1 will generate MAC-I for
+        // SNOW F9 and AES CMAC integrity check algorithms (PDCP control-plane).
+        job_ring->jobs[i].mac_i = *dma_mem;
+        memset(job_ring->jobs[i].mac_i, 0, sizeof(sec_mac_i_t));
+        *dma_mem += sizeof(sec_mac_i_t);
+
+    }
+
+    // Allocate normal virtual memory for internal c-plane FIFO
+    for(i = 0; i < FIFO_CAPACITY; i++)
+    {
+        job_ring->pdcp_c_plane_fifo.items[i] =(void*) malloc(sizeof(sec_job_t));
+        memset(job_ring->pdcp_c_plane_fifo.items[i], 0, sizeof(sec_job_t));
     }
 
     job_ring->jr_state = SEC_JOB_RING_STATE_STARTED;
@@ -182,6 +200,12 @@ int shutdown_job_ring(sec_job_ring_t * job_ring)
     SEC_ASSERT(ret == 0, ret, "Failed to shutdown hardware job ring with id %d", job_ring->jr_id);
 
     memset(job_ring, 0, sizeof(sec_job_ring_t));
+
+    int i;
+    for(i = 0; i < FIFO_CAPACITY; i++)
+    {
+        free(job_ring->pdcp_c_plane_fifo.items[i]);
+    }
 
     return SEC_SUCCESS;
 }

@@ -47,57 +47,12 @@ extern "C" {
 #include "fsl_sec.h"
 // for dma_mem library
 #include "compat.h"
+#include "test_sec_driver_poll.h"
+#include "test_sec_driver_poll_test_vectors.h"
 
 /*==================================================================================================
                                      LOCAL CONSTANTS
 ==================================================================================================*/
-
-#define PDCP_TEST_SNOW_F8_ENC           0
-#define PDCP_TEST_SNOW_F8_DEC           1
-#define PDCP_TEST_SNOW_F9_ENC           2
-#define PDCP_TEST_SNOW_F9_DEC           3
-#define PDCP_TEST_AES_CTR_ENC           4
-#define PDCP_TEST_AES_CTR_DEC           5
-#define PDCP_TEST_AES_CMAC_ENC          6
-#define PDCP_TEST_AES_CMAC_DEC          7
-#define PDCP_TEST_DATA_PLANE_NULL_ALGO  8
-#define PDCP_TEST_CTRL_PLANE_NULL_ALGO  9
-
-//////////////////////////////////////////////////////////////////////////
-// !!!!!!!!!!!!!!!!!       IMPORTANT !!!!!!!!!!!!!!!!
-//Select one and only one algorithm at a time, from below
-//////////////////////////////////////////////////////////////////////////
-
-// Ciphering
-#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F8_ENC
-// Deciphering
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F8_DEC
-
-// Authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F9_ENC
-// Authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F9_DEC
-
-// Ciphering
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CTR_ENC
-// Deciphering
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CTR_DEC
-
-// Authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CMAC_ENC
-// Authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CMAC_DEC
-
-// Test data plane PDCP with NULL-crypto(EEA0) algorithm set
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_DATA_PLANE_NULL_ALGO
-
-// Test control plane PDCP with NULL-crypto(EEA0)
-// and NULL-authentication(EIA0) algorithms set
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_NULL_ALGO
-
-//#define test_printf(format, ...)
-#define test_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__)
-
 
 
 // Number of SEC JRs used by this test application
@@ -109,27 +64,13 @@ extern "C" {
 // The other thread is producer on JR 2 and consumer on JR 1 (PDCP DL processing).
 #define THREADS_NUMBER               2
 
-// The number of PDCP contexts used
-#define MAX_PDCP_CONTEXT_NUMBER         15
-#define MIN_PDCP_CONTEXT_NUMBER         5
-
 // The size of a PDCP input buffer.
 // Consider the size of the input and output buffers provided to SEC driver for processing identical.
 #define PDCP_BUFFER_SIZE   100
 
-// The maximum number of packets processed per context
-// This test application will process a random number of packets per context ranging
-// from a minimum to a maximum value.
-//#define MAX_PACKET_NUMBER_PER_CTX   10
-//TODO: increase back number of packets per context
-#define MAX_PACKET_NUMBER_PER_CTX   10
-#define MIN_PACKET_NUMBER_PER_CTX   1
-
 #ifdef SEC_HW_VERSION_4_4
-
 #define IRQ_COALESCING_COUNT    10
 #define IRQ_COALESCING_TIMER    100
-
 #endif
 
 #define JOB_RING_POLL_UNLIMITED -1
@@ -140,6 +81,21 @@ extern "C" {
 #define BUFFER_SIZE       128
 // Max length in bytes for a confidentiality /integrity key.
 #define MAX_KEY_LENGTH    32
+
+
+// Size in bytes required to be available for driver's use in input packet,
+// BEFORE PDCP header start, when using PDCP control-plane with
+// AES CMAC integrity check algorithm.
+// I.e: packet offset should be at least 8. SEC driver will use the last 8 bytes
+// before PDCP header starts, to calculate initialization data required for AES CMAC algorithm.
+#define AES_CMAC_SCTRATCHPAD_PACKET_AREA_LENGHT 8
+
+// Offset in input and output packet, where PDCP header starts
+#define PACKET_OFFSET   3
+
+// Length in bytes requried for MAC-I code generation,
+// in case of PDCP control-plane.
+#define MAC_I_LENGTH    4
 
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
@@ -326,6 +282,17 @@ static int delete_context(pdcp_context_t * pdcp_context, int *no_of_used_pdcp_co
 static int delete_contexts(pdcp_context_t * pdcp_contexts,
                            int *no_of_used_pdcp_contexts,
                            int* contexts_deleted);
+
+#ifdef VALIDATE_CONFORMITY
+/** @brief Validate a processed packet against validation criteria.
+ * Returns 1 if packet meets validation criteria.
+ * Returns 0 if packet is incorrect.
+ */
+static int is_packet_valid(pdcp_context_t *pdcp_context,
+                           const sec_packet_t *in_packet,
+                           const sec_packet_t *out_packet,
+                           uint32_t status);
+#endif
 /*==================================================================================================
                                         LOCAL MACROS
 ==================================================================================================*/
@@ -356,605 +323,13 @@ static int no_of_used_pdcp_dl_contexts = 0;
 // and consumer on JR1.
 static thread_config_t th_config[THREADS_NUMBER];
 static pthread_t threads[THREADS_NUMBER];
+static pthread_barrier_t th_barrier;
 
 #ifndef PDCP_TEST_SCENARIO
 #error "PDCP_TEST_SCENARIO is undefined!!!"
 #endif
 
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_SNOW_F8_ENC
-//////////////////////////////////////////////////////////////////////////////
-#if PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F8_ENC
 
-// Extracted from:
-// Specification of the 3GPP Confidentiality and Integrity Algorithms UEA2 & UIA2
-// Document 3: Implementors. Test Data
-// Version: 1.0
-// Date: 10th January 2006
-// Section 4. CONFIDENTIALITY ALGORITHM UEA2, Test Set 3
-
-// Length of PDCP header
-#define PDCP_HEADER_LENGTH 2
-
-static uint8_t snow_f8_enc_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
-                                    0x4E,0xA5,0xF1,0x45,0x10,0x10,0xD8,0x52};
-// PDCP header
-static uint8_t snow_f8_enc_pdcp_hdr[] = {0x8B, 0x26};
-
-// PDCP payload not encrypted
-static uint8_t snow_f8_enc_data_in[] = {0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,
-                                        0x57,0xA4,0x9D,0x42,0x14,0x07,0xE8};
-
-// PDCP payload encrypted
-static uint8_t snow_f8_enc_data_out[] = {0xBA,0x0F,0x31,0x30,0x03,0x34,0xC5,0x6B, // PDCP payload encrypted
-                                         0x52,0xA7,0x49,0x7C,0xBA,0xC0,0x46};
-
-// Radio bearer id
-static uint8_t snow_f8_enc_bearer = 0x3;
-
-// Start HFN
-static uint32_t snow_f8_enc_hfn = 0xFA556;
-
-// HFN threshold
-static uint32_t snow_f8_enc_hfn_threshold = 0xFF00000;
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_SNOW_F8_DEC
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F8_DEC
-
-// Extracted from:
-// Specification of the 3GPP Confidentiality and Integrity Algorithms UEA2 & UIA2
-// Document 3: Implementors. Test Data
-// Version: 1.0
-// Date: 10th January 2006
-// Section 4. CONFIDENTIALITY ALGORITHM UEA2, Test Set 3
-
-// Length of PDCP header
-#define PDCP_HEADER_LENGTH 2
-
-
-static uint8_t snow_f8_dec_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
-                                    0x4E,0xA5,0xF1,0x45,0x10,0x10,0xD8,0x52};
-// PDCP header
-static uint8_t snow_f8_dec_pdcp_hdr[] = {0x8B, 0x26};
-
-// PDCP payload not encrypted
-static uint8_t snow_f8_dec_data_out[] = {0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,
-                                         0x57,0xA4,0x9D,0x42,0x14,0x07,0xE8};
-
-// PDCP payload encrypted
-static uint8_t snow_f8_dec_data_in[] = { 0xBA,0x0F,0x31,0x30,0x03,0x34,0xC5,0x6B, // PDCP payload encrypted
-                                         0x52,0xA7,0x49,0x7C,0xBA,0xC0,0x46};
-// Radio bearer id
-static uint8_t snow_f8_dec_bearer = 0x3;
-
-// Start HFN
-static uint32_t snow_f8_dec_hfn = 0xFA556;
-
-// HFN threshold
-static uint32_t snow_f8_dec_hfn_threshold = 0xFF00000;
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_AES_CTR_ENC
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_AES_CTR_ENC
-
-// Extracted from:
-// document 3GPP TS 33.401 V9.6.0 (2010-12)
-// Annex C, 128-EEA2, Test Set 1
-
-// Length of PDCP header
-#define PDCP_HEADER_LENGTH 2
-
-
-static uint8_t aes_ctr_enc_key[] = {0xd3, 0xc5, 0xd5, 0x92, 0x32, 0x7f, 0xb1, 0x1c,
-                                    0x40, 0x35, 0xc6, 0x68, 0x0a, 0xf8, 0xc6, 0xd1};
-
-// PDCP header
-static uint8_t aes_ctr_enc_pdcp_hdr[] = {0x89, 0xB4};
-
-// PDCP payload not encrypted
-static uint8_t aes_ctr_enc_data_in[] = {0x98, 0x1b, 0xa6, 0x82, 0x4c, 0x1b, 0xfb, 0x1a,
-                                        0xb4, 0x85, 0x47, 0x20, 0x29, 0xb7, 0x1d, 0x80,
-                                        0x8c, 0xe3, 0x3e, 0x2c, 0xc3, 0xc0, 0xb5, 0xfc,
-                                        0x1f, 0x3d, 0xe8, 0xa6, 0xdc, 0x66, 0xb1, 0xf0};
-
-
-// PDCP payload encrypted
-static uint8_t aes_ctr_enc_data_out[] = {0xe9, 0xfe, 0xd8, 0xa6, 0x3d, 0x15, 0x53, 0x04,
-                                         0xd7, 0x1d, 0xf2, 0x0b, 0xf3, 0xe8, 0x22, 0x14,
-                                         0xb2, 0x0e, 0xd7, 0xda, 0xd2, 0xf2, 0x33, 0xdc,
-                                         0x3c, 0x22, 0xd7, 0xbd, 0xee, 0xed, 0x8e, 0x78};
-// Radio bearer id
-static uint8_t aes_ctr_enc_bearer = 0x15;
-// Start HFN
-static uint32_t aes_ctr_enc_hfn = 0x398A5;
-
-// HFN threshold
-static uint32_t aes_ctr_enc_hfn_threshold = 0xFF00000;
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_AES_CTR_DEC
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_AES_CTR_DEC
-
-// Extracted from:
-// document 3GPP TS 33.401 V9.6.0 (2010-12)
-// Annex C, 128-EEA2, Test Set 1
-
-// Length of PDCP header
-#define PDCP_HEADER_LENGTH 2
-
-
-static uint8_t aes_ctr_dec_key[] = {0xd3, 0xc5, 0xd5, 0x92, 0x32, 0x7f, 0xb1, 0x1c,
-                                    0x40, 0x35, 0xc6, 0x68, 0x0a, 0xf8, 0xc6, 0xd1};
-
-// PDCP header
-static uint8_t aes_ctr_dec_pdcp_hdr[] = {0x89, 0xB4};
-
-// PDCP payload encrypted
-static uint8_t aes_ctr_dec_data_in[] = {0xe9, 0xfe, 0xd8, 0xa6, 0x3d, 0x15, 0x53, 0x04,
-                                        0xd7, 0x1d, 0xf2, 0x0b, 0xf3, 0xe8, 0x22, 0x14,
-                                        0xb2, 0x0e, 0xd7, 0xda, 0xd2, 0xf2, 0x33, 0xdc,
-                                        0x3c, 0x22, 0xd7, 0xbd, 0xee, 0xed, 0x8e, 0x78};
-
-
-// PDCP payload not encrypted
-static uint8_t aes_ctr_dec_data_out[] = {0x98, 0x1b, 0xa6, 0x82, 0x4c, 0x1b, 0xfb, 0x1a,
-                                         0xb4, 0x85, 0x47, 0x20, 0x29, 0xb7, 0x1d, 0x80,
-                                         0x8c, 0xe3, 0x3e, 0x2c, 0xc3, 0xc0, 0xb5, 0xfc,
-                                         0x1f, 0x3d, 0xe8, 0xa6, 0xdc, 0x66, 0xb1, 0xf0};
-// Radio bearer id
-static uint8_t aes_ctr_dec_bearer = 0x15;
-// Start HFN
-static uint32_t aes_ctr_dec_hfn = 0x398A5;
-
-// HFN threshold
-static uint32_t aes_ctr_dec_hfn_threshold = 0xFF00000;
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_SNOW_F9_ENC
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F9_ENC
-
-// Extracted from:
-// Specification of the 3GPP Confidentiality and Integrity Algorithms UEA2 & UIA2
-// Document 3: Implementors. Test Data
-// Version: 1.0
-// Date: 10th January 2006
-// Section 5. INTEGRITY ALGORITHM UIA2, Test Set 4
-
-// Length of PDCP header
-#define PDCP_HEADER_LENGTH 1
-
-static uint8_t snow_f9_enc_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
-                                    0x4E,0xA5,0xF1,0x45,0x10,0x10,0xD8,0x52};
-
-//static uint8_t snow_f9_auth_enc_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
-//                                         0x4E,0xA5,0xF1,0x45,0x10,0x10,0xD8,0x52};
-
-static uint8_t snow_f9_auth_enc_key[] = {0xC7,0x36,0xC6,0xAA,0xB2,0x2B,0xFF,0xF9,
-                                         0x1E,0x26,0x98,0xD2,0xE2,0x2A,0xD5,0x7E};
-// PDCP header
-//static uint8_t snow_f9_enc_pdcp_hdr[] = {0x8B, 0x26};
-static uint8_t snow_f9_enc_pdcp_hdr[] = {0xD0};
-
-// PDCP payload not encrypted
-//static uint8_t snow_f9_enc_data_in[] = {0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,
-//                                        0x57,0xA4,0x9D,0x42,0x14,0x07,0xE8};
-
-static uint8_t snow_f9_enc_data_in[] = {0xA7 ,0xD4,0x63,0xDF,0x9F,0xB2,0xB2,
-                                        0x78,0x83,0x3F,0xA0,0x2E,0x23,0x5A,0xA1,
-                                        0x72,0xBD,0x97,0x0C,0x14,0x73,0xE1,0x29,
-                                        0x07,0xFB,0x64,0x8B,0x65,0x99,0xAA,0xA0,
-                                        0xB2,0x4A,0x03,0x86,0x65,0x42,0x2B,0x20,
-                                        0xA4,0x99,0x27,0x6A,0x50,0x42,0x70,0x09};
-
-// PDCP payload encrypted
-//static uint8_t snow_f9_enc_data_out[] = {0xBA,0x0F,0x31,0x30,0x03,0x34,0xC5,0x6B, // PDCP payload encrypted
-//                                         0x52,0xA7,0x49,0x7C,0xBA,0xC0,0x46};
-static uint8_t snow_f9_enc_data_out[] = {0x38,0xB5,0x54,0xC0};
-
-// Radio bearer id
-static uint8_t snow_f9_enc_bearer = 0x0;
-
-// Start HFN
-static uint32_t snow_f9_enc_hfn = 0xA3C9F2;
-
-// HFN threshold
-static uint32_t snow_f9_enc_hfn_threshold = 0xFF00000;
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_SNOW_F9_DEC
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F9_DEC
-
-// Extracted from:
-// Specification of the 3GPP Confidentiality and Integrity Algorithms UEA2 & UIA2
-// Document 3: Implementors. Test Data
-// Version: 1.0
-// Date: 10th January 2006
-// Section 5. INTEGRITY ALGORITHM UIA2, Test Set 4
-
-// Length of PDCP header
-#define PDCP_HEADER_LENGTH 1
-
-static uint8_t snow_f9_dec_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
-                                    0x4E,0xA5,0xF1,0x45,0x10,0x10,0xD8,0x52};
-
-static uint8_t snow_f9_auth_dec_key[] = {0xC7,0x36,0xC6,0xAA,0xB2,0x2B,0xFF,0xF9,
-                                         0x1E,0x26,0x98,0xD2,0xE2,0x2A,0xD5,0x7E};
-// PDCP header
-static uint8_t snow_f9_dec_pdcp_hdr[] = { 0xD0};
-
-// PDCP payload not encrypted
-//static uint8_t snow_f9_enc_data_in[] = {0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,
-//                                        0x57,0xA4,0x9D,0x42,0x14,0x07,0xE8};
-
-static uint8_t snow_f9_dec_data_in[] = {0xA7 ,0xD4,0x63,0xDF,0x9F,0xB2,0xB2,
-                                        0x78,0x83,0x3F,0xA0,0x2E,0x23,0x5A,0xA1,
-                                        0x72,0xBD,0x97,0x0C,0x14,0x73,0xE1,0x29,
-                                        0x07,0xFB,0x64,0x8B,0x65,0x99,0xAA,0xA0,
-                                        0xB2,0x4A,0x03,0x86,0x65,0x42,0x2B,0x20,
-                                        0xA4,0x99,0x27,0x6A,0x50,0x42,0x70,0x09,
-                                        // The MAC-I from packet
-                                        0x38,0xB5,0x54,0xC0};
-
-// PDCP payload encrypted
-//static uint8_t snow_f9_enc_data_out[] = {0xBA,0x0F,0x31,0x30,0x03,0x34,0xC5,0x6B, // PDCP payload encrypted
-//                                         0x52,0xA7,0x49,0x7C,0xBA,0xC0,0x46};
-static uint8_t snow_f9_dec_data_out[] = { 0x38,0xB5,0x54,0xC0};
-
-// Radio bearer id
-static uint8_t snow_f9_dec_bearer = 0x0;
-
-// Start HFN
-static uint32_t snow_f9_dec_hfn = 0xA3C9F2;
-
-// HFN threshold
-static uint32_t snow_f9_dec_hfn_threshold = 0xFF00000;
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_AES_CMAC_ENC
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_AES_CMAC_ENC
-
-// Test Set 2
-
-
-// Length of PDCP header
-#define PDCP_HEADER_LENGTH 1
-
-static uint8_t aes_cmac_enc_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
-                                    0x4E,0xA5,0xF1,0x45,0x10,0x10,0xD8,0x52};
-
-static uint8_t aes_cmac_auth_enc_key[] = {0xd3,0xc5,0xd5,0x92,0x32,0x7f,0xb1,0x1c,
-                                          0x40,0x35,0xc6,0x68,0x0a,0xf8,0xc6,0xd1};
-
-// PDCP header
-static uint8_t aes_cmac_enc_pdcp_hdr[] = { 0x48};
-
-// PDCP payload
-static uint8_t aes_cmac_enc_data_in[] = {0x45,0x83,0xd5,0xaf,0xe0,0x82,0xae};
-
-// PDCP payload encrypted
-static uint8_t aes_cmac_enc_data_out[] = {0xb9,0x37,0x87,0xe6};
-
-// Radio bearer id
-static uint8_t aes_cmac_enc_bearer = 0x1a;
-
-// Start HFN
-static uint32_t aes_cmac_enc_hfn = 0x1CC52CD;
-
-// HFN threshold
-static uint32_t aes_cmac_enc_hfn_threshold = 0xFF00000;
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_AES_CMAC_DEC
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_AES_CMAC_DEC
-
-// Test Set 2
-
-
-// Length of PDCP header
-#define PDCP_HEADER_LENGTH 1
-
-static uint8_t aes_cmac_dec_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
-                                    0x4E,0xA5,0xF1,0x45,0x10,0x10,0xD8,0x52};
-
-static uint8_t aes_cmac_auth_dec_key[] = {0xd3,0xc5,0xd5,0x92,0x32,0x7f,0xb1,0x1c,
-                                          0x40,0x35,0xc6,0x68,0x0a,0xf8,0xc6,0xd1};
-// PDCP header
-static uint8_t aes_cmac_dec_pdcp_hdr[] = { 0x48};
-
-// PDCP payload not encrypted
-static uint8_t aes_cmac_dec_data_in[] = {0x45,0x83,0xd5,0xaf,0xe0,0x82,0xae,
-                                         // The MAC-I from packet
-                                         0xb9,0x37,0x87,0xe6};
-
-// PDCP payload encrypted
-static uint8_t aes_cmac_dec_data_out[] = {0xb9,0x37,0x87,0xe6};
-
-// Radio bearer id
-static uint8_t aes_cmac_dec_bearer = 0x1a;
-
-// Start HFN
-static uint32_t aes_cmac_dec_hfn = 0x1CC52CD;
-
-// HFN threshold
-static uint32_t aes_cmac_dec_hfn_threshold = 0xFF00000;
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_DATA_PLANE_NULL_ALGO
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_DATA_PLANE_NULL_ALGO
-
-
-// Length of PDCP header
-#define PDCP_HEADER_LENGTH 1
-/*
-static uint8_t aes_cmac_dec_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
-                                    0x4E,0xA5,0xF1,0x45,0x10,0x10,0xD8,0x52};
-
-static uint8_t aes_cmac_auth_dec_key[] = {0xd3,0xc5,0xd5,0x92,0x32,0x7f,0xb1,0x1c,
-                                          0x40,0x35,0xc6,0x68,0x0a,0xf8,0xc6,0xd1};
-  */
-// PDCP header
-static uint8_t null_crypto_pdcp_hdr[] = { 0x48};
-
-// PDCP payload not encrypted
-static uint8_t null_crypto_data_in[] = {0x45,0x83,0xd5,0xaf,0xe0,0x82,0xae,
-                                         // The MAC-I from packet
-                                         0xb9,0x37,0x87,0xe6, 0xb9,0x37,0x87,0xe6,0xb9,0x37,0x87,0xe6,0xb9,0x37,0x87,0xe6, 0xff};
-
-// PDCP payload encrypted
-static uint8_t null_crypto_data_out[] = {0x45,0x83,0xd5,0xaf,0xe0,0x82,0xae,
-                                          0xb9,0x37,0x87,0xe6, 0xb9,0x37,0x87,0xe6,0xb9,0x37,0x87,0xe6,0xb9,0x37,0x87,0xe6, 0xff};
-
-// Radio bearer id
-static uint8_t null_crypto_bearer = 0x1a;
-
-// Start HFN
-static uint32_t null_crypto_hfn = 0x1CC52CD;
-
-// HFN threshold
-static uint32_t null_crypto_hfn_threshold = 0xFF00000;
-#else
-#error "Unsuported test scenario!"
-#endif
-
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_SNOW_F8_ENC
-//////////////////////////////////////////////////////////////////////////////
-#if PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F8_ENC
-
-
-#define test_crypto_key         snow_f8_enc_key
-#define test_crypto_key_len     sizeof(snow_f8_enc_key)
-
-#define test_auth_key           NULL
-#define test_auth_key_len       0
-
-#define test_data_in            snow_f8_enc_data_in
-#define test_data_out           snow_f8_enc_data_out
-
-#define test_pdcp_hdr           snow_f8_enc_pdcp_hdr
-#define test_bearer             snow_f8_enc_bearer
-#define test_sn_size            SEC_PDCP_SN_SIZE_12
-#define test_user_plane         PDCP_DATA_PLANE
-#define test_packet_direction   PDCP_DOWNLINK
-#define test_protocol_direction PDCP_ENCAPSULATION
-#define test_cipher_algorithm   SEC_ALG_SNOW
-#define test_integrity_algorithm SEC_ALG_NULL
-#define test_hfn                snow_f8_enc_hfn
-#define test_hfn_threshold      snow_f8_enc_hfn_threshold
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_SNOW_F8_DEC
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F8_DEC
-
-#define test_crypto_key         snow_f8_dec_key
-#define test_crypto_key_len     sizeof(snow_f8_dec_key)
-
-#define test_auth_key           NULL
-#define test_auth_key_len       0
-
-#define test_data_in            snow_f8_dec_data_in
-#define test_data_out           snow_f8_dec_data_out
-
-#define test_pdcp_hdr           snow_f8_dec_pdcp_hdr
-#define test_bearer             snow_f8_dec_bearer
-#define test_sn_size            SEC_PDCP_SN_SIZE_12
-#define test_user_plane         PDCP_DATA_PLANE
-#define test_packet_direction   PDCP_DOWNLINK
-#define test_protocol_direction PDCP_DECAPSULATION
-#define test_cipher_algorithm    SEC_ALG_SNOW
-#define test_integrity_algorithm SEC_ALG_NULL
-#define test_hfn                snow_f8_dec_hfn
-#define test_hfn_threshold      snow_f8_dec_hfn_threshold
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_AES_CTR_ENC
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_AES_CTR_ENC
-
-#define test_crypto_key         aes_ctr_enc_key
-#define test_crypto_key_len     sizeof(aes_ctr_enc_key)
-
-#define test_auth_key           NULL
-#define test_auth_key_len       0
-
-#define test_data_in            aes_ctr_enc_data_in
-#define test_data_out           aes_ctr_enc_data_out
-
-#define test_pdcp_hdr           aes_ctr_enc_pdcp_hdr
-#define test_bearer             aes_ctr_enc_bearer
-#define test_sn_size            SEC_PDCP_SN_SIZE_12
-#define test_user_plane         PDCP_DATA_PLANE
-#define test_packet_direction   PDCP_DOWNLINK
-#define test_protocol_direction PDCP_ENCAPSULATION
-#define test_cipher_algorithm    SEC_ALG_AES
-#define test_integrity_algorithm SEC_ALG_NULL
-#define test_hfn                aes_ctr_enc_hfn
-#define test_hfn_threshold      aes_ctr_enc_hfn_threshold
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_AES_CTR_DEC
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_AES_CTR_DEC
-
-#define test_crypto_key         aes_ctr_dec_key
-#define test_crypto_key_len     sizeof(aes_ctr_dec_key)
-
-#define test_auth_key           NULL
-#define test_auth_key_len       0
-
-#define test_data_in            aes_ctr_dec_data_in
-#define test_data_out           aes_ctr_dec_data_out
-
-#define test_pdcp_hdr           aes_ctr_dec_pdcp_hdr
-#define test_bearer             aes_ctr_dec_bearer
-#define test_sn_size            SEC_PDCP_SN_SIZE_12
-#define test_user_plane         PDCP_DATA_PLANE
-#define test_packet_direction   PDCP_DOWNLINK
-#define test_protocol_direction PDCP_DECAPSULATION
-#define test_cipher_algorithm    SEC_ALG_AES
-#define test_integrity_algorithm SEC_ALG_NULL
-#define test_hfn                aes_ctr_dec_hfn
-#define test_hfn_threshold      aes_ctr_dec_hfn_threshold
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_SNOW_F9_ENC
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F9_ENC
-
-#define test_crypto_key         snow_f9_enc_key
-#define test_crypto_key_len     sizeof(snow_f9_enc_key)
-
-#define test_auth_key           snow_f9_auth_enc_key
-#define test_auth_key_len       sizeof(snow_f9_auth_enc_key)
-
-#define test_data_in            snow_f9_enc_data_in
-#define test_data_out           snow_f9_enc_data_out
-
-#define test_pdcp_hdr           snow_f9_enc_pdcp_hdr
-#define test_bearer             snow_f9_enc_bearer
-#define test_sn_size            SEC_PDCP_SN_SIZE_5
-#define test_user_plane         PDCP_CONTROL_PLANE
-#define test_packet_direction   PDCP_DOWNLINK
-#define test_protocol_direction PDCP_ENCAPSULATION
-#define test_cipher_algorithm   SEC_ALG_NULL
-//#define test_cipher_algorithm   SEC_ALG_SNOW
-#define test_integrity_algorithm SEC_ALG_SNOW
-#define test_hfn                snow_f9_enc_hfn
-#define test_hfn_threshold      snow_f9_enc_hfn_threshold
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_SNOW_F9_DEC
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F9_DEC
-
-#define test_crypto_key         snow_f9_dec_key
-#define test_crypto_key_len     sizeof(snow_f9_dec_key)
-
-#define test_auth_key           snow_f9_auth_dec_key
-#define test_auth_key_len       sizeof(snow_f9_auth_dec_key)
-
-#define test_data_in            snow_f9_dec_data_in
-#define test_data_out           snow_f9_dec_data_out
-
-#define test_pdcp_hdr           snow_f9_dec_pdcp_hdr
-#define test_bearer             snow_f9_dec_bearer
-#define test_sn_size            SEC_PDCP_SN_SIZE_5
-#define test_user_plane         PDCP_CONTROL_PLANE
-#define test_packet_direction   PDCP_DOWNLINK
-#define test_protocol_direction PDCP_DECAPSULATION
-#define test_cipher_algorithm   SEC_ALG_NULL
-#define test_integrity_algorithm SEC_ALG_SNOW
-#define test_hfn                snow_f9_dec_hfn
-#define test_hfn_threshold      snow_f9_dec_hfn_threshold
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_AES_CMAC_ENC
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_AES_CMAC_ENC
-
-#define test_crypto_key         aes_cmac_enc_key
-#define test_crypto_key_len     sizeof(aes_cmac_enc_key)
-
-#define test_auth_key           aes_cmac_auth_enc_key
-#define test_auth_key_len       sizeof(aes_cmac_auth_enc_key)
-
-#define test_data_in            aes_cmac_enc_data_in
-#define test_data_out           aes_cmac_enc_data_out
-
-#define test_pdcp_hdr           aes_cmac_enc_pdcp_hdr
-#define test_bearer             aes_cmac_enc_bearer
-#define test_sn_size            SEC_PDCP_SN_SIZE_5
-#define test_user_plane         PDCP_CONTROL_PLANE
-#define test_packet_direction   PDCP_DOWNLINK
-#define test_protocol_direction PDCP_ENCAPSULATION
-#define test_cipher_algorithm   SEC_ALG_NULL
-#define test_integrity_algorithm SEC_ALG_AES
-#define test_hfn                aes_cmac_enc_hfn
-#define test_hfn_threshold      aes_cmac_enc_hfn_threshold
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_AES_CMAC_DEC
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_AES_CMAC_DEC
-
-#define test_crypto_key         aes_cmac_dec_key
-#define test_crypto_key_len     sizeof(aes_cmac_dec_key)
-
-#define test_auth_key           aes_cmac_auth_dec_key
-#define test_auth_key_len       sizeof(aes_cmac_auth_dec_key)
-
-#define test_data_in            aes_cmac_dec_data_in
-#define test_data_out           aes_cmac_dec_data_out
-
-#define test_pdcp_hdr           aes_cmac_dec_pdcp_hdr
-#define test_bearer             aes_cmac_dec_bearer
-#define test_sn_size            SEC_PDCP_SN_SIZE_5
-#define test_user_plane         PDCP_CONTROL_PLANE
-#define test_packet_direction   PDCP_DOWNLINK
-#define test_protocol_direction PDCP_DECAPSULATION
-#define test_cipher_algorithm   SEC_ALG_NULL
-#define test_integrity_algorithm SEC_ALG_AES
-#define test_hfn                aes_cmac_dec_hfn
-#define test_hfn_threshold      aes_cmac_dec_hfn_threshold
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_DATA_PLANE_NULL_ALGO
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_DATA_PLANE_NULL_ALGO
-
-#define test_crypto_key         NULL
-#define test_crypto_key_len     0
-
-#define test_auth_key           NULL
-#define test_auth_key_len       0
-
-#define test_data_in            null_crypto_data_in
-#define test_data_out           null_crypto_data_out
-
-#define test_pdcp_hdr           null_crypto_pdcp_hdr
-#define test_bearer             null_crypto_bearer
-#define test_sn_size            SEC_PDCP_SN_SIZE_12
-#define test_user_plane         PDCP_DATA_PLANE
-#define test_packet_direction   PDCP_DOWNLINK
-#define test_protocol_direction PDCP_DECAPSULATION
-#define test_cipher_algorithm   SEC_ALG_NULL
-#define test_integrity_algorithm SEC_ALG_NULL
-#define test_hfn                null_crypto_hfn
-#define test_hfn_threshold      null_crypto_hfn_threshold
-#else
-#error "Unsuported test scenario!"
-#endif
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
@@ -1088,10 +463,11 @@ static int release_pdcp_buffers(pdcp_context_t * pdcp_context,
     }
     else
     {
-        // the stub implementation does not return an error status
         assert(status == SEC_STATUS_SUCCESS ||
                status == SEC_STATUS_HFN_THRESHOLD_REACHED ||
-               status == SEC_STATUS_ERROR );
+               status == SEC_STATUS_ERROR ||
+               status == SEC_STATUS_MAC_I_CHECK_FAILED);
+
         if (pdcp_context->usage == PDCP_CONTEXT_MARKED_FOR_DELETION &&
             pdcp_context->no_of_buffers_processed == pdcp_context->no_of_buffers_to_process)
         {
@@ -1126,7 +502,7 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
     //in_packet->offset = pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].offset;
 
     // Needed 8 bytes before actual start of PDCP packet, for PDCP control-plane + AES algo testing.
-    (*in_packet)->offset = 8;
+    (*in_packet)->offset = test_packet_offset;
     (*in_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
 
     assert(pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].usage == PDCP_BUFFER_FREE);
@@ -1138,7 +514,7 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
     //out_packet->offset = pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].offset;
 
     // Needed 8 bytes before actual start of PDCP packet, for PDCP control-plane + AES algo testing.
-    (*out_packet)->offset = 8;
+    (*out_packet)->offset = test_packet_offset;
     (*out_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
 
     // copy PDCP header
@@ -1149,14 +525,21 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
            sizeof(test_data_in));
 
     (*in_packet)->length = sizeof(test_data_in) + PDCP_HEADER_LENGTH + (*in_packet)->offset;
-    // TODO: finalize this...
+#ifdef TEST_PDCP_CONTROL_PLANE_DOUBLE_PASS_ENC
+    // Need extra 4 bytes at end of input/output packet for MAC-I code, in case of PDCP control-plane packets
+    (*in_packet)->length += MAC_I_LENGTH;
+#endif
     // Need extra 4 bytes at end of input/output packet for MAC-I code, in case of PDCP control-plane packets
     // Need  extra 8 bytes at start of input packet  for Initialization Vector (IV) when testing
-    // PDCP control-plane with AES CMAC algorithm.
-    assert((*in_packet)->length + 4 <= PDCP_BUFFER_SIZE);
+    // PDCP control-plane with AES CMAC algorithm, which is captured in 'offset' field.
+    assert((*in_packet)->length <= PDCP_BUFFER_SIZE);
 
     (*out_packet)->length = sizeof(test_data_in) + PDCP_HEADER_LENGTH + (*out_packet)->offset;
-    assert((*out_packet)->length + 4 <= PDCP_BUFFER_SIZE);
+#ifdef TEST_PDCP_CONTROL_PLANE_DOUBLE_PASS_ENC
+    // Need extra 4 bytes at end of input/output packet for MAC-I code, in case of PDCP control-plane packets
+    (*out_packet)->length += MAC_I_LENGTH;
+#endif
+    assert((*out_packet)->length <= PDCP_BUFFER_SIZE);
 
     pdcp_context->no_of_used_buffers++;
 
@@ -1171,7 +554,7 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
 {
     int ret;
     pdcp_context_t *pdcp_context = NULL;
-    int test_failed = 0;
+    int i;
 
     // validate input params
     assert(ua_ctx_handle != NULL);
@@ -1210,64 +593,42 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
 
     }
 
-    assert(in_packet->length == sizeof(test_data_in) + PDCP_HEADER_LENGTH + in_packet->offset);
-#if (PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F9_ENC) || \
-    (PDCP_TEST_SCENARIO == PDCP_TEST_AES_CMAC_ENC)
-
-    // For SNOW F9 and AES CMAC, output data consists only of MAC-I code = 4 bytes
-    test_failed = (0 != memcmp(out_packet->address + out_packet->offset,
-                               test_data_out,
-                               sizeof(test_data_out)));
-
-#elif (PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F9_DEC) || \
-      (PDCP_TEST_SCENARIO == PDCP_TEST_AES_CMAC_DEC)
-      // Status must be SUCCESS. When MAC-I validation failed,
-      // status is set to #SEC_STATUS_HFN_THRESHOLD_REACHED. 
-      test_failed = (status == SEC_STATUS_HFN_THRESHOLD_REACHED || status == SEC_STATUS_ERROR);
-#else
-
-    assert(out_packet->length == sizeof(test_data_out) + PDCP_HEADER_LENGTH + out_packet->offset);
-    test_failed = (0 != memcmp(out_packet->address + out_packet->offset,
-                               test_pdcp_hdr,
-                               PDCP_HEADER_LENGTH) ||
-                   0 != memcmp(out_packet->address + out_packet->offset + PDCP_HEADER_LENGTH,
-                               test_data_out,
-                               sizeof(test_data_out)));
-#endif
+#ifdef VALIDATE_CONFORMITY
+    int test_failed = 0;
+    // Check if packet is valid
+    test_failed = !is_packet_valid(pdcp_context, in_packet, out_packet, status);
 
     if(test_failed)
     {
-        test_printf("\nthread #%d:consumer: out packet INCORRECT!!!."
-               " out pkt= ",
-               (pdcp_context->thread_id + 1)%2);
-        int i;
+        test_printf("\nthread #%d:consumer: out packet INCORRECT!."
+                " out pkt= ",
+                (pdcp_context->thread_id + 1)%2);
         for(i = 0; i <  out_packet->length; i++)
         {
             test_printf("%02x ", out_packet->address[i]);
         }
         test_printf("\n");
-        /*
-           test_printf("\nreference data: ");
-
-           for(i = 0; i <  job->out_packet->length; i++)
-           {
-           test_printf("%02x ", snow_f8_enc_data_out[i]);
-           }
-           test_printf("\n");
-           */
         assert(0);
-
     }
     else
     {
-        int i;
-        test_printf("\nthread #%d:consumer: packet CORRECT!!! out pkt = . ", (pdcp_context->thread_id + 1)%2);
+        test_printf("\nthread #%d:consumer: packet CORRECT! out pkt = . ", (pdcp_context->thread_id + 1)%2);
         for(i = 0; i <  out_packet->length; i++)
         {
-//            test_printf("%02x ", out_packet->address[i]);
+            test_printf("%02x ", out_packet->address[i]);
         }
         test_printf("\n");
     }
+#else // #ifdef VALIDATE_CONFORMITY
+
+    // Validation against test vector not done. Just print output packet
+    test_printf("\nthread #%d:consumer: packet NOT validated! out pkt = . ", (pdcp_context->thread_id + 1)%2);
+    for(i = 0; i <  out_packet->length; i++)
+    {
+        test_printf("%02x ", out_packet->address[i]);
+    }
+    test_printf("\n");
+#endif
 
     // Buffers processing.
     // In this test application we will release the input and output buffers
@@ -1420,6 +781,67 @@ static int delete_contexts(pdcp_context_t * pdcp_contexts, int *no_of_used_pdcp_
     return 0;
 }
 
+#ifdef VALIDATE_CONFORMITY
+static int is_packet_valid(pdcp_context_t *pdcp_context,
+                           const sec_packet_t *in_packet,
+                           const sec_packet_t *out_packet,
+                           uint32_t status)
+{
+    int test_pass = 1;
+    int user_plane = test_user_plane;
+
+    if(user_plane == PDCP_DATA_PLANE)
+    {
+        assert(in_packet->length == sizeof(test_data_in) + PDCP_HEADER_LENGTH + in_packet->offset);
+        assert(out_packet->length == sizeof(test_data_out) + PDCP_HEADER_LENGTH + out_packet->offset);
+
+        test_pass = (0 == memcmp(out_packet->address + out_packet->offset,
+                                 test_pdcp_hdr,
+                                 PDCP_HEADER_LENGTH) &&
+                     0 == memcmp(out_packet->address + out_packet->offset + PDCP_HEADER_LENGTH,
+                                 test_data_out,
+                                 sizeof(test_data_out)));
+    }
+    else
+    {
+        // control plane context -> check if packet belong to last context which is data plane
+        // -> then DO NOT validate packets!
+        if(pdcp_context->pdcp_ctx_cfg_data.user_plane == PDCP_DATA_PLANE)
+        {
+            test_printf("Testing c-plane.Last PDCP context id %d is d-plane.Data plane packet NOT validated!",
+                         pdcp_context->id);
+            return 1;
+        }
+
+        // Status must be SUCCESS. When MAC-I validation failed,
+        // status is set to #SEC_STATUS_MAC_I_CHECK_FAILED.
+        test_pass = (status != SEC_STATUS_MAC_I_CHECK_FAILED && status != SEC_STATUS_ERROR);
+
+#if (PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F9_ENC) || \
+    (PDCP_TEST_SCENARIO == PDCP_TEST_AES_CMAC_ENC)
+
+        // For SNOW F9 and AES CMAC, output data consists only of MAC-I code = 4 bytes
+        test_pass = test_pass && (0 == memcmp(out_packet->address + out_packet->offset,
+                                              test_data_out,
+                                              sizeof(test_data_out)));
+#elif (PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F9_DEC) || \
+        (PDCP_TEST_SCENARIO == PDCP_TEST_AES_CMAC_DEC)
+        // Status must be SUCCESS. When MAC-I validation failed,
+        // status is set to #SEC_STATUS_MAC_I_CHECK_FAILED.
+#else
+
+        test_pass = test_pass && (0 == memcmp(out_packet->address + out_packet->offset,
+                                              test_pdcp_hdr,
+                                              PDCP_HEADER_LENGTH) &&
+                                  0 == memcmp(out_packet->address + out_packet->offset + PDCP_HEADER_LENGTH,
+                                              test_data_out,
+                                              sizeof(test_data_out)));
+#endif
+    }
+    return test_pass;
+}
+#endif //#ifdef VALIDATE_CONFORMITY
+
 static int start_sec_worker_threads(void)
 {
     int ret = 0;
@@ -1460,6 +882,16 @@ static int start_sec_worker_threads(void)
     ret = pthread_create(&threads[1], NULL, &pdcp_thread_routine, (void*)&th_config[1]);
     assert(ret == 0);
 
+
+    // Initialize thread barrier.
+    // The barrier is required in case of testing PDCP control-plane.
+    // Because PDCP control-plane packets need to be double-passed through SEC engine,
+    // New packets must be sent to trigger second processing stage for c-plane packets.
+    // As such, last packets sent by this test will be data plane packets.
+    // Threads must meet at the barrier before sending data-plane packets.
+    ret = pthread_barrier_init(&th_barrier, NULL, THREADS_NUMBER);
+    assert(ret == 0);
+
     return 0;
 }
 
@@ -1493,6 +925,10 @@ static int stop_sec_worker_threads(void)
     assert(no_of_used_pdcp_ul_contexts == 0);
 
     test_printf("thread main: all worker threads are stopped\n");
+
+    ret = pthread_barrier_destroy(&th_barrier);
+    assert(ret == 0);
+
     return 0;
 }
 
@@ -1505,6 +941,7 @@ static void* pdcp_thread_routine(void* config)
     int total_no_of_contexts_deleted = 0;
     int no_of_contexts_deleted = 0;
     int total_no_of_contexts_created = 0;
+    int is_last_context = 0;
 
     th_config_local = (thread_config_t*)config;
     assert(th_config_local != NULL);
@@ -1516,12 +953,21 @@ static void* pdcp_thread_routine(void* config)
     // number of packets per each context
     while(total_no_of_contexts_created < th_config_local->no_of_pdcp_contexts_to_test)
     {
+        if(total_no_of_contexts_created + 1 == th_config_local->no_of_pdcp_contexts_to_test)
+        {
+            is_last_context = 1;
+        }
         ret = get_free_pdcp_context(th_config_local->pdcp_contexts,
                                     th_config_local->no_of_used_pdcp_contexts,
                                     &pdcp_context);
         assert(ret == 0);
 
-        test_printf("thread #%d:producer: create pdcp context %d\n", th_config_local->tid, pdcp_context->id);
+        test_printf("thread #%d:producer: create pdcp context %d."
+                    "nr of ctx created %d. nr of ctx to create %d.\n",
+                    th_config_local->tid, pdcp_context->id,
+                    total_no_of_contexts_created,
+                    th_config_local->no_of_pdcp_contexts_to_test);
+
         pdcp_context->pdcp_ctx_cfg_data.notify_packet = &pdcp_ready_packet_handler;
         pdcp_context->pdcp_ctx_cfg_data.sn_size = test_sn_size;
         pdcp_context->pdcp_ctx_cfg_data.bearer = test_bearer;
@@ -1529,6 +975,7 @@ static void* pdcp_thread_routine(void* config)
         pdcp_context->pdcp_ctx_cfg_data.packet_direction = test_packet_direction;
         pdcp_context->pdcp_ctx_cfg_data.protocol_direction = test_protocol_direction;
         pdcp_context->pdcp_ctx_cfg_data.hfn = test_hfn;
+        pdcp_context->pdcp_ctx_cfg_data.hfn_threshold = test_hfn_threshold;
         pdcp_context->pdcp_ctx_cfg_data.hfn_threshold = test_hfn_threshold;
 
         // configure confidentiality algorithm
@@ -1554,6 +1001,19 @@ static void* pdcp_thread_routine(void* config)
             pdcp_context->pdcp_ctx_cfg_data.integrity_key_len = test_auth_key_len;
         }
 
+        if(is_last_context)
+        {
+            if(pdcp_context->pdcp_ctx_cfg_data.user_plane == PDCP_CONTROL_PLANE)
+            {
+                pdcp_context->pdcp_ctx_cfg_data.user_plane = PDCP_DATA_PLANE;
+                pdcp_context->pdcp_ctx_cfg_data.sn_size = SEC_PDCP_SN_SIZE_12;
+                pdcp_context->pdcp_ctx_cfg_data.integrity_algorithm = SEC_ALG_NULL;
+                pdcp_context->pdcp_ctx_cfg_data.integrity_key = NULL;
+                pdcp_context->pdcp_ctx_cfg_data.integrity_key_len = 0;
+            }
+        }
+
+
         pdcp_context->thread_id = th_config_local->tid;
 
         // create a SEC context in SEC driver
@@ -1573,9 +1033,44 @@ static void* pdcp_thread_routine(void* config)
         sec_packet_t *in_packet;
         sec_packet_t *out_packet;
 
+        if(is_last_context)
+        {
+            int counter;
+            for(counter = 0; counter < 10; counter++)
+            {
+                do
+                {
+                    // poll for responses
+                    ret = get_results(th_config_local->consumer_job_ring_id,
+                            JOB_RING_POLL_LIMIT,
+                            &packets_received);
+                    usleep(10);
+                }while(packets_received != 0);
+            }
+
+            printf("thread #%d:Now waiting on barrier\n", th_config_local->tid);
+            ret = pthread_barrier_wait(&th_barrier);
+            if(ret != 0 && ret != PTHREAD_BARRIER_SERIAL_THREAD)
+            {
+                printf("thread #%d:Error waiting on barrier\n", th_config_local->tid);
+                pthread_exit(NULL);
+            }
+        }
+
 
         while (get_free_pdcp_buffer(pdcp_context, &in_packet, &out_packet) == 0)
         {
+            // When testing PDCP c-plane, the last context tested MUST be
+            // PDCP data plane. This will guarantee that the last c-plane packets stored
+            // into driver's internal FIFO will be sent to SEC, without buffering any other
+            // c-plane packets..because now we are sending data-plane packets.
+#ifdef TEST_PDCP_CONTROL_PLANE_DOUBLE_PASS_ENC
+            if(is_last_context)
+            {
+                in_packet->length -= MAC_I_LENGTH;
+                out_packet->length -= MAC_I_LENGTH;
+            }
+#endif
             // if SEC process packet returns that the producer JR is full, do some polling
             // on the consumer JR until the producer JR has free entries.
             do
@@ -1818,6 +1313,8 @@ static int cleanup_sec_environment(void)
 int main(void)
 {
     int ret = 0;
+
+    printf("Testing scenario: %s\n", PDCP_TEST_SCENARIO_NAME);
 
     /////////////////////////////////////////////////////////////////////
     // 1. Initialize SEC environment
