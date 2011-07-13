@@ -82,7 +82,7 @@
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_SNOW_F8_SNOW_F9_ENC
 // Test PDCP control plane decapsulation with SNOW F8 ciphering
 // and SNOW F9 authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_SNOW_F8_SNOW_F9_DEC
+#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_SNOW_F8_SNOW_F9_DEC
 
 
 // Test PDCP control plane encapsulation with AES CTR ciphering
@@ -90,7 +90,7 @@
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_AES_CTR_AES_CMAC_ENC
 // Test PDCP control plane decapsulation with AES CTR ciphering
 // and AES CMAC authentication
-#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_AES_CTR_AES_CMAC_DEC
+//#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_AES_CTR_AES_CMAC_DEC
 
 
 // Test PDCP control plane encapsulation with AES CTR ciphering
