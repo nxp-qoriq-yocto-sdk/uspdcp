@@ -13,7 +13,7 @@ extern "C"{
                                          INCLUDE FILES
 ==================================================================================================*/
 // For dma_mem library, Freescale's custom memory management mechanism
-// TODO: replace with ALU's memory management mechanism !!!!!
+// TODO: replace with external memory management mechanism !!!!!
 #include "compat.h"
 
 /*==================================================================================================
@@ -27,7 +27,7 @@ extern "C"{
  *              A value of -1 is returned if the passed virtual address
  *              doesn't map to any physical address.
  */
-// TODO: replace with ALU's memory management mechanism !!!!!
+// TODO: replace with external memory management mechanism !!!!!
 #define sec_vtop(virt_address) dma_mem_vtop(virt_address)
 
 
@@ -38,7 +38,7 @@ extern "C"{
  * @retval      Virtual address to which the passed physical address maps onto.
  *              NULL is returned if the passed physical address doesn't map to any virtual address.
  */
-// TODO: replace with ALU's memory management mechanism !!!!!
+// TODO: replace with external memory management mechanism !!!!!
 #define sec_ptov(phys_address) dma_mem_ptov(phys_address)
 
 /*==================================================================================================
