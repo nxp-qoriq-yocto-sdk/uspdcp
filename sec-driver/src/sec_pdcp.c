@@ -44,7 +44,7 @@ extern "C" {
 #include "sec_utils.h"
 
 // For definition of sec_vtop and sec_ptov macros
-#include "alu_mem_management.h"
+#include "external_mem_management.h"
 
 /*==================================================================================================
                                      LOCAL DEFINES

@@ -43,12 +43,13 @@ extern "C" {
 #include <pthread.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/select.h>
 
 #include "fsl_sec.h"
 // for dma_mem library
 #include "compat.h"
-#include "test_sec_driver_poll.h"
-#include "test_sec_driver_poll_test_vectors.h"
+#include "test_sec_driver.h"
+#include "test_sec_driver_test_vectors.h"
 
 /*==================================================================================================
                                      LOCAL CONSTANTS
@@ -74,7 +75,7 @@ extern "C" {
 #endif
 
 #define JOB_RING_POLL_UNLIMITED -1
-#define JOB_RING_POLL_LIMIT      5
+#define JOB_RING_POLL_LIMIT      10
 
 // Alignment for input/output packets allocated from DMA-memory zone
 #define BUFFER_ALIGNEMENT 32
@@ -646,34 +647,74 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
 static int get_results(uint8_t job_ring, int limit, uint32_t *packets_out)
 {
     int ret = 0;
+    uint32_t packets_retrieved = 0;
+#if SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE_POLL
+    fd_set readfds;
+    struct timeval tv;
+    int irq_count;
+#endif
 
     assert(limit != 0);
     assert(packets_out != NULL);
+    *packets_out = 0;
 
-    ret = sec_poll_job_ring(job_ring_descriptors[job_ring].job_ring_handle, limit, packets_out);
-    if(ret == SEC_PROCESSING_ERROR)
+#if SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE_POLL
+    FD_ZERO(&readfds);
+    FD_SET(job_ring_descriptors[job_ring].job_ring_irq_fd, &readfds);
+
+    tv.tv_sec = 0;
+    tv.tv_usec = 1000;
+
+    select(job_ring_descriptors[job_ring].job_ring_irq_fd + 1, &readfds, NULL, NULL, &tv);
+    if(FD_ISSET(job_ring_descriptors[job_ring].job_ring_irq_fd, &readfds))
     {
-        test_printf("sec_poll_job_ring:: Returned SEC_PROCESSING_ERROR on Job Ring %d. "
+
+        // Now read the IRQ counter
+        ret = read(job_ring_descriptors[job_ring].job_ring_irq_fd,
+                   &irq_count,
+                   4); // size of irq counter = sizeof(int)
+        test_printf("Job ring %d. SEC IRQ received, doing hw polling. irq_count[%d]",
+                    job_ring, irq_count);
+    }
+    else
+    {
+        test_printf("Job ring %d. Select timed out, no IRQ.\n", job_ring);
+        return 0;
+    }
+
+    do
+    {
+#endif
+        packets_retrieved = 0;
+        ret = sec_poll_job_ring(job_ring_descriptors[job_ring].job_ring_handle, limit, &packets_retrieved);
+        if(ret == SEC_PROCESSING_ERROR)
+        {
+            test_printf("sec_poll_job_ring:: Returned SEC_PROCESSING_ERROR on Job Ring %d. "
                     "Need to call sec_release() ! \n", job_ring);
-        assert(ret != SEC_PROCESSING_ERROR);
-    }
-    if (ret != SEC_SUCCESS)
-    {
-        if(ret == SEC_PACKET_PROCESSING_ERROR)
+            assert(ret != SEC_PROCESSING_ERROR);
+        }
+        if (ret != SEC_SUCCESS)
         {
-            test_printf("sec_poll_job_ring::Error %d when polling for SEC results on Job Ring %d.\n"
+            if(ret == SEC_PACKET_PROCESSING_ERROR)
+            {
+                test_printf("sec_poll_job_ring::Error %d when polling for SEC results on Job Ring %d.\n"
                         "Job ring restarted and can be used normally again.\n", ret, job_ring);
+            }
+            else
+            {
+                test_printf("sec_poll_job_ring::Error %d when polling for SEC results on Job Ring %d \n", ret, job_ring);
+                return 1;
+            }
         }
-        else
-        {
-            test_printf("sec_poll_job_ring::Error %d when polling for SEC results on Job Ring %d \n", ret, job_ring);
-            return 1;
-        }
-    }
+        test_printf("Job ring %d. Retrieved %d packets\n", job_ring, packets_retrieved);
+        *packets_out += packets_retrieved;
 
-    // validate that number of packets notified does not exceed limit when limit is > 0.
-    assert(!((limit > 0) && (*packets_out > limit)));
+        // validate that number of packets notified does not exceed limit when limit is > 0.
+        assert(!((limit > 0) && (packets_retrieved > limit)));
 
+#if SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE_POLL
+    }while((limit > 0) && (packets_retrieved == limit));
+#endif
     return 0;
 }
 
@@ -937,6 +978,8 @@ static void* pdcp_thread_routine(void* config)
     thread_config_t *th_config_local = NULL;
     int ret = 0;
     unsigned int packets_received = 0;
+    unsigned int total_packets_received = 0;
+    unsigned int total_packets_sent = 0;
     pdcp_context_t *pdcp_context;
     int total_no_of_contexts_deleted = 0;
     int no_of_contexts_deleted = 0;
@@ -1040,15 +1083,17 @@ static void* pdcp_thread_routine(void* config)
             {
                 do
                 {
+                    packets_received = 0;
                     // poll for responses
                     ret = get_results(th_config_local->consumer_job_ring_id,
                             JOB_RING_POLL_LIMIT,
                             &packets_received);
+                    total_packets_received += packets_received;
                     usleep(10);
                 }while(packets_received != 0);
             }
 
-            printf("thread #%d:Now waiting on barrier\n", th_config_local->tid);
+            test_printf("thread #%d:Now waiting on barrier\n", th_config_local->tid);
             ret = pthread_barrier_wait(&th_barrier);
             if(ret != 0 && ret != PTHREAD_BARRIER_SERIAL_THREAD)
             {
@@ -1082,11 +1127,14 @@ static void* pdcp_thread_routine(void* config)
 
                 if(ret == SEC_JR_IS_FULL || ret == SEC_JOB_RING_RESET_IN_PROGRESS)
                 {
+                    packets_received = 0;
                     // wait while the producer JR is empty, and in the mean time do some
-                    // polling on the consumer JR -> retrieve only 5 notifications if available
+                    // polling on the consumer JR -> retrieve only #JOB_RING_POLL_LIMIT
+                    // notifications if available.
                     ret = get_results(th_config_local->consumer_job_ring_id,
                             JOB_RING_POLL_LIMIT,
                             &packets_received);
+                    total_packets_received += packets_received;
                     //assert(ret == 0);
 
                     usleep(10);
@@ -1101,6 +1149,7 @@ static void* pdcp_thread_routine(void* config)
                     break;
                 }
             }while(1);
+            total_packets_sent++;
         }
 
 
@@ -1130,6 +1179,7 @@ static void* pdcp_thread_routine(void* config)
         		          JOB_RING_POLL_UNLIMITED,
         		          &packets_received);
         assert(ret == 0);
+        total_packets_received += packets_received;
 
         // try to delete the contexts with packets in flight
         ret = delete_contexts(th_config_local->pdcp_contexts,
@@ -1154,9 +1204,11 @@ static void* pdcp_thread_routine(void* config)
         		          JOB_RING_POLL_UNLIMITED,
         		          &packets_received);
         assert(ret == 0);
+        total_packets_received += packets_received;
     }
 
-    test_printf("thread #%d: exit\n", th_config_local->tid);
+    printf("thread #%d: Received %d packets. Sent %d packets. Exit\n",
+           th_config_local->tid, total_packets_received, total_packets_sent);
     pthread_exit(NULL);
 }
 
@@ -1165,6 +1217,16 @@ static int setup_sec_environment(void)
     int i = 0;
     int ret = 0;
     time_t seconds;
+
+    printf("\nTesting scenario: %s\n", PDCP_TEST_SCENARIO_NAME);
+
+#if SEC_NOTIFICATION_TYPE == SEC_NOTIFICATION_TYPE_POLL
+    printf("SEC user-space driver working mode: SEC_NOTIFICATION_TYPE_POLL\n\n");
+#elif SEC_NOTIFICATION_TYPE == SEC_NOTIFICATION_TYPE_IRQ
+    printf("SEC user-space driver working mode: SEC_NOTIFICATION_TYPE_IRQ\n\n");
+#elif SEC_NOTIFICATION_TYPE == SEC_NOTIFICATION_TYPE_NAPI
+    printf("SEC user-space driver working mode: SEC_NOTIFICATION_TYPE_NAPI\n\n");
+#endif
 
     /* Get value from system clock and use it for seed generation  */
     time(&seconds);
@@ -1246,7 +1308,8 @@ static int setup_sec_environment(void)
     assert(sec_config_data.memory_area != NULL);
 
     // Fill SEC driver configuration data
-    sec_config_data.work_mode = SEC_STARTUP_POLLING_MODE;
+//    sec_config_data.work_mode = SEC_STARTUP_POLLING_MODE;
+    sec_config_data.work_mode = SEC_STARTUP_INTERRUPT_MODE;
 #ifdef SEC_HW_VERSION_4_4
     sec_config_data.irq_coalescing_count = IRQ_COALESCING_COUNT;
     sec_config_data.irq_coalescing_timer = IRQ_COALESCING_TIMER;
@@ -1314,7 +1377,6 @@ int main(void)
 {
     int ret = 0;
 
-    printf("Testing scenario: %s\n", PDCP_TEST_SCENARIO_NAME);
 
     /////////////////////////////////////////////////////////////////////
     // 1. Initialize SEC environment

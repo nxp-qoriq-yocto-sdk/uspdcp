@@ -30,8 +30,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TEST_POLL
-#define TEST_POLL
+#ifndef TEST_SEC_DRIVER
+#define TEST_SEC_DRIVER
 
 /*==============================================================================
                                 INCLUDE FILES
@@ -188,4 +188,4 @@
 /*============================================================================*/
 
 
-#endif  /* TEST_POLL */
+#endif  /* TEST_SEC_DRIVER */

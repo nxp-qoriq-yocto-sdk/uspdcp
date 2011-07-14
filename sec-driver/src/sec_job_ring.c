@@ -43,7 +43,7 @@ extern "C" {
 #include "sec_config.h"
 
 // For definition of sec_vtop and sec_ptov macros
-#include "alu_mem_management.h"
+#include "external_mem_management.h"
 
 /*==================================================================================================
                                      LOCAL DEFINES
@@ -232,6 +232,7 @@ void uio_job_ring_enable_irqs(sec_job_ring_t *job_ring)
     // SEC kernel driver enable DONE and Error IRQs for this job ring,
     // at Controller level.
     ret = sec_uio_send_command(job_ring, SEC_UIO_ENABLE_IRQ_CMD);
+    SEC_DEBUG("Jr[%p]. Enabled IRQs on jr id %d\n", job_ring, job_ring->jr_id);
     SEC_ASSERT_RET_VOID(ret == sizeof(int),
                         "Failed to request SEC engine to enable job done and "
                         "error IRQs through UIO control. Job ring id %d. Reset SEC driver!",

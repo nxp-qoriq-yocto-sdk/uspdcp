@@ -30,13 +30,13 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TEST_POLL_TEST_VECTORS
-#define TEST_POLL_TEST_VECTORS
+#ifndef TEST_SEC_DRIVER_TEST_VECTORS
+#define TEST_SEC_DRIVER_TEST_VECTORS
 
 /*==============================================================================
                                 INCLUDE FILES
 ==============================================================================*/
-#include "test_sec_driver_poll.h"
+#include "test_sec_driver.h"
 
 /*==============================================================================
                               DEFINES AND MACROS
@@ -1323,4 +1323,4 @@ static uint32_t snow_f8_aes_cmac_dec_hfn_threshold = 0xFF00000;
 /*============================================================================*/
 
 
-#endif  /* TEST_POLL_TEST_VECTORS */
+#endif  /* TEST_SEC_DRIVER_TEST_VECTORS */

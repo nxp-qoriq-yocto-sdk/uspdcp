@@ -175,11 +175,13 @@ int hw_reset_job_ring(sec_job_ring_t *job_ring)
 
     // Disable Integrity check error interrupt in STEU, the execution
     // unit that performs SNOW F9.
+    // The driver will poll for descriptor status and read ICV failure if any.
     reg_val = SEC_REG_STEU_IMR_DISABLE_ICE; 
     setbits32(job_ring->register_base_addr + SEC_REG_STEU_IMR_LO, reg_val);
 
     // Disable Integrity check error interrupt in AESU, the execution
     // unit that performs AES CMAC.
+    // The driver will poll for descriptor status and read ICV failure if any.
     reg_val = SEC_REG_AESU_IMR_DISABLE_ICE;
     setbits32(job_ring->register_base_addr + SEC_REG_AESU_IMR_LO, reg_val);
 
