@@ -344,10 +344,32 @@ int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
             return SEC_INVALID_INPUT_PARAM;
         }
 
-        kernel_usr_channel_map = *prop;        
-        usr_channel_map = ~kernel_usr_channel_map;
-      
-#endif // SEC_HW_VERSION_3_1
+        kernel_usr_channel_map = *prop;
+#elif defined(SEC_HW_VERSION_4_4) // SEC_HW_VERSION_3_1
+    // Get device node for SEC 4.4
+	for_each_compatible_node(dpa_node, NULL, "fsl,p4080-sec4.0")
+    {
+		struct device_node *child_node = NULL;
+		// If device is disabled from DTS, skip
+        if(of_device_is_available(dpa_node) == false)
+        {
+            continue;
+        }
+
+		for_each_compatible_node(child_node, NULL, "fsl,p4080-sec4.0-job-ring")
+		{
+			prop = of_get_property(child_node,"kernel-user-space-flag",&len);
+			if( prop == NULL )
+			{
+				SEC_ERROR("Error reading kernel-user-space-flag property from DTS!");
+				return SEC_INVALID_INPUT_PARAM;
+			}
+
+			kernel_usr_channel_map |= (*prop) << jr_idx++;
+		}
+#endif // SEC_HW_VERSION_4_4
+		// bit mask format is common b/w architectures
+		usr_channel_map = ~kernel_usr_channel_map;
 
         // Calculate the number of available job rings for user space usage.
         config_jr_no = SEC_NUMBER_JOB_RINGS(usr_channel_map);
@@ -375,13 +397,14 @@ int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
             {
                 SEC_INFO("Using Job Ring number %d", jr_idx);
                 job_rings[jr_no].jr_id = jr_idx;
-
+#ifdef SEC_HW_VERSION_3_1
                 // remember if the registers for this job ring are mapped in an alternate 4k page
                 if(channel_remap & JOB_RING_MASK(jr_idx))
                 {
                     job_rings[jr_no].alternate_register_range = TRUE;
                 }
                 else
+#endif // SEC_HW_VERSION_3_1
                 {
                     job_rings[jr_no].alternate_register_range = FALSE;
                 }
@@ -395,6 +418,12 @@ int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
             jr_idx++;
 
         }while(jr_idx < MAX_SEC_JOB_RINGS);
+#ifdef SEC_HW_VERSION_4_4
+#warning Due to a ahem, problem in of library, you can't have nested \
+for_each_compatible_node calls. Till this is fixed, the break \
+will remain here.
+		break;
+#endif 
     }
     return SEC_SUCCESS; 
 }

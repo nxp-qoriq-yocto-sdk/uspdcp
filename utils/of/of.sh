@@ -52,7 +52,7 @@ of_find_compatible_node()
 # $2 - compatible
 of_find_compatible_nodes()
 {
-	for c in $(fgrep -l $2 $(find $DT$1 -name compatible))
+	for c in $(fgrep -l $2 $(find $DT$1 -name compatible | sort))
 	do
 		dirname $c
 	done | cut -b 18-

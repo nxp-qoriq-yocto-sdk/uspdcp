@@ -272,19 +272,24 @@ uint64_t of_translate_address(struct device_node *dev_node, const uint32_t *addr
 
 struct device_node *of_find_compatible_node(const struct device_node	*from,
 					    const char	*type __always_unused,
-					    const char	*compatible)
+					    const char	*compatible,
+                        uint8_t     reset)
 {
     int			 _err, __err;
     char			 command[PATH_MAX], *full_name;
     FILE			*of_sh;
     struct device_node	*dev_node;
-    static uint8_t		 node = 1;
+    static uint8_t	    node;
 
     assert(compatible != NULL);
 
     if (from == NULL)
         from = &root;
 
+    if(reset == 1)
+    {
+        node = 1;
+    }
     snprintf(command, sizeof(command), "of.sh %s \"%s\" \"%s\" %hhu",
             __func__, from->full_name, compatible, node++);
 

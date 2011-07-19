@@ -239,7 +239,7 @@ extern "C"{
  *
  * The messages are logged at stdout.
  */
-#define SEC_DRIVER_LOGGING OFF
+#define SEC_DRIVER_LOGGING ON
 
 /** Configure logging level at compile time.
  * Valid values:

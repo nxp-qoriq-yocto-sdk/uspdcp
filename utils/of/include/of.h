@@ -61,9 +61,9 @@ extern "C"{
 #define __always_unused	__attribute__((unused))
 
 #define for_each_compatible_node(dev_node, type, compatible)			\
-    for (dev_node = of_find_compatible_node(NULL, type, compatible);	\
+    for (dev_node = of_find_compatible_node(NULL, type, compatible, 1);	\
             dev_node != NULL;							\
-            dev_node = of_find_compatible_node(NULL, type, compatible))
+            dev_node = of_find_compatible_node(NULL, type, compatible, 0))
 
 /*==================================================================================================
                                              ENUMS
@@ -112,7 +112,8 @@ uint64_t of_translate_address(struct device_node *dev_node, const uint32_t *addr
 
 struct device_node *of_find_compatible_node(const struct device_node	*from,
         const char			*type,
-        const char			*compatible) __attribute__((nonnull(3)));
+        const char			*compatible,
+        uint8_t             reset) __attribute__((nonnull(3)));
 
 
 struct device_node *of_find_node_by_phandle(phandle ph);

@@ -701,7 +701,7 @@ static int sec_process_pdcp_c_plane_packets(sec_job_ring_t *job_ring)
         // increment the consumer index for the current job ring
         c_plane_fifo->cidx = FIFO_CIRCULAR_COUNTER(c_plane_fifo->cidx, FIFO_CAPACITY);
 
-        SEC_DEBUG("Jr[%p] pi[%d] ci[%d].Sent c-plane packets to SEC second time."
+        SEC_DEBUG("Jr[%p] pi[%d] ci[%d].Sent c-plane packets to SEC second time.",
                   job_ring, job_ring->pidx, job_ring->cidx);
     }
 
@@ -712,7 +712,7 @@ static void sec_handle_mac_i_generation(sec_job_t *job,
                                         sec_context_t *sec_context,
                                         uint32_t *out_mac_i)
 {
-    SEC_DEBUG("SEC context[%p] in pkt[%p] out pkt[%p]."
+    SEC_DEBUG("SEC context[%p] in pkt[%p] out pkt[%p].",
               "Internal raw generated MAC-I: [0x%x,0x%x]",
               sec_context, job->in_packet, job->out_packet,
               *((uint32_t*)(job->mac_i->code)),
@@ -734,7 +734,7 @@ static void sec_handle_mac_i_generation(sec_job_t *job,
         *out_mac_i = *((uint32_t*)(job->mac_i->code));
     }
 
-    SEC_DEBUG("SEC context[%p] in pkt[%p] out pkt[%p]."
+    SEC_DEBUG("SEC context[%p] in pkt[%p] out pkt[%p].",
               "Generated MAC-I = 0x%x",
               sec_context, job->in_packet,
               job->out_packet, *out_mac_i);
@@ -836,11 +836,11 @@ static void sec_handle_c_plane_packet(sec_job_ring_t *job_ring,
         {
             // integrity algorithm: validate MAC-I
             mac_i_check_failed = sec_handle_mac_i_validation(job, sec_context);
-            SEC_DEBUG("SEC context[%p] in pkt[%p] out pkt[%p]."
+            SEC_DEBUG("SEC context[%p] in pkt[%p] out pkt[%p].",
                       "job[%p].Generated MAC-I = [0x%x,0x%x]",
                       sec_context, job->in_packet, job->out_packet, job,
                       *((uint32_t*)(job->mac_i->code)),
-                      *((uint32_t*)(job->mac_i->code + 4)),
+                      *((uint32_t*)(job->mac_i->code + 4))
                     );
 
             // Check if MAC-I validation failed
@@ -1506,7 +1506,7 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
     if(SEC_JOB_RING_IS_FULL(job_ring->pidx, job_ring->cidx,
                             SEC_JOB_RING_SIZE, SEC_JOB_RING_HW_SIZE + 1))
     {
-        SEC_DEBUG("Jr[%p] pi[%d] ci[%d].Job Ring is full."
+        SEC_DEBUG("Jr[%p] pi[%d] ci[%d].Job Ring is full.",
                   job_ring, job_ring->pidx, job_ring->cidx);
         return SEC_JR_IS_FULL;
     }
