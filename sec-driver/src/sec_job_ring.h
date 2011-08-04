@@ -81,15 +81,26 @@ struct sec_job_t
     const sec_packet_t *in_packet;      /*< Input packet */
     const sec_packet_t *out_packet;     /*< Output packet */
     ua_context_handle_t ua_handle;      /*< UA handle for the context this packet belongs to */
+#ifdef SEC_HW_VERSION_3_1
     sec_mac_i_t *mac_i;                 /*< SEC 3.1 generates only 8 bytes MAC-I. SEC generates here the MAC-I.
                                             Later the driver will copy it to packet, as necessary. */
+#endif
     sec_status_t job_status;            /*< Processing status for the packet indicated by this job.
                                             Is required for indication that HFN reached threshold.
                                             TODO: remove this field when migrating on 9132!*/
     volatile uint8_t is_integrity_algo; /*< Is set to value #TRUE for jobs with integrity algorithm configured.
                                             Set to #FALSE for crypto algorithm. */
+#if SEC_HW_VERSION_4_4
+    uint32_t    *out_status;
+#endif // SEC_HW_VERSION_4_4
 }__CACHELINE_ALIGNED;
 
+#if SEC_HW_VERSION_4_4
+struct sec_outring_entry {
+    struct sec_descriptor_t *descr;     /*< Pointer to completed descriptor */
+    uint32_t    status;                 /*< Status for completed descriptor */
+};
+#endif // SEC_HW_VERSION_4_4
 /** Lists the possible states for a job ring. */
 typedef enum sec_job_ring_state_e
 {
@@ -106,25 +117,38 @@ struct sec_job_ring_t
                                                    they lay on different cachelines, to avoid false 
                                                    sharing between threads when the threads run on different cores! */
     struct sec_job_t jobs[SEC_JOB_RING_SIZE];  /*< Ring of jobs. The same ring is used for
-                                                   input jobs and output jobs because SEC engine writes 
+                                                   input jobs and output jobs for SEC 3.1 because SEC engine writes
                                                    back output indication in input job.
                                                    Size of array is power of 2 to allow fast update of
-                                                   producer/consumer indexes with bitwise operations. */
+                                                   producer/consumer indexes with bitwise operations.
+                                                   For SEC 4.1, it represents the input jobs */
     struct sec_descriptor_t *descriptors;      /*< Ring of descriptors sent to SEC engine for processing */
-    struct fifo_t pdcp_c_plane_fifo;           /*< Ring of PDCP control plane packets that must be sent 
+#ifdef SEC_HW_VERSION_3_1
+    struct fifo_t pdcp_c_plane_fifo;           /*< Ring of PDCP control plane packets that must be sent
                                                    a second time to SEC for processing */
+#endif
+    volatile uint32_t pidx;                    /*< Producer index for job ring (jobs array) */
+#ifdef SEC_HW_VERSION_4_4
+    dma_addr_t *input_ring;                        /*< Ring of output descriptors received from SEC.
+                                                   Size of array is power of 2 to allow fast update of
+                                                   producer/consumer indexes with bitwise operations. */
 
-    volatile uint32_t pidx;                 /*< Producer index for job ring (jobs array) */
+    struct sec_outring_entry *output_ring;       /*< Ring of output descriptors received from SEC.
+                                                   Size of array is power of 2 to allow fast update of
+                                                   producer/consumer indexes with bitwise operations. */
+#endif // SEC_HW_VERSION_4_4
     uint32_t uio_fd;                        /*< The file descriptor used for polling from user space
                                                 for interrupts notifications */
     uint32_t jr_id;                         /*< Job ring id */
+#ifdef SEC_HW_VERSION_3_1
     uint32_t alternate_register_range;      /*< Can be #TRUE or #FALSE. Indicates if the registers for 
                                                 this job ring are mapped to an alternate 4k page.*/
+#endif // SEC_HW_VERSION_3_1
     volatile void *register_base_addr;      /*< Base address for SEC's register memory for this job ring.
                                                 @note On SEC 3.1 all channels share the same register address space,
                                                       so this member will have the exact same value for all of them. */
     volatile sec_job_ring_state_t jr_state; /*< The state of this job ring */
-	sec_contexts_pool_t ctx_pool;           /*< Pool of SEC contexts */
+    sec_contexts_pool_t ctx_pool;           /*< Pool of SEC contexts */
 }__CACHELINE_ALIGNED;
 /*==============================================================================
                                  CONSTANTS

@@ -167,6 +167,7 @@ struct sec_context_t
     /** Function used to update an authentication descriptor for a packet
      * belonging to this context. */
     sec_update_descriptor update_auth_descriptor;
+#ifdef SEC_HW_VERSION_3_1
     /** Flag set to #TRUE if this context is configured with NULL crypto (PDCP data plane context) or
      *  with NULL crypto + NULL authentication (PDCP control plane context). Set to #FALSE otherwise.
      */
@@ -174,6 +175,12 @@ struct sec_context_t
     /** Is set to value #TRUE for packets that must be sent to SEC twice
      * (control-plane packets) and value #FALSE otherwise. */
     uint8_t double_pass;
+#endif
+#ifdef SEC_HW_VERSION_4_4
+    /** Shared descriptor used for this context */
+    uint32_t    *sh_desc;
+    sec_update_descriptor update_descriptor;
+#endif
     /** Validation pattern at end of structure. */
     uint32_t end_pattern;
 }__CACHELINE_ALIGNED;

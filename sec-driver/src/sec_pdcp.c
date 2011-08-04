@@ -49,6 +49,7 @@ extern "C" {
 /*==================================================================================================
                                      LOCAL DEFINES
 ==================================================================================================*/
+#ifdef SEC_HW_VERSION_3_1
 /** First word of Descriptor Header that configure SEC 3.1 for SNOW F8 encryption */
 #define SEC_PDCP_SNOW_F8_ENC_DESCRIPTOR_HEADER_HI   (SEC_DESC_HDR_EU_SEL0_STEU | SEC_DESC_HDR_MODE0_STEU_F8  | \
                                                      SEC_DESC_HDR_DESC_TYPE_STEU | SEC_DESC_HDR_DIR_OUTBOUND | \
@@ -89,7 +90,9 @@ extern "C" {
 #define SEC_PDCP_AES_CMAC_DEC_DESCRIPTOR_HEADER_HI (SEC_DESC_HDR_EU_SEL0_AESU | SEC_DESC_HDR_MODE0_AESU_CMAC | \
                                                     SEC_DESC_HDR_DESC_TYPE_AESU | SEC_DESC_HDR_DIR_INBOUND | \
                                                     SEC_DESC_HDR_DONE_NOTIFY)
-
+#else
+#define SEC_JR_HEADER
+#endif
 /** Length in bytes of IV(Initialization Vector) for SNOW F8.
  * Same length is used for IV(Initialization Vector actually representing ICV = Initial Counter Value)
  * in case of AES CTR(encrypt/decrypt).
@@ -429,6 +432,7 @@ static int sec_pdcp_create_snow_f8_aes_ctr_descriptor(sec_context_t *ctx)
     return SEC_SUCCESS;
 }
 
+#ifdef SEC_HW_VERSION_3_1
 static int sec_pdcp_create_snow_f9_descriptor(sec_context_t *ctx)
 {
     sec_crypto_pdb_t *sec_pdb = &ctx->crypto_desc_pdb;
@@ -464,6 +468,17 @@ static int sec_pdcp_create_snow_f9_descriptor(sec_context_t *ctx)
 
     return SEC_SUCCESS;
 }
+#else
+static int sec_pdcp_create_snow_f9_descriptor(sec_context_t *ctx)
+{
+    sec_crypto_pdb_t *sec_pdb = &ctx->crypto_desc_pdb;
+
+    ASSERT(ctx->pdcp_crypto_info->integrity_key != NULL);
+    ASSERT(ctx->pdcp_crypto_info->sn_size == SEC_PDCP_SN_SIZE_5);
+
+    return SEC_SUCCESS;
+}
+#endif
 
 static int sec_pdcp_create_aes_cmac_descriptor(sec_context_t *ctx)
 {
@@ -520,13 +535,19 @@ static int sec_pdcp_context_create_snow_cipher_descriptor(sec_context_t *ctx)
     if (ctx->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION)
     {
         SEC_INFO("Creating SNOW F8 Encapsulation descriptor");
+#ifdef SEC_HW_VERSION_3_1
         ctx->crypto_desc_pdb.crypto_hdr = SEC_PDCP_SNOW_F8_ENC_DESCRIPTOR_HEADER_HI;
+#else
+#endif
     }
     else
     {
         SEC_INFO("Creating SNOW F8 Decapsulation descriptor");
+#ifdef SEC_HW_VERSION_3_1
         // Create descriptor for decrypt
         ctx->crypto_desc_pdb.crypto_hdr = SEC_PDCP_SNOW_F8_DEC_DESCRIPTOR_HEADER_HI;
+#else
+#endif
     }
     return SEC_SUCCESS;
 }
@@ -551,13 +572,19 @@ static int sec_pdcp_context_create_aes_cipher_descriptor(sec_context_t *ctx)
     if (ctx->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION)
     {
         SEC_INFO("Creating AES CTR Encapsulation descriptor");
+#ifdef SEC_HW_VERSION_3_1
         ctx->crypto_desc_pdb.crypto_hdr = SEC_PDCP_AES_CTR_ENC_DESCRIPTOR_HEADER_HI;
+#else
+#endif
     }
     else
     {
         SEC_INFO("Creating AES CTR Decapsulation descriptor");
+#ifdef SEC_HW_VERSION_3_1
         // Create descriptor for decrypt
         ctx->crypto_desc_pdb.crypto_hdr = SEC_PDCP_AES_CTR_DEC_DESCRIPTOR_HEADER_HI;
+#else
+#endif
     }
     return SEC_SUCCESS;
 }
@@ -570,6 +597,8 @@ static int sec_pdcp_context_create_null_cipher_descriptor(sec_context_t *ctx)
 
     return SEC_SUCCESS;
 }
+
+
 static int sec_pdcp_context_create_snow_auth_descriptor(sec_context_t *ctx)
 {
     int ret = SEC_SUCCESS;
@@ -588,13 +617,19 @@ static int sec_pdcp_context_create_snow_auth_descriptor(sec_context_t *ctx)
     if (ctx->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION)
     {
         SEC_INFO("Creating SNOW F9 Encapsulation descriptor");
+#ifdef SEC_HW_VERSION_3_1
         ctx->crypto_desc_pdb.auth_hdr = SEC_PDCP_SNOW_F9_ENC_DESCRIPTOR_HEADER_HI;
+#else
+#endif
     }
     else
     {
         SEC_INFO("Creating SNOW F9 Decapsulation descriptor");
+#ifdef SEC_HW_VERSION_3_1
         // Create descriptor for decrypt
         ctx->crypto_desc_pdb.auth_hdr = SEC_PDCP_SNOW_F9_DEC_DESCRIPTOR_HEADER_HI;
+#else
+#endif
     }
     return SEC_SUCCESS;
 }
@@ -617,13 +652,19 @@ static int sec_pdcp_context_create_aes_auth_descriptor(sec_context_t *ctx)
     if (ctx->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION)
     {
         SEC_INFO("Creating AES CMAC Encapsulation descriptor");
+#ifdef SEC_HW_VERSION_3_1
         ctx->crypto_desc_pdb.auth_hdr = SEC_PDCP_AES_CMAC_ENC_DESCRIPTOR_HEADER_HI;
+#else
+#endif
     }
     else
     {
         SEC_INFO("Creating AES CMAC Decapsulation descriptor");
         // Create descriptor for decrypt
+#ifdef SEC_HW_VERSION_3_1
         ctx->crypto_desc_pdb.auth_hdr = SEC_PDCP_AES_CMAC_DEC_DESCRIPTOR_HEADER_HI;
+#else
+#endif
     }
 
     return SEC_SUCCESS;
@@ -678,7 +719,7 @@ static int sec_pdcp_context_create_descriptor(sec_context_t *ctx)
     }
     return ret;
 }
-
+#ifdef SEC_HW_VERSION_3_1
 static int sec_pdcp_context_update_snow_f8_aes_ctr_descriptor(sec_job_t *job, sec_descriptor_t *descriptor)
 {
     int ret = SEC_SUCCESS;
@@ -816,7 +857,15 @@ static int sec_pdcp_context_update_snow_f8_aes_ctr_descriptor(sec_job_t *job, se
 
     return ret;
 }
+#else
+static int sec_pdcp_context_update_snow_f8_aes_ctr_descriptor(sec_job_t *job, sec_descriptor_t *descriptor)
+{
+    int ret = SEC_SUCCESS;
+    return ret;
+}
+#endif
 
+#ifdef SEC_HW_VERSION_3_1
 static int sec_pdcp_context_update_snow_f9_descriptor(sec_job_t *job, sec_descriptor_t *descriptor)
 {
     int ret = SEC_SUCCESS;
@@ -999,7 +1048,19 @@ static int sec_pdcp_context_update_snow_f9_descriptor(sec_job_t *job, sec_descri
     }
     return ret;
 }
+#else
+#warning "Function does nothing"
+static int sec_pdcp_context_update_snow_f9_descriptor(sec_job_t *job, sec_descriptor_t *descriptor)
+{
+    int ret = SEC_SUCCESS;
+    sec_crypto_pdb_t *sec_pdb = &job->sec_context->crypto_desc_pdb;
+    const sec_pdcp_context_info_t *ua_crypto_info = job->sec_context->pdcp_crypto_info;
+    dma_addr_t phys_addr = 0;
 
+    return ret;
+}
+#endif
+#ifdef SEC_HW_VERSION_3_1
 static int sec_pdcp_context_update_aes_cmac_descriptor(sec_job_t *job, sec_descriptor_t *descriptor)
 {
     int ret = SEC_SUCCESS;
@@ -1139,7 +1200,18 @@ static int sec_pdcp_context_update_aes_cmac_descriptor(sec_job_t *job, sec_descr
 
     return ret;
 }
+#else
+#warning "Function does nothing..."
+static int sec_pdcp_context_update_aes_cmac_descriptor(sec_job_t *job, sec_descriptor_t *descriptor)
+{
+    int ret = SEC_SUCCESS;
+    sec_crypto_pdb_t *sec_pdb = &job->sec_context->crypto_desc_pdb;
+    const sec_pdcp_context_info_t *ua_crypto_info = job->sec_context->pdcp_crypto_info;
+    dma_addr_t phys_addr = 0;
 
+    return ret;
+}
+#endif
 static int sec_pdcp_context_update_null_auth_descriptor(sec_job_t *job, sec_descriptor_t *descriptor)
 {
     return SEC_SUCCESS;
@@ -1258,7 +1330,7 @@ int sec_pdcp_context_update_descriptor(sec_context_t *ctx,
     // SNOW F8/F9 or AES CTR/CMAC
     ret = do_integrity_check == 1 ? ctx->update_auth_descriptor(job, descriptor):
                                     ctx->update_crypto_descriptor(job, descriptor);
-    //SEC_INFO("Update crypto descriptor return code = %d", ret);
+    SEC_INFO("Update crypto descriptor return code = %d", ret);
 
     return ret;
 }

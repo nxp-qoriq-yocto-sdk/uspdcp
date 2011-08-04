@@ -244,7 +244,7 @@ static void hw_flush_job_ring(sec_job_ring_t *job_ring,
  * WITHOUT beeing notified to UA.
  */
 static void flush_job_rings();
-
+#ifdef SEC_HW_VERSION_3_1
 /** @brief Checks if there are any PDCP control-plane packets waiting
  * to be processed, on a certain job ring.
  * PDCP control-plane packets may require a two step processing:
@@ -320,7 +320,7 @@ static void sec_buffer_c_plane_packet(sec_job_ring_t *job_ring,
  * @retval other for error
  */
 static int sec_process_packet_with_null_algo(sec_job_t *job);
-
+#endif // SEC_HW_VERSION_3_1
 /** @brief Handle packet that generated error in SEC engine.
  * Identify the exact type of error and handle the error.
  * Depending on the error type, the job ring could be reset.
@@ -510,10 +510,18 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
         job = &job_ring->jobs[job_ring->cidx];
 
         // check if job is DONE
+#if SEC_HW_VERSION_4_4
+        if(!hw_job_is_done(job))
+#else
         if(!hw_job_is_done(job->descr))
+#endif
         {
             // check if any job generated error, not only this job.
+#if SEC_HW_VERSION_3_1
             sec_error_code = hw_job_ring_error(job_ring);
+#else
+            sec_error_code = hw_job_error(job);
+#endif
             if (sec_error_code)
             {
                 // Set errno value to the error code returned by SEC engine.
@@ -533,9 +541,12 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
             }
             else
             {
+#warning "Do something for SEC 4.4"
+#ifdef SEC_HW_VERSION_3_1
                 // Packet is not processed yet, exit
                 SEC_DEBUG("Jr[%p]. packet not done, exit. job descr hdr = 0x%x \n",
                           job_ring, job->descr->hdr);
+#endif
                 break;
             }
         }
@@ -544,7 +555,7 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
         // before the packet is sent to SEC.
         status = job->job_status;
         sec_context = job->sec_context;
-
+#ifdef SEC_HW_VERSION_3_1
         // Packet processing is DONE. See if it's a data-plane or control-plane packet
         if(sec_context->pdcp_crypto_info->user_plane == PDCP_CONTROL_PLANE)
         {
@@ -562,7 +573,7 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
                 continue;
             }
         }
-
+#endif
         // copy into a temporary job the fields from the job we need to raise callback
         // this is done to free the slot before the callback is called,
         // which we cannot control in terms of how much processing it will do.
@@ -573,6 +584,9 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
         // now increment the consumer index for the current job ring,
         // AFTER saving job in temporary location!
         job_ring->cidx = SEC_CIRCULAR_COUNTER(job_ring->cidx, SEC_JOB_RING_SIZE);
+#if SEC_HW_VERSION_4_4
+        JR_HW_REMOVE_ONE_ENTRY(job_ring);
+#endif
 
         // If context is retiring, set a suggestive status for the packets notified to UA.
         // Doesn't matter if the status is overwritten here, if UA deleted the context,
@@ -632,7 +646,7 @@ static void flush_job_rings()
         }
     }
 }
-
+#ifdef SEC_HW_VERSION_3_1
 static int sec_process_pdcp_c_plane_packets(sec_job_ring_t *job_ring)
 {
     int ret = SEC_SUCCESS;
@@ -926,6 +940,7 @@ static int sec_process_packet_with_null_algo(sec_job_t *job)
     job->descr->hdr |=  SEC_DESC_HDR_DONE;
     return SEC_SUCCESS;
 }
+#endif // SEC_HW_VERSION_3_1
 
 static void sec_handle_packet_error(sec_job_ring_t *job_ring,
                                     uint32_t sec_error_code,
@@ -944,8 +959,11 @@ static void sec_handle_packet_error(sec_job_ring_t *job_ring,
 
     // Analyze the SEC error on this job ring
     // and see if a job ring reset is required.
+#ifdef SEC_HW_VERSION_3_1
     hw_handle_job_ring_error(job_ring, sec_error_code, &reset_cont_job_ring);
-
+#else
+    hw_handle_job_ring_error(sec_error_code, &reset_cont_job_ring);
+#endif
     // Flush the channel no matter the error type.
     // Notify all submitted jobs to UA, setting corresponding error cause
     hw_flush_job_ring(job_ring,
@@ -1241,7 +1259,7 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
         free_or_retire_context(ctx->pool, ctx);
         return SEC_INVALID_INPUT_PARAM;
     }
-
+#ifdef SEC_HW_VERSION_3_1
     // On SEC 3.1 all packets belonging to PDCP control-plane conetxts that have configured both
     // integrity check and confidentiality algorithms will be double-passed through SEC engine.
     ctx->double_pass = (ctx->pdcp_crypto_info->user_plane == PDCP_CONTROL_PLANE) &&
@@ -1260,7 +1278,7 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
         SEC_DEBUG("Jr[%p].Context %p user plane = %d configured with NULL algorithm",
                   job_ring, ctx, ctx->pdcp_crypto_info->user_plane);
     }
-
+#endif
     // provide to UA a SEC ctx handle
 	*sec_ctx_handle = (sec_context_handle_t)ctx;
     return SEC_SUCCESS;
@@ -1495,13 +1513,13 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
                SEC_JOB_RING_RESET_IN_PROGRESS,
                "Job ring with id %d is currently resetting. "
                "Can use it again after reset is over(when sec_poll function/s return)", job_ring->jr_id);
-
+#ifdef SEC_HW_VERSION_3_1
     // Check control-plane internal queue for packets that need be sent to SEC
     // for second processing step.
     ret = sec_process_pdcp_c_plane_packets(job_ring);
     SEC_ASSERT_CONT(ret == SEC_SUCCESS,
                     "sec_process_pdcp_c_plane_packets returned error code %d", ret);
-
+#endif
     // check if the Job Ring is full
     if(SEC_JOB_RING_IS_FULL(job_ring->pidx, job_ring->cidx,
                             SEC_JOB_RING_SIZE, SEC_JOB_RING_HW_SIZE + 1))
@@ -1523,15 +1541,21 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
 
     job->sec_context = sec_context;
     job->ua_handle = ua_ctx_handle;
-
+#ifdef SEC_HW_VERSION_3_1
     job->is_integrity_algo = (sec_context->pdcp_crypto_info->user_plane == PDCP_CONTROL_PLANE) && 
         ((sec_context->double_pass == FALSE && sec_context->pdcp_crypto_info->integrity_algorithm != SEC_ALG_NULL) ||
          (sec_context->double_pass == TRUE && sec_context->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION) );
-
     SEC_DEBUG("Jr[%p] pi[%d] ci[%d].in packet[%p].packet double-pass[%d].is_integrity_algo[%d]",
               job_ring, job_ring->pidx, job_ring->cidx,
               job->in_packet, sec_context->double_pass,
               job->is_integrity_algo);
+#else
+    job->is_integrity_algo = (sec_context->pdcp_crypto_info->user_plane == PDCP_CONTROL_PLANE) &&
+                             (sec_context->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION);
+    SEC_DEBUG("Jr[%p] pi[%d] ci[%d].in packet[%p].is_integrity_algo[%d]",
+              job_ring, job_ring->pidx, job_ring->cidx,
+              job->in_packet,job->is_integrity_algo);
+#endif
 
     // update descriptor with pointers to input/output data and pointers to crypto information
     ASSERT(job->descr != NULL);
@@ -1559,6 +1583,7 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
     // On SEC 3.1 there is no hardware support for NULL-crypto and NULL-auth.
     // Need to simulate this with memcpy.
     // TODO: remove this 'if'statement on 9132(SEC 4.1 knows about NULL-algo).
+#ifdef SEC_HW_VERSION_3_1
     if(sec_context->is_null_algo == FALSE)
     {
         hw_enqueue_packet_on_job_ring(job_ring, job->descr_phys_addr);
@@ -1570,6 +1595,9 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
                "Failed to process packet with NULL crypto / "
                "NULL authentication algorithms");
     }
+#else // SEC_HW_VERSION_3_1
+    hw_enqueue_packet_on_job_ring(job_ring, job->descr_phys_addr);
+#endif
 
     return SEC_SUCCESS;
 }

@@ -194,7 +194,7 @@ static bool uio_find_device_file(int jr_id, char *device_file, int *uio_device_i
                 if(jr_number == jr_id)
                 {
                     sprintf(device_file, "%s%d", SEC_UIO_DEVICE_FILE_NAME, uio_minor_number);
-                    SEC_INFO("Found UIO device %s for job ring id %d\n", 
+                    SEC_INFO("Found UIO device %s for job ring id %d",
                             device_file,
                             jr_id);
                     device_file_found = true;
@@ -297,7 +297,9 @@ int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
 {
     struct device_node *dpa_node = NULL;
     uint32_t *prop = NULL;
+#ifdef SEC_HW_VERSION_3_1
     uint32_t channel_remap = 0;
+#endif // SEC_HW_VERSION_3_1
     uint32_t kernel_usr_channel_map = 0;
     uint32_t usr_channel_map = 0; 
     uint32_t len = 0;
@@ -365,7 +367,10 @@ int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
 				return SEC_INVALID_INPUT_PARAM;
 			}
 
-			kernel_usr_channel_map |= (*prop) << jr_idx++;
+			if( (*prop) )
+			{
+			    kernel_usr_channel_map |= (*prop) << jr_idx++;
+			}
 		}
 #endif // SEC_HW_VERSION_4_4
 		// bit mask format is common b/w architectures
@@ -404,11 +409,10 @@ int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
                     job_rings[jr_no].alternate_register_range = TRUE;
                 }
                 else
-#endif // SEC_HW_VERSION_3_1
                 {
                     job_rings[jr_no].alternate_register_range = FALSE;
                 }
-
+#endif // SEC_HW_VERSION_3_1
                 jr_no++;
                 if (jr_no == job_ring_number)
                 {
@@ -419,7 +423,7 @@ int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
 
         }while(jr_idx < MAX_SEC_JOB_RINGS);
 #ifdef SEC_HW_VERSION_4_4
-#warning Due to a ahem, problem in of library, you can't have nested \
+#warning Due to a ahem, problem in of library, you can''t have nested \
 for_each_compatible_node calls. Till this is fixed, the break \
 will remain here.
 		break;

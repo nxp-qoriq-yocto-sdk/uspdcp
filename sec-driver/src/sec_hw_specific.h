@@ -57,7 +57,13 @@
  *****************************************************************/
 
 /** Memory range assigned for registers of a job ring */
+#ifdef SEC_HW_VERSION_3_1
 #define SEC_CH_REG_RANGE                    0x100
+#else // SEC_HW_VERSION_4_4
+#define SEC_CH_REG_RANGE                    0x1000
+#endif
+
+#ifdef SEC_HW_VERSION_3_1
 /** Offset to the registers of a job ring, as mapped by default by SEC engine */
 #define SEC_CH_REG_RANGE_START_NORMAL       0x1000
 /** Offset to the registers of a job ring, mapped in an alternate 4k page 
@@ -68,7 +74,10 @@
 #define CHAN_BASE(job_ring) ((    (job_ring->alternate_register_range == TRUE) ? \
                     SEC_CH_REG_RANGE_START_ALTERNATE : SEC_CH_REG_RANGE_START_NORMAL) \
                     + (job_ring->jr_id * SEC_CH_REG_RANGE))
-
+#else // SEC_HW_VERSION_4_4
+//#define CHAN_BASE(job_ring) (job_ring->jr_id * SEC_CH_REG_RANGE)
+#define CHAN_BASE(job_ring) (0)
+#endif // SEC_HW_VERSION_4_4
 /*****************************************************************
  * ISR(Interrupt Status Register) offset
  *****************************************************************/
@@ -130,12 +139,76 @@
 /** Offset to lower 32 bits of CCR, Channel Configuration Register */
 #define SEC_REG_CCCR_OFFSET_LO  0x010C
 
+#ifdef SEC_HW_VERSION_4_4
+
+#define JR_REG_IRSR(jr)        (CHAN_BASE(jr) + JR_REG_IRSR_OFFSET)
+
+#define JR_REG_ORSR(jr)        (CHAN_BASE(jr) + JR_REG_ORSR_OFFSET)
+
+#define JR_REG_IRSR_OFFSET      0x000C
+
+#define JR_REG_ORSR_OFFSET      0x002C
+
+#define JR_REG_IRBA(jr)             (CHAN_BASE(jr) + JR_REG_IRBA_OFFSET_HI)
+
+#define JR_REG_IRBA_LO(jr)          (CHAN_BASE(jr) + JR_REG_IRBA_OFFSET_LO)
+
+#define JR_REG_IRBA_OFFSET_HI       0x0000
+
+#define JR_REG_IRBA_OFFSET_LO       0x0004
+
+#define JR_REG_ORBA(jr)             (CHAN_BASE(jr) + JR_REG_ORBA_OFFSET_HI)
+
+#define JR_REG_ORBA_LO(jr)          (CHAN_BASE(jr) + JR_REG_ORBA_OFFSET_LO)
+
+#define JR_REG_ORBA_OFFSET_HI       0x0020
+
+#define JR_REG_ORBA_OFFSET_LO       0x0024
+
+#define JR_REG_IRJA(jr)             (CHAN_BASE(jr) + JR_REG_IRJA_OFFSET)
+
+#define JR_REG_IRJA_OFFSET          0x001C
+
+#define JR_REG_IRRI(jr)             (CHAN_BASE(jr) + JR_REG_IRJA_OFFSET)
+
+#define JR_REG_IRRI_OFFSET          0x005C
+
+#define JR_REG_ORJR(jr)                 (CHAN_BASE(jr) + JR_REG_ORJR_OFFSET)
+
+#define JR_REG_ORJR_OFFSET          0x0034
+
+#define JR_REG_JRCR(jr)                 (CHAN_BASE(jr) + JR_REG_JRCR_OFFSET)
+
+#define JR_REG_JRCR_OFFSET          0x006C
+
+#define JR_REG_JRCFG_LO(jr)                (CHAN_BASE(jr) + JR_REG_JRCFG_OFFSET_LO)
+
+#define JR_REG_JRCFG_OFFSET_LO      0x0050
+
+#define JR_REG_JRINT(jr)                (CHAN_BASE(jr) + JR_REG_JRINT_OFFSET)
+
+#define JR_REG_JRINT_OFFSET         0x004C
+
+#endif // SEC_HW_VERSION_4_4
+
+
 /*****************************************************************
  * CCR(Channel Configuration Register) values
  *****************************************************************/
 
 /* Job ring reset */
+#ifdef SEC_HW_VERSION_3_1
 #define SEC_REG_CCCR_VAL_RESET      0x1
+#else
+#define JR_REG_JRCR_VAL_RESET       0x00000001
+
+#define JR_REG_JRCFG_LO_IMSK        0x00000001
+
+#define JRINT_ERR_HALT_MASK         0x0C
+
+#define JRINT_ERR_HALT_INPROGRESS   0x04
+
+#endif
 /* Job ring continue. Do same operations as for reset
 but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. */
 #define SEC_REG_CCCR_VAL_CONTINUE   0x2
@@ -212,7 +285,90 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 #define SEC_REG_CSR_LO_RSI    0x0020 /* RAID size incorrect error */
 #define SEC_REG_CSR_LO_RSG    0x0010 /* RAID scatter/gather error */
 
+#ifdef SEC_HW_VERSION_4_4
+#define JQSTA_SSRC_SHIFT            28
+#define JQSTA_SSRC_MASK             0xf0000000
 
+#define JQSTA_SSRC_NONE             0x00000000
+#define JQSTA_SSRC_CCB_ERROR        0x20000000
+#define JQSTA_SSRC_JUMP_HALT_USER   0x30000000
+#define JQSTA_SSRC_DECO             0x40000000
+#define JQSTA_SSRC_JQERROR          0x60000000
+#define JQSTA_SSRC_JUMP_HALT_CC     0x70000000
+
+#define JQSTA_DECOERR_JUMP          0x08000000
+#define JQSTA_DECOERR_INDEX_SHIFT   8
+#define JQSTA_DECOERR_INDEX_MASK    0xff00
+#define JQSTA_DECOERR_ERROR_MASK    0x00ff
+
+#define JQSTA_DECOERR_NONE          0x00
+#define JQSTA_DECOERR_LINKLEN       0x01
+#define JQSTA_DECOERR_LINKPTR       0x02
+#define JQSTA_DECOERR_JQCTRL        0x03
+#define JQSTA_DECOERR_DESCCMD       0x04
+#define JQSTA_DECOERR_ORDER         0x05
+#define JQSTA_DECOERR_KEYCMD        0x06
+#define JQSTA_DECOERR_LOADCMD       0x07
+#define JQSTA_DECOERR_STORECMD      0x08
+#define JQSTA_DECOERR_OPCMD         0x09
+#define JQSTA_DECOERR_FIFOLDCMD     0x0a
+#define JQSTA_DECOERR_FIFOSTCMD     0x0b
+#define JQSTA_DECOERR_MOVECMD       0x0c
+#define JQSTA_DECOERR_JUMPCMD       0x0d
+#define JQSTA_DECOERR_MATHCMD       0x0e
+#define JQSTA_DECOERR_SHASHCMD      0x0f
+#define JQSTA_DECOERR_SEQCMD        0x10
+#define JQSTA_DECOERR_DECOINTERNAL  0x11
+#define JQSTA_DECOERR_SHDESCHDR     0x12
+#define JQSTA_DECOERR_HDRLEN        0x13
+#define JQSTA_DECOERR_BURSTER       0x14
+#define JQSTA_DECOERR_DESCSIGNATURE 0x15
+#define JQSTA_DECOERR_DMA           0x16
+#define JQSTA_DECOERR_BURSTFIFO     0x17
+#define JQSTA_DECOERR_JQRESET       0x1a
+#define JQSTA_DECOERR_JOBFAIL       0x1b
+#define JQSTA_DECOERR_DNRERR        0x80
+#define JQSTA_DECOERR_UNDEFPCL      0x81
+#define JQSTA_DECOERR_PDBERR        0x82
+#define JQSTA_DECOERR_ANRPLY_LATE   0x83
+#define JQSTA_DECOERR_ANRPLY_REPLAY 0x84
+#define JQSTA_DECOERR_SEQOVF        0x85
+#define JQSTA_DECOERR_INVSIGN       0x86
+#define JQSTA_DECOERR_DSASIGN       0x87
+
+#define JQSTA_CCBERR_JUMP           0x08000000
+#define JQSTA_CCBERR_INDEX_MASK     0xff00
+#define JQSTA_CCBERR_INDEX_SHIFT    8
+#define JQSTA_CCBERR_CHAID_MASK     0x00f0
+#define JQSTA_CCBERR_CHAID_SHIFT    4
+#define JQSTA_CCBERR_ERRID_MASK     0x000f
+
+#define JQSTA_CCBERR_CHAID_AES      (0x01 << JQSTA_CCBERR_CHAID_SHIFT)
+#define JQSTA_CCBERR_CHAID_DES      (0x02 << JQSTA_CCBERR_CHAID_SHIFT)
+#define JQSTA_CCBERR_CHAID_ARC4     (0x03 << JQSTA_CCBERR_CHAID_SHIFT)
+#define JQSTA_CCBERR_CHAID_MD       (0x04 << JQSTA_CCBERR_CHAID_SHIFT)
+#define JQSTA_CCBERR_CHAID_RNG      (0x05 << JQSTA_CCBERR_CHAID_SHIFT)
+#define JQSTA_CCBERR_CHAID_SNOW     (0x06 << JQSTA_CCBERR_CHAID_SHIFT)
+#define JQSTA_CCBERR_CHAID_KASUMI   (0x07 << JQSTA_CCBERR_CHAID_SHIFT)
+#define JQSTA_CCBERR_CHAID_PK       (0x08 << JQSTA_CCBERR_CHAID_SHIFT)
+#define JQSTA_CCBERR_CHAID_CRC      (0x09 << JQSTA_CCBERR_CHAID_SHIFT)
+
+#define JQSTA_CCBERR_ERRID_NONE     0x00
+#define JQSTA_CCBERR_ERRID_MODE     0x01
+#define JQSTA_CCBERR_ERRID_DATASIZ  0x02
+#define JQSTA_CCBERR_ERRID_KEYSIZ   0x03
+#define JQSTA_CCBERR_ERRID_PKAMEMSZ 0x04
+#define JQSTA_CCBERR_ERRID_PKBMEMSZ 0x05
+#define JQSTA_CCBERR_ERRID_SEQUENCE 0x06
+#define JQSTA_CCBERR_ERRID_PKDIVZRO 0x07
+#define JQSTA_CCBERR_ERRID_PKMODEVN 0x08
+#define JQSTA_CCBERR_ERRID_KEYPARIT 0x09
+#define JQSTA_CCBERR_ERRID_ICVCHK   0x0a
+#define JQSTA_CCBERR_ERRID_HARDWARE 0x0b
+#define JQSTA_CCBERR_ERRID_CCMAAD   0x0c
+#define JQSTA_CCBERR_ERRID_INVCHA   0x0f
+
+#endif
 
 /*****************************************************************
  * STEU IMR (Interrupt Mask Register) offset.
@@ -285,12 +441,17 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
  * Descriptor format: Header Dword values
  *****************************************************************/
 
+#ifdef SEC_HW_VERSION_4_4
+#define JR_JOB_STATUS_MASK         0x000000FF
+
+#define JR_DESC_STATUS_NO_ERR       0x00000000
+#else
 /** Written back when packet processing is done,
  * in lower 32 bits of Descriptor header */
 #define SEC_DESC_HDR_DONE           0xff000000
 /** Request done notification (DN) per descriptor */
 #define SEC_DESC_HDR_DONE_NOTIFY    0x00000001
-
+#endif
 /** Mask used to extract ICCR0 result from lower 32 bits of Descriptor header.
  * ICCR0 indicates result for integrity check performed by primary execution unit.
  * ICCR1 does the same for secondary execution unit.
@@ -352,27 +513,35 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 /** Check if a descriptor has the DONE bits set.
  * If yes, it means the packet tied to the descriptor 
  * is processed by SEC engine already.*/
+#if SEC_HW_VERSION_4_4
+#define hw_job_is_done(job)          (((*((job)->out_status)) & JR_JOB_STATUS_MASK) == JR_DESC_STATUS_NO_ERR)
+#else
 #define hw_job_is_done(descriptor)          ((descriptor->hdr & SEC_DESC_HDR_DONE) == SEC_DESC_HDR_DONE)
+#endif
 
 /** Check if integrity check performed by primary execution unit failed */
 #define hw_icv_check_failed(descriptor)     ((descriptor->hdr_lo & SEC_DESC_HDR_ICCR0_MASK) == SEC_DESC_HDR_ICCR0_FAIL)
 
 /** Check if integrity check performed by primary execution unit passed */
 #define hw_icv_check_passed(descriptor)     ((descriptor->hdr_lo & SEC_DESC_HDR_ICCR0_MASK) == SEC_DESC_HDR_ICCR0_PASS)
-
+#ifdef SEC_HW_VERSION_3_1
 /** Enable done writeback in descriptor header dword after packet is processed by SEC engine */
 #define hw_job_enable_writeback(descriptor_hdr) ((descriptor_hdr) |= SEC_DESC_HDR_DONE_NOTIFY)
-
+#endif //# SEC_HW_VERSION_3_1
 /** Return 0 if no error generated on this job ring.
  * Return non-zero if error. */
+#if SEC_HW_VERSION_3_1
 #define hw_job_ring_error(jr) (in_be32((jr)->register_base_addr + SEC_REG_CSR_LO(jr)) & SEC_REG_CSR_ERROR_MASK)
+#else // SEC_HW_VERSION_3_1
+#define hw_job_error(jr)    ((*((job)->out_status)) & JR_JOB_STATUS_MASK)
+#endif
 
  /** Some error types require that the same error bit is set to 1 to clear the error source.
   * Use this macro for this purpose.
   */
 #define hw_job_ring_clear_error(jr, value) (setbits32((jr)->register_base_addr + SEC_REG_CSR_LO(jr), (value)))
 
-
+#ifdef SEC_HW_VERSION_3_1
 /** Read pointer to current descriptor that is beeing processed on a job ring. */
 #if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
 #define hw_get_current_descriptor(jr) ((dma_addr_t)((in_be32((jr)->register_base_addr + SEC_REG_CDPR(jr)) << 32)  |  \
@@ -380,6 +549,7 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 #else
 #define hw_get_current_descriptor(jr) ((dma_addr_t) (in_be32((jr)->register_base_addr + SEC_REG_CDPR_LO(jr))))
 #endif
+
 
 /*****************************************************************
  * Macros manipulating SEC registers for a job ring/channel
@@ -427,8 +597,99 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
     out_be32(job_ring->register_base_addr + SEC_REG_FFER_LO(job_ring),\
              (descriptor));\
 }
-
 #endif
+#else // SEC_HW_VERSION_3_1
+
+#define hw_get_current_inp_index(jr)        (( dma_addr_t)(in_be32((jr)->register_base_addr + JR_REG_IRRI(jr))) )
+
+#define hw_get_current_out_index(jr)        (( dma_addr_t)(in_be32((jr)->register_base_addr + JR_REG_ORWI(jr))) )
+
+#define hw_get_no_out_entries(jr)           ((uint32_t)(in_be32(jr)->register_base_addr + JR_REG_ORSF(jr)))
+
+/** Read pointer to current descriptor that is being processed on a job ring. */
+#if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
+#define hw_get_inp_queue_base(jr)   ( (dma_addr_t)((in_be32((jr)->register_base_addr + JR_REG_IRBA(jr)) << 32) | \
+                                       (in_be32((jr)->register_base_addr + JR_REG_IRBA_LO(jr)))))
+#define hw_get_inp_queue_base(jr)   ( (dma_addr_t)((in_be32((jr)->register_base_addr + JR_REG_ORBA(jr)) << 32) | \
+                                       (in_be32((jr)->register_base_addr + JR_REG_ORBA_LO(jr)))))
+#else
+#define hw_get_inp_queue_base(jr)   ( (dma_addr_t)(in_be32((jr)->register_base_addr + JR_REG_IRBA_LO(jr))))
+
+#define hw_get_out_queue_base(jr)   ( (dma_addr_t)((in_be32((jr)->register_base_addr + JR_REG_ORBA_LO(jr)))))
+#endif
+
+#define hw_get_current_inp_descriptor(jr) ( (dma_addr_t)(hw_get_inp_queue_base(jr) + \
+                                         hw_get_current_inp_index(jr)))
+
+#define hw_get_current_out_descriptor(jr) ( (dma_addr_t)(hw_get_out_queue_base(jr) + \
+                                         hw_get_current_out_index(jr)))
+
+#if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
+#define hw_enqueue_packet_on_job_ring(job_ring, descriptor) \
+{ \
+    out_be32( (job_ring)->register_base_addr + JR_REG_IRBA(jr),PHYS_ADDR_HI(descriptor) ); \
+    out_be32( (job_ring)->register_base_addr + JR_REG_IRBA_LO(jr),PHYS_ADDR_LO(descriptor) ); \
+    out_be32(job_ring->register_base_addr + JR_REG_IRJA(job_ring),1);\
+}
+#else
+#define hw_enqueue_packet_on_job_ring(job_ring, descriptor) \
+{ \
+    out_be32((job_ring)->register_base_addr + JR_REG_IRBA_LO(job_ring),PHYS_ADDR_LO(descriptor)); \
+    out_be32((job_ring)->register_base_addr + JR_REG_IRJA(job_ring),1); \
+}
+#endif
+#endif //SEC_HW_VERSION_3_1
+
+#ifdef SEC_HW_VERSION_4_4
+
+#define hw_set_input_ring_size(job_ring,size) \
+{   \
+    out_be32(job_ring->register_base_addr + JR_REG_IRSR(job_ring),\
+             (size));\
+}
+
+#define hw_set_output_ring_size(job_ring,size) \
+{   \
+    out_be32(job_ring->register_base_addr + JR_REG_ORSR(job_ring),\
+             (size));\
+}
+
+#if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
+#define hw_set_input_ring_start_addr(job_ring, descriptor) \
+{   \
+    out_be32(job_ring->register_base_addr + JR_REG_IRBA(job_ring),\
+             PHYS_ADDR_HI(descriptor));\
+    out_be32(job_ring->register_base_addr + JR_REG_IRBA_LO(job_ring),\
+             PHYS_ADDR_LO(descriptor));\
+}
+
+#define hw_set_output_ring_start_addr(job_ring, descriptor) \
+{   \
+    out_be32(job_ring->register_base_addr + JR_REG_ORBA(job_ring),\
+             PHYS_ADDR_HI(descriptor));\
+    out_be32(job_ring->register_base_addr + JR_REG_ORBA_LO(job_ring),\
+             PHYS_ADDR_LO(descriptor));\
+}
+
+#else //#if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
+#define hw_set_input_ring_start_addr(job_ring, descriptor) \
+{   \
+    out_be32(job_ring->register_base_addr + JR_REG_IRBA(job_ring),\
+             (descriptor));\
+}
+
+#define hw_set_output_ring_start_addr(job_ring, descriptor) \
+{   \
+    out_be32(job_ring->register_base_addr + JR_REG_ORBA(job_ring),\
+             (descriptor));\
+}
+#endif
+
+#define JR_HW_REMOVE_ONE_ENTRY(jr) ( out_be32((jr)->register_base_addr + JR_REG_ORJR(jr),1) )
+
+#define JR_HW_REMOVE_ENTRIES(jr,no_entries) ( out_be32((jr)->register_base_addr + JR_REG_ORJR(jr),(no_entries)))
+
+#endif // SEC_HW_VERSION_4_4
 /*==============================================================================
                                     ENUMS
 ==============================================================================*/
@@ -439,6 +700,7 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 /** Forward structure declaration */
 typedef struct sec_job_ring_t sec_job_ring_t;
 
+#ifdef SEC_HW_VERSION_3_1
 /** SEC Descriptor pointer entry */
 struct sec_ptr {
     uint16_t len;       /*< length */
@@ -460,7 +722,94 @@ struct sec_descriptor_t
     uint32_t __CACHELINE_ALIGNED iv[SEC_IV_MAX_LENGTH];
 
 } __CACHELINE_ALIGNED;
+#else
+struct preheader_s {
+    union {
+        uint32_t word;
+        struct {
+            uint16_t rsvd63_48;
+            unsigned int rsvd47_39:9;
+            unsigned int idlen:7;
+        } field;
+    } __CACHELINE_ALIGNED hi;
 
+    union {
+        uint32_t word;
+        struct {
+            unsigned int rsvd31_30:2;
+            unsigned int fsgt:1;
+            unsigned int lng:1;
+            unsigned int offset:2;
+            unsigned int abs:1;
+            unsigned int add_buf:1;
+            uint8_t pool_id;
+            uint16_t pool_buffer_size;
+        } field;
+    } __CACHELINE_ALIGNED lo;
+} __CACHELINE_ALIGNED;
+
+struct init_descriptor_header_s {
+    union {
+        uint32_t word;
+        struct {
+            unsigned int ctype:5;
+            unsigned int rsvd26_25:2;
+            unsigned int dnr:1;
+            unsigned int one:1;
+            unsigned int start_idx:7;
+            unsigned int zro:1;
+            unsigned int rsvd14_12:3;
+            unsigned int propogate_dnr:1;
+            unsigned int share:3;
+            unsigned int rsvd7:1;
+            unsigned int desc_len:7;
+        } field;
+    } __CACHELINE_ALIGNED command;
+} __CACHELINE_ALIGNED;
+
+struct key_command_s {
+    union {
+        uint32_t word;
+        struct {
+            unsigned int ctype:5;
+            unsigned int cls:2;
+            unsigned int sgf:1;
+            unsigned int imm:1;
+            unsigned int enc:1;
+            unsigned int rsvd21_18:4;
+            unsigned int kdest:2;
+            unsigned int rsvd15_10:6;
+            unsigned int length:10;
+        } field;
+    } __CACHELINE_ALIGNED command;
+} __CACHELINE_ALIGNED;
+
+struct algorithm_operation_command_s {
+    union {
+        uint32_t word;
+        struct {
+            unsigned int ctype:5;
+            unsigned int optype:3;
+            uint8_t alg;
+            unsigned int rsvd16_18:3;
+            unsigned int aai:9;
+            unsigned int as:2;
+            unsigned int icv:1;
+            unsigned int enc:1;
+        } field;
+    } __CACHELINE_ALIGNED command;
+} __CACHELINE_ALIGNED;
+
+struct sec_descriptor_t {
+    struct preheader_s prehdr;
+    struct init_descriptor_header_s deschdr;
+    struct key_command_s keycmd;
+    uint32_t key[6];
+    struct algorithm_operation_command_s opcmd;
+    uint32_t rsv[15];   //TODO: fill it for iv, LOAD, MATH, FIFO LOAD etc.
+} __CACHELINE_ALIGNED;
+
+#endif
 /** Cryptographic data belonging to a SEC context.
  * Can be considered a joint venture between:
  * - a 'shared descriptor' (the descriptor header word)
@@ -538,10 +887,14 @@ int hw_reset_and_continue_job_ring(sec_job_ring_t *job_ring);
  * @param [in]  sec_error_code  The job ring's error code as first read from SEC engine
  * @param [out] reset_required  If set to #TRUE, the job ring must be reset.
  */
+#ifdef SEC_HW_VERSION_3_1
 void hw_handle_job_ring_error(sec_job_ring_t *job_ring,
                               uint32_t sec_error_code,
                               uint32_t *reset_required);
-
+#else // SEC_HW_VERSION_3_1
+void hw_handle_job_ring_error (uint32_t sec_error_code,
+                              uint32_t *reset_required);
+#endif
 /*============================================================================*/
 
 

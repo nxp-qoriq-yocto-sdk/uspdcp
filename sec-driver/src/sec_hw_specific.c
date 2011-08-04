@@ -87,10 +87,19 @@ static void hw_handle_eu_error(sec_job_ring_t *job_ring)
     int i;
     struct sec_job_t *job = NULL;
     dma_addr_t current_desc_phys_addr;
+#if SEC_HW_VERSION_4_4
+    struct sec_outring_entry   *output_ring_entry;
+
+    output_ring_entry = (struct sec_outring_entry*)job;
+#endif // SEC_HW_VERSION_4_4
 
     // First read job ring register to get current descriptor,
     // that is also the one that generated the error.
+#if SEC_HW_VERSION_4_4
+    current_desc_phys_addr = (dma_addr_t)output_ring_entry->descr;
+#else
     current_desc_phys_addr = hw_get_current_descriptor(job_ring);
+#endif
 
     // Now search the job ring for the descriptor
     for(i = 0; i < SEC_JOB_RING_SIZE; i++)
@@ -110,7 +119,8 @@ static void hw_handle_eu_error(sec_job_ring_t *job_ring)
                   current_desc_phys_addr, job_ring->jr_id);
         return;
     }
-
+#warning "Do something for SEC 4.4"
+#ifdef SEC_HW_VERSION_3_1
     // Read descriptor header and identify the EU(Execution Unit)
     // that generated the error.
     switch (job->descr->hdr & SEC_DESC_HDR_SEL0_MASK)
@@ -136,6 +146,7 @@ static void hw_handle_eu_error(sec_job_ring_t *job_ring)
                       job->descr->hdr);
             break;
     }
+#endif
 }
 
 /*==================================================================================================
@@ -152,7 +163,7 @@ int hw_reset_job_ring(sec_job_ring_t *job_ring)
     // First reset the job ring in hw
     ret = hw_shutdown_job_ring(job_ring);
     SEC_ASSERT(ret == 0, ret, "Failed resetting job ring in hardware");
-
+#ifdef SEC_HW_VERSION_3_1
     // Set done writeback enable at job ring level.
     reg_val = SEC_REG_VAL_CCCR_LO_CDWE;
 
@@ -166,7 +177,6 @@ int hw_reset_job_ring(sec_job_ring_t *job_ring)
     // ONLY if NOT in polling mode.
     reg_val |= SEC_REG_VAL_CCCR_LO_CDIE;
 #endif
-
     // Enable integrity check if configured in descriptors.
     // Required for PDCP control plane processing.
     reg_val |= SEC_REG_VAL_CCCR_LO_IWSE;
@@ -185,9 +195,14 @@ int hw_reset_job_ring(sec_job_ring_t *job_ring)
     reg_val = SEC_REG_AESU_IMR_DISABLE_ICE;
     setbits32(job_ring->register_base_addr + SEC_REG_AESU_IMR_LO, reg_val);
 
+#else // SEC_HW_VERSION_3_1
+#warning "I'm sure something has to be done here..."
+#endif
+
     return 0;
 }
 
+#if SEC_HW_VERSION_3_1
 int hw_shutdown_job_ring(sec_job_ring_t *job_ring)
 {
     unsigned int timeout = SEC_TIMEOUT;
@@ -219,6 +234,61 @@ int hw_shutdown_job_ring(sec_job_ring_t *job_ring)
     }
     return 0;
 }
+#else // SEC_HW_VERSION_3_1
+int hw_shutdown_job_ring(sec_job_ring_t *job_ring)
+{
+    unsigned int timeout = 100000;
+    uint32_t    tmp;
+
+    ASSERT(job_ring->register_base_addr != NULL);
+
+    SEC_INFO("Resetting Job ring %d", job_ring->jr_id);
+
+    /*
+     * mask interrupts since we are going to poll
+     * for reset completion status
+     */
+    setbits32(job_ring->register_base_addr + JR_REG_JRCFG_LO(job_ring), JR_REG_JRCFG_LO_IMSK);
+
+    out_be32(job_ring->register_base_addr + JR_REG_JRCR(job_ring), JR_REG_JRCR_VAL_RESET);
+
+    do
+    {
+        tmp = in_be32(job_ring->register_base_addr + JR_REG_JRINT(job_ring));
+    }while ( ((tmp  & JRINT_ERR_HALT_MASK) == JRINT_ERR_HALT_INPROGRESS) && \
+               --timeout);
+
+     tmp = in_be32(job_ring->register_base_addr + JR_REG_JRINT(job_ring));
+
+     if( tmp & JRINT_ERR_HALT_MASK)
+     {
+         SEC_ERROR("Failed to flush hw job ring with id  %d\n", job_ring->jr_id);
+         return -1;
+     }
+
+     timeout = 100000;
+
+    // Now reset
+    out_be32(job_ring->register_base_addr + JR_REG_JRCR(job_ring), JR_REG_JRCR_VAL_RESET);
+
+    do
+    {
+        tmp = in_be32(job_ring->register_base_addr + JR_REG_JRCR(job_ring));
+    }while ( (tmp & JR_REG_JRCR_VAL_RESET) && --timeout);
+
+    if( timeout ==  0)
+    {
+        SEC_ERROR("Failed to reset hw job ring with id  %d\n", job_ring->jr_id);
+        return -1;
+    }
+
+    /* unmask interrupts */
+    clrbits32(job_ring->register_base_addr + JR_REG_JRCFG_LO(job_ring), JR_REG_JRCFG_LO_IMSK);
+
+    return 0;
+
+}
+#endif
 
 int hw_reset_and_continue_job_ring(sec_job_ring_t *job_ring)
 {
@@ -252,6 +322,7 @@ int hw_reset_and_continue_job_ring(sec_job_ring_t *job_ring)
     return 0;
 }
 
+#ifdef SEC_HW_VERSION_3_1
 void hw_handle_job_ring_error(sec_job_ring_t *job_ring,
                               uint32_t error_code,
                               uint32_t *reset_required)
@@ -325,6 +396,36 @@ void hw_handle_job_ring_error(sec_job_ring_t *job_ring,
         SEC_ERROR("RSG error on job ring with id %d", job_ring->jr_id);
     }
 }
+#else // SEC_HW_VERSION_3_1
+
+void hw_handle_job_ring_error(uint32_t error_code,
+                              uint32_t *reset_required)
+{
+    struct stat_src {
+        void (*report_ssed)(uint32_t status);
+        char *error;
+    } status_src[] = {
+        { NULL, "No error" },
+        { NULL, NULL },
+        { NULL, "CCB" },
+        { NULL, "Jump" },
+        { NULL, "DECO" },
+        { NULL, NULL },
+        { NULL, "Job Queue" },
+        { NULL, "Condition Code" },
+    };
+    uint32_t ssrc = error_code >> JQSTA_SSRC_SHIFT;
+
+    ASSERT(reset_required != NULL);
+
+#warning "Must write the code that does the actual checking of the error code \
+and performs the correct action since all I did was copy-paste some code from \
+ks driver"
+
+    SEC_ERROR("%s: ", status_src[ssrc].error);
+
+}
+#endif
 /*================================================================================================*/
 
 #ifdef __cplusplus
