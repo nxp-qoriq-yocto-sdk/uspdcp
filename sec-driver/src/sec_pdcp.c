@@ -396,7 +396,7 @@ static void sec_pdcp_create_pdb(sec_context_t *ctx);
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
-
+#ifdef SEC_HW_VERSION_3_1
 static int sec_pdcp_create_snow_f8_aes_ctr_descriptor(sec_context_t *ctx)
 {
     sec_crypto_pdb_t *sec_pdb = &ctx->crypto_desc_pdb;
@@ -431,6 +431,17 @@ static int sec_pdcp_create_snow_f8_aes_ctr_descriptor(sec_context_t *ctx)
 
     return SEC_SUCCESS;
 }
+#else
+static int sec_pdcp_create_snow_f8_aes_ctr_descriptor(sec_context_t *ctx)
+{
+    sec_crypto_pdb_t *sec_pdb = &ctx->crypto_desc_pdb;
+
+    // Copy crypto data into PDB
+    ASSERT(ctx->pdcp_crypto_info->cipher_key != NULL);
+
+    return SEC_SUCCESS;
+}
+#endif
 
 #ifdef SEC_HW_VERSION_3_1
 static int sec_pdcp_create_snow_f9_descriptor(sec_context_t *ctx)
@@ -469,6 +480,7 @@ static int sec_pdcp_create_snow_f9_descriptor(sec_context_t *ctx)
     return SEC_SUCCESS;
 }
 #else
+#warning "Function does nothing..."
 static int sec_pdcp_create_snow_f9_descriptor(sec_context_t *ctx)
 {
     sec_crypto_pdb_t *sec_pdb = &ctx->crypto_desc_pdb;
@@ -1219,7 +1231,63 @@ static int sec_pdcp_context_update_null_auth_descriptor(sec_job_t *job, sec_desc
 
 static int sec_pdcp_context_update_null_cipher_descriptor(sec_job_t *job, sec_descriptor_t *descriptor)
 {
-    return SEC_SUCCESS;
+    int ret = SEC_SUCCESS;
+    sec_crypto_pdb_t *sec_pdb = &job->sec_context->crypto_desc_pdb;
+    const sec_pdcp_context_info_t *ua_crypto_info = job->sec_context->pdcp_crypto_info;
+    dma_addr_t phys_addr = 0;
+#if 1
+    descriptor->deschdr.command.word = 0xB0850010;
+    descriptor->pdb[0] = 0x00000002;
+    descriptor->pdb[1] = 0x9FB31245;
+    descriptor->pdb[2] = 0xA4000000;
+    descriptor->pdb[3] = 0xFBFFB1C0;
+    descriptor->pdb[4] = 0xFFFFFFFF; // threshold mask
+
+    descriptor->keycmd.command.word = 0x02800010; // class 1 key
+    descriptor->key[0] = 0x8C48FF89;
+    descriptor->key[1] = 0xCB854FC0;
+    descriptor->key[2] = 0x9081CC47;
+    descriptor->key[3] = 0xEDFC8619;
+
+    descriptor->opcmd.command.word = 0x87420000; // u-plane encap w/null enc
+
+    phys_addr = sec_vtop(job->in_packet->address);
+    descriptor->seq_inp_ptr[0] = (0xF000 << 16) | job->in_packet->length;
+#warning "Update for 36 bits addresses"
+    descriptor->seq_inp_ptr[1] = phys_addr;
+
+    phys_addr = sec_vtop(job->out_packet->address);
+    descriptor->seq_out_ptr[0] = (0xF800 << 16) | job->out_packet->length;
+#warning "Update for 36 bits addresses"
+    descriptor->seq_out_ptr[1] = phys_addr;
+#else
+
+    *(((uint32_t*)descriptor + 0)) = 0xB080000B; //       jobhdr: stidx=0 len=15
+    *(((uint32_t*)descriptor + 1)) = 0x12200010; //           ld: ccb1-ctx len=16 offs=0
+//    *(((uint32_t*)descriptor + 2)) = 0x00000000; //               ptr->@0x8c0b21d80
+    *(((uint32_t*)descriptor + 2)) = sec_vtop(job->in_packet->address);//0x380001ac;
+    *(((uint32_t*)descriptor + 3)) = 0x02000010; //          key: class1-keyreg len=16
+//    *(((uint32_t*)descriptor + 4)) = 0x0000000D; //               ptr->@0xdd5fa8880
+    *(((uint32_t*)descriptor + 4)) = sec_vtop(job->in_packet->address);
+    *(((uint32_t*)descriptor + 5)) = 0x8210010C; // operation: cls1-op aes cbc init-final dec
+    *(((uint32_t*)descriptor + 6)) = 0x22120400; //    fifold: class1 msgdata-last1 len=1024
+//    *(((uint32_t*)descriptor + 9)) = 0x00000008; //            ptr->@0x82ba84e1c
+    *(((uint32_t*)descriptor + 7)) = sec_vtop(job->out_packet->address);
+    *(((uint32_t*)descriptor + 8)) = 0x62700000; //      fifostr: class1 msgdata ext
+//    *(((uint32_t*)descriptor + 0xc)) = 0x00000005;   //               ptr->@0x582007840
+    *(((uint32_t*)descriptor + 9)) = sec_vtop(job->out_packet->address);
+    *(((uint32_t*)descriptor + 0xa)) = 0x00000400; //              extlen=1024
+#endif
+    {
+        int i = 0;
+        SEC_DEBUG("descriptor @ 0x%06x",(uint32_t)descriptor);
+        for(;i < sizeof(sec_descriptor_t)/sizeof(uint32_t);i++)
+        {
+            SEC_DEBUG("descriptor[%x] = 0x%08x",i,*(((uint32_t*)descriptor) + i));
+        }
+    }
+
+    return ret;
 }
 
 static void sec_pdcp_update_iv_template(sec_crypto_pdb_t *sec_pdb,

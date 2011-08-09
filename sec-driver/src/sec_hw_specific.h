@@ -181,13 +181,29 @@
 
 #define JR_REG_JRCR_OFFSET          0x006C
 
+#define JR_REG_JRCFG(jr)                (CHAN_BASE(jr) + JR_REG_JRCFG_OFFSET)
+
+#define JR_REG_JRCFG_OFFSET         0x0050
+
 #define JR_REG_JRCFG_LO(jr)                (CHAN_BASE(jr) + JR_REG_JRCFG_OFFSET_LO)
 
-#define JR_REG_JRCFG_OFFSET_LO      0x0050
+#define JR_REG_JRCFG_OFFSET_LO      0x0054
 
 #define JR_REG_JRINT(jr)                (CHAN_BASE(jr) + JR_REG_JRINT_OFFSET)
 
 #define JR_REG_JRINT_OFFSET         0x004C
+
+#define JR_REG_ORSFR(jr)                 (CHAN_BASE(jr) + JR_REG_ORSFR_OFFSET)
+
+#define JR_REG_ORSFR_OFFSET          0x003C
+
+#define JR_REG_JROSR(jr)                 (CHAN_BASE(jr) + JR_REG_JROSR_OFFSET)
+
+#define JR_REG_JROSR_OFFSET             0x0044
+
+#define JR_REG_ORWI(jr)                 (CHAN_BASE(jr) + JR_REG_ORWI_OFFSET)
+
+#define JR_REG_ORWI_OFFSET              0x0064
 
 #endif // SEC_HW_VERSION_4_4
 
@@ -199,16 +215,7 @@
 /* Job ring reset */
 #ifdef SEC_HW_VERSION_3_1
 #define SEC_REG_CCCR_VAL_RESET      0x1
-#else
-#define JR_REG_JRCR_VAL_RESET       0x00000001
 
-#define JR_REG_JRCFG_LO_IMSK        0x00000001
-
-#define JRINT_ERR_HALT_MASK         0x0C
-
-#define JRINT_ERR_HALT_INPROGRESS   0x04
-
-#endif
 /* Job ring continue. Do same operations as for reset
 but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. */
 #define SEC_REG_CCCR_VAL_CONTINUE   0x2
@@ -220,6 +227,19 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 #define SEC_REG_VAL_CCCR_LO_CDIE    0x2
 /* Enable ICV writeback if descriptor configured for ICV */
 #define SEC_REG_VAL_CCCR_LO_IWSE    0x80
+#else
+#define JR_REG_JRCR_VAL_RESET       0x00000001
+
+#define JR_REG_JRCFG_LO_IMSK        0x00000001
+
+#define JRINT_ERR_HALT_MASK         0x0C
+
+#define JRINT_ERR_HALT_INPROGRESS   0x04
+
+#define JRINT_ERR_HALT_COMPLETE     0x08
+
+#define JR_REG_JRCR_IMSK            0x00000001
+#endif
 
 /*****************************************************************
  * FFER(Fetch Fifo Enqueue Register) offset
@@ -610,7 +630,7 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 #if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
 #define hw_get_inp_queue_base(jr)   ( (dma_addr_t)((in_be32((jr)->register_base_addr + JR_REG_IRBA(jr)) << 32) | \
                                        (in_be32((jr)->register_base_addr + JR_REG_IRBA_LO(jr)))))
-#define hw_get_inp_queue_base(jr)   ( (dma_addr_t)((in_be32((jr)->register_base_addr + JR_REG_ORBA(jr)) << 32) | \
+#define hw_get_out_queue_base(jr)   ( (dma_addr_t)((in_be32((jr)->register_base_addr + JR_REG_ORBA(jr)) << 32) | \
                                        (in_be32((jr)->register_base_addr + JR_REG_ORBA_LO(jr)))))
 #else
 #define hw_get_inp_queue_base(jr)   ( (dma_addr_t)(in_be32((jr)->register_base_addr + JR_REG_IRBA_LO(jr))))
@@ -624,6 +644,8 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 #define hw_get_current_out_descriptor(jr) ( (dma_addr_t)(hw_get_out_queue_base(jr) + \
                                          hw_get_current_out_index(jr)))
 
+#define hw_get_no_finished_jobs(jr) ( *(uint32_t*)((jr)->register_base_addr +  JR_REG_ORSFR(jr)) )
+
 #if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
 #define hw_enqueue_packet_on_job_ring(job_ring, descriptor) \
 { \
@@ -632,9 +654,9 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
     out_be32(job_ring->register_base_addr + JR_REG_IRJA(job_ring),1);\
 }
 #else
+//    out_be32((job_ring)->register_base_addr + JR_REG_IRBA_LO(job_ring),PHYS_ADDR_LO(descriptor));
 #define hw_enqueue_packet_on_job_ring(job_ring, descriptor) \
 { \
-    out_be32((job_ring)->register_base_addr + JR_REG_IRBA_LO(job_ring),PHYS_ADDR_LO(descriptor)); \
     out_be32((job_ring)->register_base_addr + JR_REG_IRJA(job_ring),1); \
 }
 #endif
@@ -674,13 +696,13 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 #else //#if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
 #define hw_set_input_ring_start_addr(job_ring, descriptor) \
 {   \
-    out_be32(job_ring->register_base_addr + JR_REG_IRBA(job_ring),\
+    out_be32(job_ring->register_base_addr + JR_REG_IRBA_LO(job_ring),\
              (descriptor));\
 }
 
 #define hw_set_output_ring_start_addr(job_ring, descriptor) \
 {   \
-    out_be32(job_ring->register_base_addr + JR_REG_ORBA(job_ring),\
+    out_be32(job_ring->register_base_addr + JR_REG_ORBA_LO(job_ring),\
              (descriptor));\
 }
 #endif
@@ -723,31 +745,7 @@ struct sec_descriptor_t
 
 } __CACHELINE_ALIGNED;
 #else
-struct preheader_s {
-    union {
-        uint32_t word;
-        struct {
-            uint16_t rsvd63_48;
-            unsigned int rsvd47_39:9;
-            unsigned int idlen:7;
-        } field;
-    } __CACHELINE_ALIGNED hi;
-
-    union {
-        uint32_t word;
-        struct {
-            unsigned int rsvd31_30:2;
-            unsigned int fsgt:1;
-            unsigned int lng:1;
-            unsigned int offset:2;
-            unsigned int abs:1;
-            unsigned int add_buf:1;
-            uint8_t pool_id;
-            uint16_t pool_buffer_size;
-        } field;
-    } __CACHELINE_ALIGNED lo;
-} __CACHELINE_ALIGNED;
-
+#define __PACKED __attribute__((__packed__))
 struct init_descriptor_header_s {
     union {
         uint32_t word;
@@ -764,8 +762,8 @@ struct init_descriptor_header_s {
             unsigned int rsvd7:1;
             unsigned int desc_len:7;
         } field;
-    } __CACHELINE_ALIGNED command;
-} __CACHELINE_ALIGNED;
+    } __PACKED command;
+} __PACKED;
 
 struct key_command_s {
     union {
@@ -781,8 +779,8 @@ struct key_command_s {
             unsigned int rsvd15_10:6;
             unsigned int length:10;
         } field;
-    } __CACHELINE_ALIGNED command;
-} __CACHELINE_ALIGNED;
+    } __PACKED command;
+} __PACKED;
 
 struct algorithm_operation_command_s {
     union {
@@ -797,17 +795,19 @@ struct algorithm_operation_command_s {
             unsigned int icv:1;
             unsigned int enc:1;
         } field;
-    } __CACHELINE_ALIGNED command;
-} __CACHELINE_ALIGNED;
+    } __PACKED command;
+} __PACKED;
 
 struct sec_descriptor_t {
-    struct preheader_s prehdr;
     struct init_descriptor_header_s deschdr;
+    uint32_t    pdb[5];
     struct key_command_s keycmd;
-    uint32_t key[6];
+    uint32_t key[4];
     struct algorithm_operation_command_s opcmd;
-    uint32_t rsv[15];   //TODO: fill it for iv, LOAD, MATH, FIFO LOAD etc.
-} __CACHELINE_ALIGNED;
+    uint32_t    seq_inp_ptr[2];
+    uint32_t    seq_out_ptr[2];
+//    uint32_t rsv[48];   //TODO: fill it for iv, LOAD, MATH, FIFO LOAD etc.
+} __PACKED;
 
 #endif
 /** Cryptographic data belonging to a SEC context.

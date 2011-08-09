@@ -499,13 +499,32 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
 
     while(jobs_no_to_notify > notified_packets_no)
     {
+#ifdef SEC_HW_VERSION_4_4
+        if(hw_get_no_finished_jobs(job_ring) == 0 )
+        {
+            SEC_DEBUG("No jobs completed yet...");
+            continue;
+        }
+
+        SEC_DEBUG("Found a job! Total # of jobs waiting: %d", hw_get_no_finished_jobs(job_ring) );
+        {
+            dma_addr_t out_descr = hw_get_current_out_descriptor(job_ring);
+
+            out_descr -= sizeof(struct sec_outring_entry);
+            SEC_DEBUG("Last output descriptor @ addr: 0x%x",out_descr);
+            SEC_DEBUG("Last descriptor status: 0x%x",((struct sec_outring_entry*)out_descr)->status);
+
+            SEC_DEBUG("Last processed descriptor status (from register): 0x%x",JR_REG_JROSR(job_ring));
+        }
+
+#else
         if(SEC_JOB_RING_NUMBER_OF_ITEMS(SEC_JOB_RING_SIZE, job_ring->pidx, job_ring->cidx) == 0)
         {
             SEC_DEBUG("Job Ring %p was emptied by moving c-plane packets into internal FIFO",
                       job_ring);
             break;
         }
-
+#endif
         // get the first un-notified job from the job ring
         job = &job_ring->jobs[job_ring->cidx];
 
@@ -530,6 +549,7 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
 
                 SEC_ERROR("Packet at cidx %d generated error 0x%x on job ring with id %d\n",
                           job_ring->cidx, sec_error_code, job_ring->jr_id);
+                SEC_DEBUG("Job status: 0x%x",*(uint32_t*)(job->out_status));
 
                 // flush jobs from JR, with error code set to callback
                 sec_handle_packet_error(job_ring, sec_error_code, &error_packets_no, &do_driver_shutdown);

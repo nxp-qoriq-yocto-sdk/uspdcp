@@ -71,7 +71,7 @@
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CMAC_DEC
 
 // Test data plane PDCP with NULL-crypto(EEA0) algorithm set
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_DATA_PLANE_NULL_ALGO
+#define PDCP_TEST_SCENARIO  PDCP_TEST_DATA_PLANE_NULL_ALGO
 
 // Test control plane PDCP with NULL-crypto(EEA0)
 // and NULL-authentication(EIA0) algorithms set
@@ -82,7 +82,7 @@
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_SNOW_F8_SNOW_F9_ENC
 // Test PDCP control plane decapsulation with SNOW F8 ciphering
 // and SNOW F9 authentication
-#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_SNOW_F8_SNOW_F9_DEC
+//#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_SNOW_F8_SNOW_F9_DEC
 
 
 // Test PDCP control plane encapsulation with AES CTR ciphering
@@ -119,16 +119,19 @@
 // #MIN_PDCP_CONTEXT_NUMBER ... #MAX_PDCP_CONTEXT_NUMBER
 
 // Higher limit for number of PDCP contexts
-#define MAX_PDCP_CONTEXT_NUMBER         15
+//#define MAX_PDCP_CONTEXT_NUMBER         15
+#define MAX_PDCP_CONTEXT_NUMBER         1
 // Lower limit for number of PDCP contexts
-#define MIN_PDCP_CONTEXT_NUMBER         5
+//#define MIN_PDCP_CONTEXT_NUMBER         5
+#define MIN_PDCP_CONTEXT_NUMBER         1
 
 
 // The maximum number of packets processed per context
 // This test application will process a random number of packets per context ranging
 // from a #MIN_PACKET_NUMBER_PER_CTX to #MAX_PACKET_NUMBER_PER_CTX value.
 // Higher limit for number of packets per PDCP context
-#define MAX_PACKET_NUMBER_PER_CTX   10
+//#define MAX_PACKET_NUMBER_PER_CTX   10
+#define MAX_PACKET_NUMBER_PER_CTX   1
 // Lower limit for number of packets per PDCP context
 #define MIN_PACKET_NUMBER_PER_CTX   1
 
@@ -137,10 +140,10 @@
 //////////////////////////////////////////////////////////////////////////////
 
 // Disable test application logging
-#define test_printf(format, ...)
+//#define test_printf(format, ...)
 
 // Enable test application logging
-//#define test_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__) 
+#define test_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__)
 
 /******************************************************************************/
 // END OF CONFIGURATION SECTION

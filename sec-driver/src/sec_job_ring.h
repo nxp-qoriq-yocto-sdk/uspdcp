@@ -99,7 +99,7 @@ struct sec_job_t
 struct sec_outring_entry {
     struct sec_descriptor_t *descr;     /*< Pointer to completed descriptor */
     uint32_t    status;                 /*< Status for completed descriptor */
-};
+} __PACKED;
 #endif // SEC_HW_VERSION_4_4
 /** Lists the possible states for a job ring. */
 typedef enum sec_job_ring_state_e

@@ -895,7 +895,8 @@ static int start_sec_worker_threads(void)
     th_config[0].tid = 0;
     // PDCP UL thread is consumer on JR ID 0 and producer on JR ID 1
     th_config[0].consumer_job_ring_id = 0;
-    th_config[0].producer_job_ring_id = 1;
+    //th_config[0].producer_job_ring_id = 1;
+    th_config[0].producer_job_ring_id = 0;
     th_config[0].pdcp_contexts = &pdcp_ul_contexts[0];
     th_config[0].no_of_used_pdcp_contexts = &no_of_used_pdcp_ul_contexts;
     th_config[0].no_of_pdcp_contexts_to_test =
@@ -911,7 +912,8 @@ static int start_sec_worker_threads(void)
     th_config[1].tid = 1;
     // PDCP DL thread is consumer on JR ID 1 and producer on JR ID 0
     th_config[1].consumer_job_ring_id = 1;
-    th_config[1].producer_job_ring_id = 0;
+    //th_config[1].producer_job_ring_id = 0;
+    th_config[1].producer_job_ring_id = 1;
     th_config[1].pdcp_contexts = &pdcp_dl_contexts[0];
     th_config[1].no_of_used_pdcp_contexts = &no_of_used_pdcp_dl_contexts;
     th_config[1].no_of_pdcp_contexts_to_test =

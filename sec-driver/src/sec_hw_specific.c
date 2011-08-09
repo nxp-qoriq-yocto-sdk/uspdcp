@@ -198,7 +198,13 @@ int hw_reset_job_ring(sec_job_ring_t *job_ring)
 #else // SEC_HW_VERSION_3_1
 #warning "I'm sure something has to be done here..."
 #endif
+#if SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE_POLL
+    // Enable interrupt generation at job ring level
+    // ONLY if NOT in polling mode.
+    reg_val |= JR_REG_JRCR_IMSK;
+#endif
 
+    setbits32(job_ring->register_base_addr + JR_REG_JRCR(job_ring), reg_val);
     return 0;
 }
 
@@ -237,8 +243,9 @@ int hw_shutdown_job_ring(sec_job_ring_t *job_ring)
 #else // SEC_HW_VERSION_3_1
 int hw_shutdown_job_ring(sec_job_ring_t *job_ring)
 {
-    unsigned int timeout = 100000;
+    unsigned int timeout = SEC_TIMEOUT;
     uint32_t    tmp;
+    int usleep_interval = 10;
 
     ASSERT(job_ring->register_base_addr != NULL);
 
@@ -255,18 +262,20 @@ int hw_shutdown_job_ring(sec_job_ring_t *job_ring)
     do
     {
         tmp = in_be32(job_ring->register_base_addr + JR_REG_JRINT(job_ring));
+        usleep(usleep_interval);
     }while ( ((tmp  & JRINT_ERR_HALT_MASK) == JRINT_ERR_HALT_INPROGRESS) && \
                --timeout);
 
      tmp = in_be32(job_ring->register_base_addr + JR_REG_JRINT(job_ring));
 
-     if( tmp & JRINT_ERR_HALT_MASK)
+     if( (tmp & JRINT_ERR_HALT_MASK) != JRINT_ERR_HALT_COMPLETE || \
+         timeout == 0)
      {
          SEC_ERROR("Failed to flush hw job ring with id  %d\n", job_ring->jr_id);
          return -1;
      }
 
-     timeout = 100000;
+     timeout = SEC_TIMEOUT;
 
     // Now reset
     out_be32(job_ring->register_base_addr + JR_REG_JRCR(job_ring), JR_REG_JRCR_VAL_RESET);
@@ -289,7 +298,7 @@ int hw_shutdown_job_ring(sec_job_ring_t *job_ring)
 
 }
 #endif
-
+#ifdef SEC_HW_VERSION_3_1
 int hw_reset_and_continue_job_ring(sec_job_ring_t *job_ring)
 {
     unsigned int timeout = SEC_TIMEOUT;
@@ -321,7 +330,14 @@ int hw_reset_and_continue_job_ring(sec_job_ring_t *job_ring)
     }
     return 0;
 }
-
+#else
+#warning "Write something here"
+int hw_reset_and_continue_job_ring(sec_job_ring_t *job_ring)
+{
+    SEC_DEBUG("Function does nothing");
+    return 0;
+}
+#endif
 #ifdef SEC_HW_VERSION_3_1
 void hw_handle_job_ring_error(sec_job_ring_t *job_ring,
                               uint32_t error_code,
