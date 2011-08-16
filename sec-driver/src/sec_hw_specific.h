@@ -626,6 +626,8 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 
 #define hw_get_no_out_entries(jr)           ((uint32_t)(in_be32(jr)->register_base_addr + JR_REG_ORSF(jr)))
 
+#define hw_get_jr_status(jr)                ((uint32_t)(in_be32((jr)->register_base_addr + JR_REG_JROSR(jr))))
+
 /** Read pointer to current descriptor that is being processed on a job ring. */
 #if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
 #define hw_get_inp_queue_base(jr)   ( (dma_addr_t)((in_be32((jr)->register_base_addr + JR_REG_IRBA(jr)) << 32) | \
@@ -746,6 +748,25 @@ struct sec_descriptor_t
 } __CACHELINE_ALIGNED;
 #else
 #define __PACKED __attribute__((__packed__))
+
+#define SH_DESC_HEADER          0xBA850200
+
+#define SH_DESC_PDB_SNS         0x00000002
+
+#define CMD_DESC_PROTO          0x80000000
+
+#define CMD_DESC_ENCAP          0x07000000
+#define CMD_DESC_DECAP          0x06000000
+
+#define CMD_DESC_PDCP_UPLANE    0x00420000
+#define CMD_DESC_PDCP_CPLANE    0x00430000
+
+#define CMD_DESC_NULL_ALG       0x00000000
+#define CMD_DESC_SNOW_ALG       0x00000001
+#define CMD_DESC_AES_ALG        0x00000002
+
+#define KEY2_CMD                0x04800000
+
 struct init_descriptor_header_s {
     union {
         uint32_t word;
@@ -798,14 +819,32 @@ struct algorithm_operation_command_s {
     } __PACKED command;
 } __PACKED;
 
+
+struct sec_sh_descriptor_t{
+#if 0
+    uint32_t    header;
+    uint32_t    pdb[5];
+    uint32_t    key2_cmd;
+    uint32_t    key2[4];
+    uint32_t    key1_cmd;
+    uint32_t    key1[4];
+    uint32_t    cmd;
+#endif
+    uint32_t    desc[18];
+} __PACKED;
+
 struct sec_descriptor_t {
+#if 0
     struct init_descriptor_header_s deschdr;
     uint32_t    pdb[5];
     struct key_command_s keycmd;
     uint32_t key[4];
-    struct algorithm_operation_command_s opcmd;
-    uint32_t    seq_inp_ptr[2];
+    uint32_t    seq_in_ptr[2];
     uint32_t    seq_out_ptr[2];
+    struct algorithm_operation_command_s opcmd;
+#else
+    uint32_t desc[21];
+#endif
 //    uint32_t rsv[48];   //TODO: fill it for iv, LOAD, MATH, FIFO LOAD etc.
 } __PACKED;
 

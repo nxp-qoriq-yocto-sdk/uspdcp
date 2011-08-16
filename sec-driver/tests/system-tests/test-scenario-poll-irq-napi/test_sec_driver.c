@@ -67,7 +67,7 @@ extern "C" {
 
 // The size of a PDCP input buffer.
 // Consider the size of the input and output buffers provided to SEC driver for processing identical.
-#define PDCP_BUFFER_SIZE   100
+#define PDCP_BUFFER_SIZE   1000
 
 #ifdef SEC_HW_VERSION_4_4
 #define IRQ_COALESCING_COUNT    10

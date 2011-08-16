@@ -178,7 +178,7 @@ struct sec_context_t
 #endif
 #ifdef SEC_HW_VERSION_4_4
     /** Shared descriptor used for this context */
-    uint32_t    *sh_desc;
+    struct sec_sh_descriptor_t  *sh_desc;
     sec_update_descriptor update_descriptor;
 #endif
     /** Validation pattern at end of structure. */

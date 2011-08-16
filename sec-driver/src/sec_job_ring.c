@@ -171,13 +171,13 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
 
     // Now write the ptrs to the input and output ring
     hw_set_input_ring_start_addr(job_ring, sec_vtop(job_ring->input_ring));
-    SEC_DEBUG(" Set input ring base address to: Virtual: 0x%x, Phyisical: 0x%x, Read from HW: 0x%x",
+    SEC_DEBUG(" Set input ring base address to: Virtual: 0x%x, Physical: 0x%x, Read from HW: 0x%x",
             (dma_addr_t)job_ring->input_ring,
             sec_vtop(job_ring->input_ring),
             hw_get_inp_queue_base(job_ring));
 
     hw_set_output_ring_start_addr(job_ring, sec_vtop(job_ring->output_ring));
-    SEC_DEBUG(" Set output ring base address to: Virtual: 0x%x, Phyisical: 0x%x, Read from HW: 0x%x",
+    SEC_DEBUG(" Set output ring base address to: Virtual: 0x%x, Physical: 0x%x, Read from HW: 0x%x",
             (dma_addr_t)job_ring->output_ring,
             sec_vtop(job_ring->output_ring),
             hw_get_out_queue_base(job_ring));
@@ -203,7 +203,7 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
                 "Current jobs[i]->mac_i [i=%d] position is not cacheline aligned.", i);
 #if SEC_HW_VERSION_4_4
         // Set pointers to descriptors in input ring
-        job_ring->input_ring[i] = &job_ring->descriptors[i];
+        job_ring->input_ring[i] = (dma_addr_t)&job_ring->descriptors[i];
         // Need to store pointer to output ring status
         job_ring->jobs[i].out_status = &job_ring->output_ring[i].status;
 #else

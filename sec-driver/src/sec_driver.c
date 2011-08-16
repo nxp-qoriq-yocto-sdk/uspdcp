@@ -509,12 +509,19 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
         SEC_DEBUG("Found a job! Total # of jobs waiting: %d", hw_get_no_finished_jobs(job_ring) );
         {
             dma_addr_t out_descr = hw_get_current_out_descriptor(job_ring);
+            int i = 0;
 
             out_descr -= sizeof(struct sec_outring_entry);
             SEC_DEBUG("Last output descriptor @ addr: 0x%x",out_descr);
             SEC_DEBUG("Last descriptor status: 0x%x",((struct sec_outring_entry*)out_descr)->status);
+            SEC_DEBUG("Last processed descriptor status (from register): 0x%x",hw_get_jr_status(job_ring));
 
-            SEC_DEBUG("Last processed descriptor status (from register): 0x%x",JR_REG_JROSR(job_ring));
+            SEC_DEBUG("descriptor @ 0x%06x",(uint32_t)(((struct sec_outring_entry*)out_descr)->descr));
+            for(;i < sizeof(sec_descriptor_t)/sizeof(uint32_t);i++)
+            {
+                SEC_DEBUG("descriptor[%x] = 0x%08x",i,*(((uint32_t*)(((struct sec_outring_entry*)out_descr)->descr)) + i));
+            }
+
         }
 
 #else
@@ -527,6 +534,15 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
 #endif
         // get the first un-notified job from the job ring
         job = &job_ring->jobs[job_ring->cidx];
+
+        {
+            int i = 0;
+            SEC_DEBUG("out pkt @ 0x%06x (offset %d)",job->out_packet->address,job->out_packet->offset);
+            for(i = 0; i < job->in_packet->length - job->out_packet->offset ; i++ )
+            {
+                SEC_DEBUG("0x%x",*(job->out_packet->address + job->out_packet->offset + i));
+            }
+        }
 
         // check if job is DONE
 #if SEC_HW_VERSION_4_4
@@ -1298,6 +1314,39 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
         SEC_DEBUG("Jr[%p].Context %p user plane = %d configured with NULL algorithm",
                   job_ring, ctx, ctx->pdcp_crypto_info->user_plane);
     }
+#endif
+
+#ifdef SEC_HW_VERSION_4_4
+    ctx->sh_desc = (dma_addr_t)g_dma_mem_free;
+    memset(ctx->sh_desc, 0, sizeof(struct sec_sh_descriptor_t));
+    g_dma_mem_free += sizeof(struct sec_sh_descriptor_t);
+
+    {
+        int i = 0;
+
+        ctx->sh_desc->desc[i++] = 0xB8860011; // hdr
+
+        ctx->sh_desc->desc[i++] = 0x00000002;
+        ctx->sh_desc->desc[i++] = 0x00000020;
+        ctx->sh_desc->desc[i++] = 0xB4000000;
+        ctx->sh_desc->desc[i++] = 0xFFFFFF60; // pdb
+        ctx->sh_desc->desc[i++] = 0xFFFFFF60; // pdb
+
+        ctx->sh_desc->desc[i++] = 0x04800010; // key 2
+        ctx->sh_desc->desc[i++] = 0xA1010C81;
+        ctx->sh_desc->desc[i++] = 0x3B52BEC0;
+        ctx->sh_desc->desc[i++] = 0x962EBF2D;
+        ctx->sh_desc->desc[i++] = 0xF0B27895; // key
+
+        ctx->sh_desc->desc[i++] = 0x02800010; // key1 cmd
+        ctx->sh_desc->desc[i++] = 0xB9D0FAD6;
+        ctx->sh_desc->desc[i++] = 0x860BDDF1;
+        ctx->sh_desc->desc[i++] = 0x2CBE5EFC;
+        ctx->sh_desc->desc[i++] = 0x95946313; // key
+
+        ctx->sh_desc->desc[i++] = 0x87430000; // pdcp-uplane enc w/null
+    }
+
 #endif
     // provide to UA a SEC ctx handle
 	*sec_ctx_handle = (sec_context_handle_t)ctx;

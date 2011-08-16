@@ -1235,32 +1235,61 @@ static int sec_pdcp_context_update_null_cipher_descriptor(sec_job_t *job, sec_de
     sec_crypto_pdb_t *sec_pdb = &job->sec_context->crypto_desc_pdb;
     const sec_pdcp_context_info_t *ua_crypto_info = job->sec_context->pdcp_crypto_info;
     dma_addr_t phys_addr = 0;
-#if 1
-    descriptor->deschdr.command.word = 0xB0850010;
-    descriptor->pdb[0] = 0x00000002;
-    descriptor->pdb[1] = 0x9FB31245;
-    descriptor->pdb[2] = 0xA4000000;
-    descriptor->pdb[3] = 0xFBFFB1C0;
+#if 0
+    //descriptor->deschdr.command.word = 0xB0860010;
+    descriptor->deschdr.command.word = 0xB0860010;
+
+    descriptor->pdb[0] = 0x00000000;
+    descriptor->pdb[1] = 0x1CC52CD0;
+    descriptor->pdb[2] = 0x1a000000;
+    descriptor->pdb[3] = 0xFF000000;
     descriptor->pdb[4] = 0xFFFFFFFF; // threshold mask
 
     descriptor->keycmd.command.word = 0x02800010; // class 1 key
-    descriptor->key[0] = 0x8C48FF89;
-    descriptor->key[1] = 0xCB854FC0;
-    descriptor->key[2] = 0x9081CC47;
-    descriptor->key[3] = 0xEDFC8619;
+    descriptor->key[0] = 0x5ACB1D64;
+    descriptor->key[1] = 0x4C0D5120;
+    descriptor->key[2] = 0x4EA5F145;
+    descriptor->key[3] = 0x1010D852;
 
     descriptor->opcmd.command.word = 0x87420000; // u-plane encap w/null enc
 
     phys_addr = sec_vtop(job->in_packet->address);
-    descriptor->seq_inp_ptr[0] = (0xF000 << 16) | job->in_packet->length;
+    descriptor->seq_in_ptr[0] = (0xF000 << 16) | (job->in_packet->length - job->in_packet->offset);
 #warning "Update for 36 bits addresses"
-    descriptor->seq_inp_ptr[1] = phys_addr;
+    descriptor->seq_in_ptr[1] = phys_addr + job->in_packet->offset;
 
     phys_addr = sec_vtop(job->out_packet->address);
-    descriptor->seq_out_ptr[0] = (0xF800 << 16) | job->out_packet->length;
+    descriptor->seq_out_ptr[0] = (0xF800 << 16) | (job->out_packet->length - job->out_packet->offset);
 #warning "Update for 36 bits addresses"
-    descriptor->seq_out_ptr[1] = phys_addr;
+    descriptor->seq_out_ptr[1] = phys_addr + job->out_packet->offset;
+
 #else
+    int i = 0;
+
+    descriptor->desc[i++] = 0xB0911005;
+
+    phys_addr = sec_vtop(job->sec_context->sh_desc);
+    descriptor->desc[i++] = phys_addr;
+
+    phys_addr = sec_vtop(job->in_packet->address);
+    descriptor->desc[i++] = (0xF000 << 16) | job->in_packet->length ; // seq in ptr
+    descriptor->desc[i++] = phys_addr;
+
+    phys_addr = sec_vtop(job->out_packet->address);
+    descriptor->desc[i++] = (0xF800 << 16) | job->out_packet->length; // seq out ptr
+    descriptor->desc[i++] = phys_addr;
+
+#endif
+    {
+        int i = 0;
+        SEC_DEBUG("in pkt @ 0x%06x (offset %d)",job->in_packet->address,job->in_packet->offset);
+        for(; i < job->in_packet->length - job->in_packet->offset; i++ )
+        {
+            SEC_DEBUG("0x%x",*(job->in_packet->address + job->in_packet->offset + i));
+        }
+    }
+
+#if 0
 
     *(((uint32_t*)descriptor + 0)) = 0xB080000B; //       jobhdr: stidx=0 len=15
     *(((uint32_t*)descriptor + 1)) = 0x12200010; //           ld: ccb1-ctx len=16 offs=0
@@ -1285,6 +1314,13 @@ static int sec_pdcp_context_update_null_cipher_descriptor(sec_job_t *job, sec_de
         {
             SEC_DEBUG("descriptor[%x] = 0x%08x",i,*(((uint32_t*)descriptor) + i));
         }
+
+        SEC_DEBUG("shared descriptor @ 0x%06x",(uint32_t)job->sec_context->sh_desc);
+        for(i = 0;i < sizeof(struct sec_sh_descriptor_t)/sizeof(uint32_t);i++)
+        {
+            SEC_DEBUG("shared descriptor[%x] = 0x%08x",i,*(((uint32_t*)job->sec_context->sh_desc) + i));
+        }
+
     }
 
     return ret;
