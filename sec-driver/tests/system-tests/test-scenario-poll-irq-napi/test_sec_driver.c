@@ -92,7 +92,8 @@ extern "C" {
 #define AES_CMAC_SCTRATCHPAD_PACKET_AREA_LENGHT 8
 
 // Offset in input and output packet, where PDCP header starts
-#define PACKET_OFFSET   3
+//#define PACKET_OFFSET   3
+#define PACKET_OFFSET   0
 
 // Length in bytes requried for MAC-I code generation,
 // in case of PDCP control-plane.
@@ -535,7 +536,7 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
     // PDCP control-plane with AES CMAC algorithm, which is captured in 'offset' field.
     assert((*in_packet)->length <= PDCP_BUFFER_SIZE);
 
-    (*out_packet)->length = sizeof(test_data_in) + PDCP_HEADER_LENGTH + (*out_packet)->offset;
+    (*out_packet)->length = sizeof(test_data_out) + PDCP_HEADER_LENGTH + (*out_packet)->offset;
 #ifdef TEST_PDCP_CONTROL_PLANE_DOUBLE_PASS_ENC
     // Need extra 4 bytes at end of input/output packet for MAC-I code, in case of PDCP control-plane packets
     (*out_packet)->length += MAC_I_LENGTH;

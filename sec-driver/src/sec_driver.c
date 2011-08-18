@@ -1323,28 +1323,52 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
 
     {
         int i = 0;
+#if 1
+        ctx->sh_desc->desc[i++] = 0xBA850210; // hdr, share=serial
 
-        ctx->sh_desc->desc[i++] = 0xB8860011; // hdr
+        ctx->sh_desc->desc[i++] = 0x00000002; // opts
+        ctx->sh_desc->desc[i++] = 0x00000020; // hfn
+        ctx->sh_desc->desc[i++] = 0xB4000000; // bearer,dir
+        ctx->sh_desc->desc[i++] = 0xFFFFFF60; // threshold
 
-        ctx->sh_desc->desc[i++] = 0x00000002;
-        ctx->sh_desc->desc[i++] = 0x00000020;
-        ctx->sh_desc->desc[i++] = 0xB4000000;
-        ctx->sh_desc->desc[i++] = 0xFFFFFF60; // pdb
-        ctx->sh_desc->desc[i++] = 0xFFFFFF60; // pdb
-
-        ctx->sh_desc->desc[i++] = 0x04800010; // key 2
+        ctx->sh_desc->desc[i++] = 0x04800010; // key 2 cmd, imm
         ctx->sh_desc->desc[i++] = 0xA1010C81;
         ctx->sh_desc->desc[i++] = 0x3B52BEC0;
         ctx->sh_desc->desc[i++] = 0x962EBF2D;
-        ctx->sh_desc->desc[i++] = 0xF0B27895; // key
+        ctx->sh_desc->desc[i++] = 0xF0B27895; // key2
 
-        ctx->sh_desc->desc[i++] = 0x02800010; // key1 cmd
+        ctx->sh_desc->desc[i++] = 0x02800010; // key1 cmd, imm
         ctx->sh_desc->desc[i++] = 0xB9D0FAD6;
         ctx->sh_desc->desc[i++] = 0x860BDDF1;
         ctx->sh_desc->desc[i++] = 0x2CBE5EFC;
-        ctx->sh_desc->desc[i++] = 0x95946313; // key
+        ctx->sh_desc->desc[i++] = 0x95946313; // key1
 
-        ctx->sh_desc->desc[i++] = 0x87430000; // pdcp-uplane enc w/null
+        ctx->sh_desc->desc[i++] = 0x87430001; // pdcp-cplane enc w/snow
+#else
+        ctx->sh_desc->desc[i++] = 0xB8801011;    /* Job Descriptor Header */
+
+        ctx->sh_desc->desc[i++] = 0xA8084A04;    /* CMD MATH: VSIL <- SEQ_IN_Length + Immediate(0x0) = Data_length */
+        ctx->sh_desc->desc[i++] = 0x00000000;    /* Immediate    = 0x0 */
+        ctx->sh_desc->desc[i++] = 0xA8084B04;    /* CMD MATH: VSOL <- SEQ_IN_Length + Immediate(0x0) = Data_length */
+        ctx->sh_desc->desc[i++] = 0x00000000;    /* Immediate    = 0x0 */
+
+        ctx->sh_desc->desc[i++] = 0x16860800;    /* CMD LOAD: Disable Automatic Info FIFO entries */
+        ctx->sh_desc->desc[i++] = 0x2B120000;    /* CMD SEQ FIFO LOAD */
+
+        ctx->sh_desc->desc[i++] = 0x69300000;    /* CMD SEQ FIFO STORE */
+        ctx->sh_desc->desc[i++] = 0x16860400;    /* CMD LOAD: Enable Automatic Info FIFO entries */
+
+        ctx->sh_desc->desc[i++] = 0xA80C4104;    /* CMD MATH: Math_reg_1 <- ZERO + Immediate(Move_size) = Move_size */
+        ctx->sh_desc->desc[i++] = 0x00000008;    /* Immediate = Move_size -> 8 bytes */
+
+        /* LOOP */
+        ctx->sh_desc->desc[i++] = 0xA82A1F04;    /* CMD MATH: VSIL - Math_reg1 */
+        ctx->sh_desc->desc[i++] = 0xA0020C04;    /* CMD JUMP: if Z or N, Jump forward 4 [last chunk of data - JMP to 19] */
+        ctx->sh_desc->desc[i++] = 0x78820008;    /* CMD MOVE: Move Data from FIFO IN to FIFO out (length:Move_size -> 8 bytes) */
+        ctx->sh_desc->desc[i++] = 0xA82A1A04;    /* CMD MATH: VSIL = VSIL - Math_Reg1 (Remaining Len - Move Len -> Remaining Length) */
+        ctx->sh_desc->desc[i++] = 0xA00000FC;    /* CMD JUMP: LOOP - jump backward 4 */
+        ctx->sh_desc->desc[i++] = 0x7C820008; /* CMD MOVE: Move Data from FIFO IN to FIFO out with FLUSH set */
+#endif
     }
 
 #endif
