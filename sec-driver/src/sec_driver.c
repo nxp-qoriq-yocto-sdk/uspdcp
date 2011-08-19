@@ -1324,12 +1324,14 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
     {
         int i = 0;
 #if 1
-        ctx->sh_desc->desc[i++] = 0xBA850210; // hdr, share=serial
+        //ctx->sh_desc->desc[i++] = 0xBA850210; // hdr, share=serial
+        ctx->sh_desc->desc[i++] = 0xBA85020B; // hdr, share=serial
 #if 1
-        ctx->sh_desc->desc[i++] = 0x00000002; // opts
-        ctx->sh_desc->desc[i++] = 0x01F4AAC0; // hfn
+        ctx->sh_desc->desc[i++] = 0x00000000; // opts
+        //ctx->sh_desc->desc[i++] = 0x01F4AAC0; // hfn
+        ctx->sh_desc->desc[i++] = 0xFA556000;
         ctx->sh_desc->desc[i++] = 0x1C000000; // bearer,dir
-        ctx->sh_desc->desc[i++] = 0x0FF00000; // threshold
+        ctx->sh_desc->desc[i++] = 0xFF000000; // threshold
 #else
         ctx->sh_desc->desc[i++] = 0x00000002; // opts
         ctx->sh_desc->desc[i++] = 0x00000020; // hfn
@@ -1337,6 +1339,7 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
         ctx->sh_desc->desc[i++] = 0xFFFFFF60; // threshold
 #endif
 
+#if 0
         ctx->sh_desc->desc[i++] = 0x04800010; // key 2 cmd, imm
 #if 1
         ctx->sh_desc->desc[i++] = 0xC736C6AA;
@@ -1348,6 +1351,7 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
         ctx->sh_desc->desc[i++] = 0x3B52BEC0;
         ctx->sh_desc->desc[i++] = 0x962EBF2D;
         ctx->sh_desc->desc[i++] = 0xF0B27895; // key2
+#endif
 #endif
         ctx->sh_desc->desc[i++] = 0x02800010; // key1 cmd, imm
 #if 1
@@ -1362,7 +1366,9 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
         ctx->sh_desc->desc[i++] = 0x95946313; // key1
 #endif
 
-        ctx->sh_desc->desc[i++] = 0x87430001; // pdcp-cplane enc w/snow
+        //ctx->sh_desc->desc[i++] = 0x87430001; // pdcp-cplane enc w/snow
+       //ctx->sh_desc->desc[i++] = 0x87420001; // pdcp-dplane enc w/snow
+        ctx->sh_desc->desc[i++] = 0x87420000 ; // pdcp-dplane enc w/snow
 #else
         ctx->sh_desc->desc[i++] = 0xB8801011;    /* Job Descriptor Header */
 

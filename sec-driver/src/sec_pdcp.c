@@ -1266,7 +1266,8 @@ static int sec_pdcp_context_update_null_cipher_descriptor(sec_job_t *job, sec_de
 #else
     int i = 0;
 
-    descriptor->desc[i++] = 0xB0901C08;// jd hdr, share = defer, reo
+    //descriptor->desc[i++] = 0xB0901C08;// jd hdr, share = defer, reo
+    descriptor->desc[i++] = 0xB08B1C08;// jd hdr, share = defer, reo
 
     phys_addr = sec_vtop(job->sec_context->sh_desc);
     descriptor->desc[i++] = phys_addr;
