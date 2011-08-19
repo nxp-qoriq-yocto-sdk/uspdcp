@@ -92,8 +92,8 @@ extern "C" {
 #define AES_CMAC_SCTRATCHPAD_PACKET_AREA_LENGHT 8
 
 // Offset in input and output packet, where PDCP header starts
-//#define PACKET_OFFSET   3
-#define PACKET_OFFSET   0
+#define PACKET_OFFSET   3
+//#define PACKET_OFFSET   0
 
 // Length in bytes requried for MAC-I code generation,
 // in case of PDCP control-plane.

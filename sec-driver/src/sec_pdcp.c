@@ -1266,23 +1266,25 @@ static int sec_pdcp_context_update_null_cipher_descriptor(sec_job_t *job, sec_de
 #else
     int i = 0;
 
-    descriptor->desc[i++] = 0xB0911005;
+    descriptor->desc[i++] = 0xB0901C08;// jd hdr, share = defer, reo
 
     phys_addr = sec_vtop(job->sec_context->sh_desc);
     descriptor->desc[i++] = phys_addr;
 
-    phys_addr = sec_vtop(job->in_packet->address);
-    descriptor->desc[i++] = (0xF000 << 16) | job->in_packet->length ; // seq in ptr
-    descriptor->desc[i++] = phys_addr;
-
     phys_addr = sec_vtop(job->out_packet->address);
-    descriptor->desc[i++] = (0xF800 << 16) | job->out_packet->length; // seq out ptr
-    descriptor->desc[i++] = phys_addr;
+    descriptor->desc[i++] = 0xF8400000; // seq out, ext = 1
+    descriptor->desc[i++] = phys_addr + job->out_packet->offset; // seq out ptr
+    descriptor->desc[i++] = job->out_packet->length - job->out_packet->offset; // length
+
+    phys_addr = sec_vtop(job->in_packet->address);
+    descriptor->desc[i++] = 0xF0400000; // seq in, ext = 1
+    descriptor->desc[i++] = phys_addr + job->in_packet->offset; // seq in ptr
+    descriptor->desc[i++] = job->in_packet->length - job->in_packet->offset; // length
 
 #endif
     {
         int i = 0;
-        SEC_DEBUG("in pkt @ 0x%06x (offset %d)",job->in_packet->address,job->in_packet->offset);
+        SEC_DEBUG("in pkt @ 0x%06x (length: %d, offset %d)",job->in_packet->address,job->in_packet->length,job->in_packet->offset);
         for(; i < job->in_packet->length - job->in_packet->offset; i++ )
         {
             SEC_DEBUG("0x%x",*(job->in_packet->address + job->in_packet->offset + i));

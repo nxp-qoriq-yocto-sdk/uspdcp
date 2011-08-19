@@ -537,10 +537,10 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
 
         {
             int i = 0;
-            SEC_DEBUG("out pkt @ 0x%06x (offset %d)",job->out_packet->address,job->out_packet->offset);
-            for(i = 0; i < job->in_packet->length - job->out_packet->offset ; i++ )
+            SEC_DEBUG("out pkt @ 0x%06x (length: %d,offset %d)",job->out_packet->address, job->out_packet->length, job->out_packet->offset);
+            for(i = 0; i < job->out_packet->length  ; i++ )
             {
-                SEC_DEBUG("0x%x",*(job->out_packet->address + job->out_packet->offset + i));
+                SEC_DEBUG("0x%x",*(job->out_packet->address + i));
             }
         }
 
@@ -1325,23 +1325,42 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
         int i = 0;
 #if 1
         ctx->sh_desc->desc[i++] = 0xBA850210; // hdr, share=serial
-
+#if 1
+        ctx->sh_desc->desc[i++] = 0x00000002; // opts
+        ctx->sh_desc->desc[i++] = 0x01F4AAC0; // hfn
+        ctx->sh_desc->desc[i++] = 0x1C000000; // bearer,dir
+        ctx->sh_desc->desc[i++] = 0x0FF00000; // threshold
+#else
         ctx->sh_desc->desc[i++] = 0x00000002; // opts
         ctx->sh_desc->desc[i++] = 0x00000020; // hfn
         ctx->sh_desc->desc[i++] = 0xB4000000; // bearer,dir
         ctx->sh_desc->desc[i++] = 0xFFFFFF60; // threshold
+#endif
 
         ctx->sh_desc->desc[i++] = 0x04800010; // key 2 cmd, imm
+#if 1
+        ctx->sh_desc->desc[i++] = 0xC736C6AA;
+        ctx->sh_desc->desc[i++] = 0xB22BFFF9;
+        ctx->sh_desc->desc[i++] = 0x1E2698D2;
+        ctx->sh_desc->desc[i++] = 0xE22AD57E;
+#else
         ctx->sh_desc->desc[i++] = 0xA1010C81;
         ctx->sh_desc->desc[i++] = 0x3B52BEC0;
         ctx->sh_desc->desc[i++] = 0x962EBF2D;
         ctx->sh_desc->desc[i++] = 0xF0B27895; // key2
-
+#endif
         ctx->sh_desc->desc[i++] = 0x02800010; // key1 cmd, imm
+#if 1
+        ctx->sh_desc->desc[i++] = 0x5ACB1D64;
+        ctx->sh_desc->desc[i++] = 0x4C0D5120;
+        ctx->sh_desc->desc[i++] = 0x4EA5F145;
+        ctx->sh_desc->desc[i++] = 0x1010D852;
+#else
         ctx->sh_desc->desc[i++] = 0xB9D0FAD6;
         ctx->sh_desc->desc[i++] = 0x860BDDF1;
         ctx->sh_desc->desc[i++] = 0x2CBE5EFC;
         ctx->sh_desc->desc[i++] = 0x95946313; // key1
+#endif
 
         ctx->sh_desc->desc[i++] = 0x87430001; // pdcp-cplane enc w/snow
 #else
