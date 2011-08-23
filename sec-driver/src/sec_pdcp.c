@@ -393,6 +393,109 @@ static void sec_pdcp_update_iv_template(sec_crypto_pdb_t *sec_pdb,
  * @param [in,out] ctx          SEC context
  */
 static void sec_pdcp_create_pdb(sec_context_t *ctx);
+
+#ifdef SEC_HW_VERSION_4_4
+
+#define NUM_CIPHER_ALGS sizeof(sec_crypto_alg_t)
+#define NUM_INT_ALGS sizeof(sec_crypto_alg_t)
+
+static int create_cplane_hw_acc_desc(sec_context_t *crypto_pdb);
+
+static int create_uplane_hw_acc_desc(sec_context_t *crypto_pdb);
+
+static int create_mixed_desc(sec_context_t *crypto_pdb);
+
+static int create_auth_only_desc(sec_context_t *crypto_pdb);
+
+static int create_cipher_only_desc(sec_context_t *crypto_pdb);
+
+static int create_copy_desc(sec_context_t *crypto_pdb);
+
+typedef int (*create_desc_fp)(sec_context_t *crypto_pdb);
+
+#warning "Make the \"2\" below a nice define"
+static create_desc_fp ctrl_plane_create_desc[2][NUM_CIPHER_ALGS][NUM_INT_ALGS] = {
+        {   // C-PLANE
+                /*              SNOW                      AES                       NULL */
+                /* SNOW */{create_cplane_hw_acc_desc,      create_mixed_desc,       create_auth_only_desc},
+                /* AES  */{create_mixed_desc,              create_cplane_hw_acc_desc,      create_auth_only_desc},
+                /* NULL */{create_cipher_only_desc, create_cipher_only_desc, create_copy_desc},
+        },
+        {   // U-PLANE
+                          {create_uplane_hw_acc_desc,   create_uplane_hw_acc_desc,         create_copy_desc}
+        }
+    };
+
+static int create_cplane_hw_acc_desc(sec_context_t *ctx)
+{
+    ASSERT(ctx != NULL);
+    ASSERT(ctx->sh_desc != NULL);
+
+    ASSERT(ctx->pdcp_crypto_info->cipher_key != NULL);
+    ASSERT(ctx->pdcp_crypto_info->integrity_key != NULL);
+
+    SEC_INFO("Creating descriptor w/enc alg %s & auth alg %s",
+              ctx->pdcp_crypto_info->cipher_algorithm == SEC_ALG_AES ? "AES" : "SNOW",
+              ctx->pdcp_crypto_info->cipher_algorithm == SEC_ALG_AES ? "AES" : "SNOW");
+
+    SEC_PDCP_INIT_CPLANE_SD(ctx->sh_desc);
+    // PDB Template:
+    // W1: must set to 0x00000020
+    // W2: HFN (27 bits) | Reserved (5 bits)
+    // W3: Bearer(5 bits)|Dir(1 bit)| Reserved (25 bits)
+    // W4: Threshold (27bits) | Reserved (5 bits)
+    SEC_PDCP_INIT_CPLANE_PDB(ctx->sh_desc->pdb,
+                             ctx->pdcp_crypto_info);
+
+    SEC_PDCP_SD_SET_KEY2(ctx->sh_desc,
+                         ctx->pdcp_crypto_info->integrity_key,
+                         ctx->pdcp_crypto_info->integrity_key_len);
+
+    SEC_PDCP_SD_SET_KEY1(ctx->sh_desc,
+                         ctx->pdcp_crypto_info->cipher_key,
+                         ctx->pdcp_crypto_info->cipher_key_len);
+
+    // Doesn't matter which alg, since they're the same in this case
+    SEC_PDCP_SH_SET_PROT_DIR(ctx->sh_desc, ctx->pdcp_crypto_info->protocol_direction);
+
+    SEC_PDCP_SH_SET_PROT_ALG(ctx->sh_desc,ctx->pdcp_crypto_info->cipher_algorithm);
+
+    SEC_PDCP_DUMP_DESC(ctx->sh_desc);
+    return SEC_SUCCESS;
+}
+
+static int create_uplane_hw_acc_desc(sec_context_t *crypto_pdb)
+{
+    SEC_INFO(" Called create_uplane_hw_acc_desc");
+
+    return SEC_OUT_OF_MEMORY;
+}
+
+static int create_mixed_desc(sec_context_t *crypto_pdb)
+{
+    SEC_INFO(" Called create_mixed_desc");
+    return SEC_OUT_OF_MEMORY;
+}
+
+static int create_auth_only_desc(sec_context_t *crypto_pdb)
+{
+    SEC_INFO(" Called create_auth_only_desc");
+    return SEC_OUT_OF_MEMORY;
+}
+
+static int create_cipher_only_desc(sec_context_t *crypto_pdb)
+{
+    SEC_INFO(" Called create_cipher_only_desc");
+    return SEC_OUT_OF_MEMORY;
+}
+
+static int create_copy_desc(sec_context_t *crypto_pdb)
+{
+    SEC_INFO(" Called create_copy_desc");
+    return SEC_OUT_OF_MEMORY;
+}
+
+#endif
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
@@ -691,6 +794,7 @@ static int sec_pdcp_context_create_null_auth_descriptor(sec_context_t *ctx)
     return SEC_SUCCESS;
 }
 
+#ifdef SEC_HW_VERSION_3_1
 static int sec_pdcp_context_create_descriptor(sec_context_t *ctx)
 {
     int ret = SEC_SUCCESS;
@@ -731,7 +835,7 @@ static int sec_pdcp_context_create_descriptor(sec_context_t *ctx)
     }
     return ret;
 }
-#ifdef SEC_HW_VERSION_3_1
+
 static int sec_pdcp_context_update_snow_f8_aes_ctr_descriptor(sec_job_t *job, sec_descriptor_t *descriptor)
 {
     int ret = SEC_SUCCESS;
@@ -870,6 +974,29 @@ static int sec_pdcp_context_update_snow_f8_aes_ctr_descriptor(sec_job_t *job, se
     return ret;
 }
 #else
+static int sec_pdcp_context_create_descriptor(sec_context_t *ctx)
+{
+    int ret = SEC_SUCCESS;
+    extern void* g_dma_mem_free;
+
+    ASSERT(ctx != NULL);
+    ASSERT(ctx->pdcp_crypto_info != NULL);
+
+    ctx->sh_desc = (dma_addr_t)g_dma_mem_free;
+    memset(ctx->sh_desc, 0, sizeof(struct sec_pdcp_sd_t));
+    g_dma_mem_free += sizeof(struct sec_pdcp_sd_t);
+
+    SEC_INFO("Created shared descriptor @ 0x%04x",(uint32_t)ctx->sh_desc);
+
+    // Create a Protocol Data Blob (PDB)
+    sec_pdcp_create_pdb(ctx);
+
+    ret = ctrl_plane_create_desc[ctx->pdcp_crypto_info->user_plane]
+                          [ctx->pdcp_crypto_info->cipher_algorithm]
+                          [ctx->pdcp_crypto_info->integrity_algorithm](ctx);
+
+    return ret;
+}
 static int sec_pdcp_context_update_snow_f8_aes_ctr_descriptor(sec_job_t *job, sec_descriptor_t *descriptor)
 {
     int ret = SEC_SUCCESS;
@@ -1228,7 +1355,7 @@ static int sec_pdcp_context_update_null_auth_descriptor(sec_job_t *job, sec_desc
 {
     return SEC_SUCCESS;
 }
-
+#ifdef SEC_HW_VERSION_3_1
 static int sec_pdcp_context_update_null_cipher_descriptor(sec_job_t *job, sec_descriptor_t *descriptor)
 {
     int ret = SEC_SUCCESS;
@@ -1328,6 +1455,7 @@ static int sec_pdcp_context_update_null_cipher_descriptor(sec_job_t *job, sec_de
 
     return ret;
 }
+#endif // SEC_HW_VERSION_3_1
 
 static void sec_pdcp_update_iv_template(sec_crypto_pdb_t *sec_pdb,
                                         uint8_t *pdcp_header,
@@ -1425,7 +1553,7 @@ int sec_pdcp_context_set_crypto_info(sec_context_t *ctx,
 
     return SEC_SUCCESS;
 }
-
+#ifdef SEC_HW_VERSION_3_1
 int sec_pdcp_context_update_descriptor(sec_context_t *ctx,
                                        sec_job_t *job,
                                        sec_descriptor_t *descriptor,
@@ -1433,7 +1561,7 @@ int sec_pdcp_context_update_descriptor(sec_context_t *ctx,
 {
     int ret = SEC_SUCCESS;
 
-    // Call function pointer to update descriptor for: 
+    // Call function pointer to update descriptor for:
     // SNOW F8/F9 or AES CTR/CMAC
     ret = do_integrity_check == 1 ? ctx->update_auth_descriptor(job, descriptor):
                                     ctx->update_crypto_descriptor(job, descriptor);
@@ -1441,7 +1569,51 @@ int sec_pdcp_context_update_descriptor(sec_context_t *ctx,
 
     return ret;
 }
+#else
+int sec_pdcp_context_update_descriptor(sec_context_t *ctx,
+                                       sec_job_t *job,
+                                       sec_descriptor_t *descriptor,
+                                       uint8_t do_integrity_check)
+{
+    dma_addr_t  phys_addr;
+    int ret = SEC_SUCCESS;
 
+    phys_addr = sec_vtop(job->sec_context->sh_desc);
+
+    PDCP_INIT_JD(descriptor);
+    PDCP_JD_SET_SD(descriptor,
+                   phys_addr,
+                   SD_LEN);
+
+    phys_addr = sec_vtop(job->out_packet->address);
+    PDCP_JD_SET_OUT_PTR(descriptor,
+                        phys_addr,
+                        job->out_packet->offset,
+                        job->out_packet->length);
+
+    phys_addr = sec_vtop(job->in_packet->address);
+    PDCP_JD_SET_IN_PTR(descriptor,
+                       phys_addr,
+                       job->in_packet->offset,
+                       job->in_packet->length);
+
+    {
+        int i = 0;
+        SEC_DEBUG("in pkt @ 0x%06x (length: %d, offset %d)",job->in_packet->address,job->in_packet->length,job->in_packet->offset);
+        for(; i < job->in_packet->length - job->in_packet->offset; i++ )
+        {
+            SEC_DEBUG("0x%x",*(job->in_packet->address + job->in_packet->offset + i));
+        }
+    }
+
+    SEC_PDCP_DUMP_DESC(descriptor);
+
+    SEC_INFO("Update crypto descriptor return code = %d", ret);
+
+    return ret;
+}
+
+#endif
 /*================================================================================================*/
 
 #ifdef __cplusplus

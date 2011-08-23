@@ -749,40 +749,62 @@ struct sec_descriptor_t
 #else
 #define __PACKED __attribute__((__packed__))
 
-#define SH_DESC_HEADER          0xBA850200
+#define CMD_HDR_CTYPE_SD        0x16
+#define CMD_HDR_CTYPE_JD        0x17
 
-#define SH_DESC_PDB_SNS         0x00000002
+#define CMD_PROTO_SNOW_ALG       0x01
+#define CMD_PROTO_AES_ALG        0x02
 
-#define CMD_DESC_PROTO          0x80000000
+#define CMD_PROTO_DECAP         0x06
+#define CMD_PROTO_ENCAP         0x07
 
-#define CMD_DESC_ENCAP          0x07000000
-#define CMD_DESC_DECAP          0x06000000
+#define PDCP_JD_SET_SD(descriptor,ptr,sd_len)           { \
+    (descriptor)->sd_ptr = (ptr);                         \
+    (descriptor)->deschdr.command.jd.shr_desc_len = (sd_len);\
+}
 
-#define CMD_DESC_PDCP_UPLANE    0x00420000
-#define CMD_DESC_PDCP_CPLANE    0x00430000
+#define PDCP_INIT_JD(descriptor)              { \
+        (descriptor)->deschdr.command.word = 0xB0801C08; \
+        (descriptor)->seq_out.command.word = 0xF8400000; \
+        (descriptor)->seq_in.command.word  = 0xF0400000; \
+}
 
-#define CMD_DESC_NULL_ALG       0x00000000
-#define CMD_DESC_SNOW_ALG       0x00000001
-#define CMD_DESC_AES_ALG        0x00000002
-
-#define KEY2_CMD                0x04800000
-
-struct init_descriptor_header_s {
+struct descriptor_header_s {
     union {
         uint32_t word;
         struct {
-            unsigned int ctype:5;
-            unsigned int rsvd26_25:2;
-            unsigned int dnr:1;
-            unsigned int one:1;
-            unsigned int start_idx:7;
-            unsigned int zro:1;
-            unsigned int rsvd14_12:3;
-            unsigned int propogate_dnr:1;
-            unsigned int share:3;
-            unsigned int rsvd7:1;
-            unsigned int desc_len:7;
-        } field;
+            /* 4  */ unsigned int ctype:5;
+            /* 5  */ unsigned int res1:2;
+            /* 7  */ unsigned int dnr:1;
+            /* 8  */ unsigned int one:1;
+            /* 9  */ unsigned int res2:1;
+            /* 10 */ unsigned int start_idx:6;
+            /* 16 */ unsigned int res3:2;
+            /* 18 */ unsigned int cif:1;
+            /* 19 */ unsigned int sc:1;
+            /* 20 */ unsigned int pd:1;
+            /* 21 */ unsigned int res4:1;
+            /* 22 */ unsigned int share:2;
+            /* 24 */ unsigned int res5:2;
+            /* 26 */ unsigned int desclen:6;
+        } sd;
+        struct {
+            /* 4  */ unsigned int ctype:5;
+            /* 5  */ unsigned int res1:1;
+            /* 6  */ unsigned int rsms:1;
+            /* 7  */ unsigned int dnr:1;
+            /* 8  */ unsigned int one:1;
+            /* 9  */ unsigned int res2:1;
+            /* 10 */ unsigned int shr_desc_len:6;
+            /* 16 */ unsigned int zero:1;
+            /* 17 */ unsigned int td:1;
+            /* 18 */ unsigned int mtd:1;
+            /* 19 */ unsigned int shr:1;
+            /* 20 */ unsigned int reo:1;
+            /* 21 */ unsigned int share:3;
+            /* 24 */ unsigned int res4:1;
+            /* 25 */ unsigned int desclen:7;
+        } jd;
     } __PACKED command;
 } __PACKED;
 
@@ -795,57 +817,198 @@ struct key_command_s {
             unsigned int sgf:1;
             unsigned int imm:1;
             unsigned int enc:1;
-            unsigned int rsvd21_18:4;
-            unsigned int kdest:2;
-            unsigned int rsvd15_10:6;
+            unsigned int nwb:1;
+            unsigned int ekt:1;
+            unsigned int kdest:4;
+            unsigned int tk:1;
+            unsigned int rsvd1:5;
             unsigned int length:10;
-        } field;
+        } __PACKED field;
     } __PACKED command;
 } __PACKED;
 
-struct algorithm_operation_command_s {
+struct protocol_operation_command_s {
     union {
         uint32_t word;
         struct {
             unsigned int ctype:5;
             unsigned int optype:3;
-            uint8_t alg;
-            unsigned int rsvd16_18:3;
-            unsigned int aai:9;
-            unsigned int as:2;
-            unsigned int icv:1;
-            unsigned int enc:1;
+            unsigned char protid;
+            unsigned short protinfo;
+        } __PACKED field;
+    } __PACKED command;
+} __PACKED;
+
+struct seq_in_command_s {
+    union {
+        uint32_t word;
+        struct {
+            unsigned int ctype:5;
+            unsigned int res1:1;
+            unsigned int inl:1;
+            unsigned int sgf:1;
+            unsigned int pre:1;
+            unsigned int ext:1;
+            unsigned int rto:1;
+            unsigned int rjd:1;
+            unsigned int res2:4;
+        } field;
+    } __PACKED command;
+}__PACKED;
+
+struct seq_out_command_s{
+    union {
+        uint32_t word;
+        struct {
+            unsigned int ctype:5;
+            unsigned int res1:2;
+            unsigned int sgf:1;
+            unsigned int pre:1;
+            unsigned int ext:1;
+            unsigned int rto:1;
+            unsigned int res2:5;
         } field;
     } __PACKED command;
 } __PACKED;
 
+struct sec_pdcp_pdb_s
+{
+    union{
+        uint32_t    content[4];
+        struct{
+            unsigned int res1;
+            unsigned int hfn:27;
+            unsigned int res2:5;
+            unsigned int bearer:5;
+            unsigned int dir:1;
+            unsigned int res3:26;
+            unsigned int threshold;
+        }__PACKED cplane_pdb;
+        struct{
+            unsigned int res1_sns;
+            union{
+                struct{
+                    unsigned int hfn:20;
+                    unsigned int res:12;
+                }__PACKED hfn_l;
+                struct{
+                    unsigned int hfn:25;
+                    unsigned int res:7;
+                }__PACKED hfn_s;
+                unsigned int word;
+            } __PACKED hfn;
+            unsigned int bearer:5;
+            unsigned int dir:1;
+            unsigned int res3:26;
+            unsigned int threshold;
+        }__PACKED uplane_pdb;
+    }__PACKED pdb_content;
+} __PACKED;
 
-struct sec_sh_descriptor_t{
-#if 0
-    uint32_t    header;
-    uint32_t    pdb[5];
-    uint32_t    key2_cmd;
-    uint32_t    key2[4];
-    uint32_t    key1_cmd;
-    uint32_t    key1[4];
-    uint32_t    cmd;
-#endif
+#define SEC_PDCP_INIT_CPLANE_PDB(pdb,ctx)   {                           \
+    (pdb).pdb_content.cplane_pdb.res1 = 0x00000002;                     \
+    (pdb).pdb_content.cplane_pdb.hfn = (ctx)->hfn;                      \
+    (pdb).pdb_content.cplane_pdb.bearer = (ctx)->bearer;                \
+    (pdb).pdb_content.cplane_pdb.dir = (ctx)->protocol_direction ==     \
+                                    PDCP_ENCAPSULATION ? 1 : 0;         \
+    (pdb).pdb_content.cplane_pdb.threshold = (ctx)->hfn_threshold;      \
+}
+
+#define SEC_PDCP_INIT_CPLANE_SD(descriptor){ \
+        (descriptor)->deschdr.command.word  = 0xBA850210;    \
+        (descriptor)->key2_cmd.command.word = 0x04800000;    \
+        (descriptor)->key1_cmd.command.word = 0x02800000;    \
+        (descriptor)->protocol.command.word = 0x80430000;    \
+}
+
+#define SEC_PDCP_SD_COPY_KEY(key_dst,key_src,len)    {              \
+        int __cnt;                                                  \
+        for(__cnt = 0; __cnt < (len)/sizeof(uint32_t); __cnt++)     \
+        {                                                           \
+            (key_dst)[__cnt] = *(((uint32_t*)(key_src))+__cnt);     \
+        }                                                           \
+}
+
+#define SEC_PDCP_SD_SET_KEY1(descriptor,key,len) {              \
+        (descriptor)->key1_cmd.command.field.length = (len);    \
+        SEC_PDCP_SD_COPY_KEY((descriptor)->key1,(key),(len));   \
+}
+
+#define SEC_PDCP_SD_SET_KEY2(descriptor,key,len) {              \
+        (descriptor)->key2_cmd.command.field.length = (len);    \
+        SEC_PDCP_SD_COPY_KEY((descriptor)->key2,(key),(len));   \
+}
+
+#define PDCP_JD_SET_IN_PTR(descriptor,phys_addr,offset,length) {    \
+    (descriptor)->seq_in_ptr = (phys_addr) + (offset);              \
+    (descriptor)->in_ext_length = (length) - (offset);              \
+}
+
+#define PDCP_JD_SET_OUT_PTR(descriptor,phys_addr,offset,length) {   \
+    (descriptor)->seq_out_ptr = (phys_addr) + (offset);             \
+    (descriptor)->out_ext_length = (length) - (offset);             \
+}
+
+#define SEC_PDCP_SH_SET_PROT_DIR(descriptor,dir)    ( (descriptor)->protocol.command.field.optype = \
+                        (dir == PDCP_ENCAPSULATION) ? CMD_PROTO_ENCAP : CMD_PROTO_DECAP )
+
+#define SEC_PDCP_SH_SET_PROT_ALG(descriptor,alg)    ( (descriptor)->protocol.command.field.protinfo = \
+                        (alg == SEC_ALG_SNOW) ? CMD_PROTO_SNOW_ALG : (alg == SEC_ALG_AES) ? \
+                         SEC_ALG_AES : SEC_ALG_SNOW )
+
+#define SEC_PDCP_GET_DESC_LEN(descriptor)                                                   \
+    (((struct descriptor_header_s*)(descriptor))->command.sd.ctype ==                       \
+    CMD_HDR_CTYPE_SD ? ((struct descriptor_header_s*)(descriptor))->command.sd.desclen :    \
+                       ((struct descriptor_header_s*)(descriptor))->command.jd.desclen )
+
+#define SEC_PDCP_DUMP_DESC(descriptor) {                                    \
+        int __i;                                                            \
+        SEC_DEBUG("Descriptor @ 0x%08x",(uint32_t)((uint32_t*)(descriptor)));\
+        for( __i = 0;                                                       \
+            __i < SEC_PDCP_GET_DESC_LEN(descriptor);                        \
+            __i++)                                                          \
+        {                                                                   \
+            SEC_DEBUG("0x%08x: %08x",                                       \
+                    (uint32_t)(((uint32_t*)(descriptor)) + __i),            \
+                    *(((uint32_t*)(descriptor)) + __i));                    \
+        }                                                                   \
+}
+
+
+#define SD_LEN      0x10
+
+struct sec_pdcp_sd_t{
+#if 1
+    struct descriptor_header_s  deschdr;
+#warning "Update to define"
+    struct sec_pdcp_pdb_s       pdb;
+    struct key_command_s        key2_cmd;
+#warning "Update to define"
+    uint32_t                    key2[4];
+    struct key_command_s        key1_cmd;
+#warning "Update to define"
+    uint32_t                    key1[4];
+    struct protocol_operation_command_s protocol;
+#else
     uint32_t    desc[18];
+#endif
 } __PACKED;
 
 struct sec_descriptor_t {
-#if 0
-    struct init_descriptor_header_s deschdr;
-    uint32_t    pdb[5];
-    struct key_command_s keycmd;
-    uint32_t key[4];
-    uint32_t    seq_in_ptr[2];
-    uint32_t    seq_out_ptr[2];
-    struct algorithm_operation_command_s opcmd;
+#if 1
+    struct descriptor_header_s deschdr;
+#warning "Update for 36 bits addresses"
+    dma_addr_t    sd_ptr;
+    struct seq_out_command_s seq_out;
+#warning "Update for 36 bits addresses"
+    dma_addr_t    seq_in_ptr;
+    uint32_t      in_ext_length;
+    struct seq_in_command_s seq_in;
+    dma_addr_t    seq_out_ptr;
+    uint32_t    out_ext_length;
 #else
     uint32_t desc[21];
 #endif
-//    uint32_t rsv[48];   //TODO: fill it for iv, LOAD, MATH, FIFO LOAD etc.
 } __PACKED;
 
 #endif

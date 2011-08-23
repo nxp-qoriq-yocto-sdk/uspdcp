@@ -1317,10 +1317,7 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
 #endif
 
 #ifdef SEC_HW_VERSION_4_4
-    ctx->sh_desc = (dma_addr_t)g_dma_mem_free;
-    memset(ctx->sh_desc, 0, sizeof(struct sec_sh_descriptor_t));
-    g_dma_mem_free += sizeof(struct sec_sh_descriptor_t);
-
+#if 0
     {
         int i = 0;
 #if 1
@@ -1328,9 +1325,8 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
         ctx->sh_desc->desc[i++] = 0xBA85020B; // hdr, share=serial
 #if 1
         ctx->sh_desc->desc[i++] = 0x00000000; // opts
-        //ctx->sh_desc->desc[i++] = 0x01F4AAC0; // hfn
-        ctx->sh_desc->desc[i++] = 0xFA556000;
-        ctx->sh_desc->desc[i++] = 0x1C000000; // bearer,dir
+        ctx->sh_desc->desc[i++] = 0x398A5000;
+        ctx->sh_desc->desc[i++] = 0xAC000000; // bearer,dir
         ctx->sh_desc->desc[i++] = 0xFF000000; // threshold
 #else
         ctx->sh_desc->desc[i++] = 0x00000002; // opts
@@ -1355,10 +1351,10 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
 #endif
         ctx->sh_desc->desc[i++] = 0x02800010; // key1 cmd, imm
 #if 1
-        ctx->sh_desc->desc[i++] = 0x5ACB1D64;
-        ctx->sh_desc->desc[i++] = 0x4C0D5120;
-        ctx->sh_desc->desc[i++] = 0x4EA5F145;
-        ctx->sh_desc->desc[i++] = 0x1010D852;
+        ctx->sh_desc->desc[i++] = 0xd3c5d592;
+        ctx->sh_desc->desc[i++] = 0x327fb11c;
+        ctx->sh_desc->desc[i++] = 0x4035c668;
+        ctx->sh_desc->desc[i++] = 0x0af8c6d1;
 #else
         ctx->sh_desc->desc[i++] = 0xB9D0FAD6;
         ctx->sh_desc->desc[i++] = 0x860BDDF1;
@@ -1367,8 +1363,7 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
 #endif
 
         //ctx->sh_desc->desc[i++] = 0x87430001; // pdcp-cplane enc w/snow
-       //ctx->sh_desc->desc[i++] = 0x87420001; // pdcp-dplane enc w/snow
-        ctx->sh_desc->desc[i++] = 0x87420000 ; // pdcp-dplane enc w/snow
+        ctx->sh_desc->desc[i++] = 0x87420002 ; // pdcp-dplane enc w/aes
 #else
         ctx->sh_desc->desc[i++] = 0xB8801011;    /* Job Descriptor Header */
 
@@ -1395,8 +1390,10 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
         ctx->sh_desc->desc[i++] = 0x7C820008; /* CMD MOVE: Move Data from FIFO IN to FIFO out with FLUSH set */
 #endif
     }
+#endif // if 0
 
 #endif
+
     // provide to UA a SEC ctx handle
 	*sec_ctx_handle = (sec_context_handle_t)ctx;
     return SEC_SUCCESS;

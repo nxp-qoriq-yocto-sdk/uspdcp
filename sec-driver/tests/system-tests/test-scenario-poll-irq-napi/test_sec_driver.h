@@ -71,7 +71,7 @@
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CMAC_DEC
 
 // Test data plane PDCP with NULL-crypto(EEA0) algorithm set
-#define PDCP_TEST_SCENARIO  PDCP_TEST_DATA_PLANE_NULL_ALGO
+//#define PDCP_TEST_SCENARIO  PDCP_TEST_DATA_PLANE_NULL_ALGO
 
 // Test control plane PDCP with NULL-crypto(EEA0)
 // and NULL-authentication(EIA0) algorithms set
@@ -79,7 +79,7 @@
 
 // Test PDCP control plane encapsulation with SNOW F8 ciphering
 // and SNOW F9 authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_SNOW_F8_SNOW_F9_ENC
+#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_SNOW_F8_SNOW_F9_ENC
 // Test PDCP control plane decapsulation with SNOW F8 ciphering
 // and SNOW F9 authentication
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_SNOW_F8_SNOW_F9_DEC
