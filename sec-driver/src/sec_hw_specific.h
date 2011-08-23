@@ -954,7 +954,7 @@ struct sec_pdcp_pdb_s
 
 #define SEC_PDCP_SH_SET_PROT_ALG(descriptor,alg)    ( (descriptor)->protocol.command.field.protinfo = \
                         (alg == SEC_ALG_SNOW) ? CMD_PROTO_SNOW_ALG : (alg == SEC_ALG_AES) ? \
-                         SEC_ALG_AES : SEC_ALG_SNOW )
+                         CMD_PROTO_AES_ALG : CMD_PROTO_SNOW_ALG )
 
 #define SEC_PDCP_GET_DESC_LEN(descriptor)                                                   \
     (((struct descriptor_header_s*)(descriptor))->command.sd.ctype ==                       \
@@ -1001,11 +1001,11 @@ struct sec_descriptor_t {
     dma_addr_t    sd_ptr;
     struct seq_out_command_s seq_out;
 #warning "Update for 36 bits addresses"
-    dma_addr_t    seq_in_ptr;
-    uint32_t      in_ext_length;
-    struct seq_in_command_s seq_in;
     dma_addr_t    seq_out_ptr;
-    uint32_t    out_ext_length;
+    uint32_t      out_ext_length;
+    struct seq_in_command_s seq_in;
+    dma_addr_t    seq_in_ptr;
+    uint32_t    in_ext_length;
 #else
     uint32_t desc[21];
 #endif
