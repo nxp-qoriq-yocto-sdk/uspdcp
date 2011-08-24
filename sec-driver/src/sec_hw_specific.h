@@ -871,54 +871,68 @@ struct seq_out_command_s{
     } __PACKED command;
 } __PACKED;
 
+struct cplane_pdb_s{
+    unsigned int res1;
+    unsigned int hfn:27;
+    unsigned int res2:5;
+    unsigned int bearer:5;
+    unsigned int dir:1;
+    unsigned int res3:26;
+    unsigned int threshold:27;
+    unsigned int res4:5;
+}__PACKED;
+
+struct uplane_pdb_s{
+    unsigned int res1:30;
+    unsigned int sns:1;
+    unsigned int res2:1;
+    union{
+        struct{
+            unsigned int hfn:20;
+            unsigned int res:12;
+        }__PACKED hfn_l;
+        struct{
+            unsigned int hfn:25;
+            unsigned int res:7;
+        }__PACKED hfn_s;
+        unsigned int word;
+    } __PACKED hfn;
+    unsigned int bearer:5;
+    unsigned int dir:1;
+    unsigned int res3:26;
+    union{
+        struct{
+            unsigned int threshold:20;
+            unsigned int res:12;
+        }__PACKED threshold_l;
+        struct{
+            unsigned int threshold:25;
+            unsigned int res:7;
+        }__PACKED threshold_s;
+    } __PACKED threshold;
+}__PACKED;
+
 struct sec_pdcp_pdb_s
 {
     union{
         uint32_t    content[4];
-        struct{
-            unsigned int res1;
-            unsigned int hfn:27;
-            unsigned int res2:5;
-            unsigned int bearer:5;
-            unsigned int dir:1;
-            unsigned int res3:26;
-            unsigned int threshold;
-        }__PACKED cplane_pdb;
-        struct{
-            unsigned int res1_sns;
-            union{
-                struct{
-                    unsigned int hfn:20;
-                    unsigned int res:12;
-                }__PACKED hfn_l;
-                struct{
-                    unsigned int hfn:25;
-                    unsigned int res:7;
-                }__PACKED hfn_s;
-                unsigned int word;
-            } __PACKED hfn;
-            unsigned int bearer:5;
-            unsigned int dir:1;
-            unsigned int res3:26;
-            unsigned int threshold;
-        }__PACKED uplane_pdb;
+        struct cplane_pdb_s cplane_pdb;
+        struct uplane_pdb_s uplane_pdb;
     }__PACKED pdb_content;
 } __PACKED;
-
-#define SEC_PDCP_INIT_CPLANE_PDB(pdb,ctx)   {                           \
-    (pdb).pdb_content.cplane_pdb.res1 = 0x00000002;                     \
-    (pdb).pdb_content.cplane_pdb.hfn = (ctx)->hfn;                      \
-    (pdb).pdb_content.cplane_pdb.bearer = (ctx)->bearer;                \
-    (pdb).pdb_content.cplane_pdb.dir = (ctx)->protocol_direction ==     \
-                                    PDCP_ENCAPSULATION ? 1 : 0;         \
-    (pdb).pdb_content.cplane_pdb.threshold = (ctx)->hfn_threshold;      \
-}
 
 #define SEC_PDCP_INIT_CPLANE_SD(descriptor){ \
         (descriptor)->deschdr.command.word  = 0xBA850210;    \
         (descriptor)->key2_cmd.command.word = 0x04800000;    \
         (descriptor)->key1_cmd.command.word = 0x02800000;    \
         (descriptor)->protocol.command.word = 0x80430000;    \
+}
+
+#define SEC_PDCP_INIT_UPLANE_SD(descriptor){ \
+        (descriptor)->deschdr.command.word  = 0xBA8A0210;    \
+        (descriptor)->key2_cmd.command.word = 0x04800000;    \
+        (descriptor)->key1_cmd.command.word = 0x02800000;    \
+        (descriptor)->protocol.command.word = 0x80420000;    \
 }
 
 #define SEC_PDCP_SD_COPY_KEY(key_dst,key_src,len)    {              \
@@ -950,7 +964,7 @@ struct sec_pdcp_pdb_s
 }
 
 #define SEC_PDCP_SH_SET_PROT_DIR(descriptor,dir)    ( (descriptor)->protocol.command.field.optype = \
-                        (dir == PDCP_ENCAPSULATION) ? CMD_PROTO_ENCAP : CMD_PROTO_DECAP )
+                        ((dir) == PDCP_ENCAPSULATION) ? CMD_PROTO_ENCAP : CMD_PROTO_DECAP )
 
 #define SEC_PDCP_SH_SET_PROT_ALG(descriptor,alg)    ( (descriptor)->protocol.command.field.protinfo = \
                         (alg == SEC_ALG_SNOW) ? CMD_PROTO_SNOW_ALG : (alg == SEC_ALG_AES) ? \
@@ -978,9 +992,7 @@ struct sec_pdcp_pdb_s
 #define SD_LEN      0x10
 
 struct sec_pdcp_sd_t{
-#if 1
     struct descriptor_header_s  deschdr;
-#warning "Update to define"
     struct sec_pdcp_pdb_s       pdb;
     struct key_command_s        key2_cmd;
 #warning "Update to define"
@@ -989,13 +1001,9 @@ struct sec_pdcp_sd_t{
 #warning "Update to define"
     uint32_t                    key1[4];
     struct protocol_operation_command_s protocol;
-#else
-    uint32_t    desc[18];
-#endif
 } __PACKED;
 
 struct sec_descriptor_t {
-#if 1
     struct descriptor_header_s deschdr;
 #warning "Update for 36 bits addresses"
     dma_addr_t    sd_ptr;
@@ -1006,9 +1014,6 @@ struct sec_descriptor_t {
     struct seq_in_command_s seq_in;
     dma_addr_t    seq_in_ptr;
     uint32_t    in_ext_length;
-#else
-    uint32_t desc[21];
-#endif
 } __PACKED;
 
 #endif

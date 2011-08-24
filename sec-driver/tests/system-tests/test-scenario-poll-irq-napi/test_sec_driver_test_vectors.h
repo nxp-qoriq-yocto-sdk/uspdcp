@@ -110,7 +110,8 @@ static uint8_t snow_f8_enc_bearer = 0x3;
 static uint32_t snow_f8_enc_hfn = 0xFA556;
 
 // HFN threshold
-static uint32_t snow_f8_enc_hfn_threshold = 0xFF00000;
+//static uint32_t snow_f8_enc_hfn_threshold = 0xFF00000;
+static uint32_t snow_f8_enc_hfn_threshold = 0xFA557;
 
 //////////////////////////////////////////////////////////////////////////////
 // PDCP_TEST_SNOW_F8_DEC
@@ -149,7 +150,8 @@ static uint8_t snow_f8_dec_bearer = 0x3;
 static uint32_t snow_f8_dec_hfn = 0xFA556;
 
 // HFN threshold
-static uint32_t snow_f8_dec_hfn_threshold = 0xFF00000;
+//static uint32_t snow_f8_dec_hfn_threshold = 0xFF00000;
+static uint32_t snow_f8_dec_hfn_threshold = 0xFA557;
 
 //////////////////////////////////////////////////////////////////////////////
 // PDCP_TEST_AES_CTR_ENC
@@ -190,7 +192,8 @@ static uint8_t aes_ctr_enc_bearer = 0x15;
 static uint32_t aes_ctr_enc_hfn = 0x398A5;
 
 // HFN threshold
-static uint32_t aes_ctr_enc_hfn_threshold = 0xFF00000;
+//static uint32_t aes_ctr_enc_hfn_threshold = 0xFF00000;
+static uint32_t aes_ctr_enc_hfn_threshold = 0x398A6;
 
 //////////////////////////////////////////////////////////////////////////////
 // PDCP_TEST_AES_CTR_DEC
@@ -231,7 +234,7 @@ static uint8_t aes_ctr_dec_bearer = 0x15;
 static uint32_t aes_ctr_dec_hfn = 0x398A5;
 
 // HFN threshold
-static uint32_t aes_ctr_dec_hfn_threshold = 0xFF00000;
+static uint32_t aes_ctr_dec_hfn_threshold = 0x398A6;
 
 //////////////////////////////////////////////////////////////////////////////
 // PDCP_TEST_SNOW_F9_ENC

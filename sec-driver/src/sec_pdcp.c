@@ -399,34 +399,33 @@ static void sec_pdcp_create_pdb(sec_context_t *ctx);
 #define NUM_CIPHER_ALGS sizeof(sec_crypto_alg_t)
 #define NUM_INT_ALGS sizeof(sec_crypto_alg_t)
 
-static int create_cplane_hw_acc_desc(sec_context_t *crypto_pdb);
+static int create_c_plane_hw_acc_desc(sec_context_t *ctx);
 
-static int create_uplane_hw_acc_desc(sec_context_t *crypto_pdb);
+static int create_u_plane_hw_acc_desc(sec_context_t *ctx);
 
-static int create_mixed_desc(sec_context_t *crypto_pdb);
+static int create_mixed_desc(sec_context_t *ctx);
 
-static int create_auth_only_desc(sec_context_t *crypto_pdb);
+static int create_auth_only_desc(sec_context_t *ctx);
 
-static int create_cipher_only_desc(sec_context_t *crypto_pdb);
+static int create_cipher_only_desc(sec_context_t *ctx);
 
-static int create_copy_desc(sec_context_t *crypto_pdb);
+static int create_copy_desc(sec_context_t *ctx);
 
-typedef int (*create_desc_fp)(sec_context_t *crypto_pdb);
+typedef int (*create_desc_fp)(sec_context_t *ctx);
 
-#warning "Make the \"2\" below a nice define"
-static create_desc_fp ctrl_plane_create_desc[2][NUM_CIPHER_ALGS][NUM_INT_ALGS] = {
-        {   // C-PLANE
-                /*              SNOW                      AES                       NULL */
-                /* SNOW */{create_cplane_hw_acc_desc,      create_mixed_desc,       create_auth_only_desc},
-                /* AES  */{create_mixed_desc,              create_cplane_hw_acc_desc,      create_auth_only_desc},
-                /* NULL */{create_cipher_only_desc, create_cipher_only_desc, create_copy_desc},
-        },
-        {   // U-PLANE
-                          {create_uplane_hw_acc_desc,   create_uplane_hw_acc_desc,         create_copy_desc}
-        }
-    };
+static create_desc_fp c_plane_create_desc[NUM_CIPHER_ALGS][NUM_INT_ALGS] = {
+        /*              SNOW                      AES                          NULL */
+        /* SNOW */{create_c_plane_hw_acc_desc,    create_mixed_desc,           create_auth_only_desc},
+        /* AES  */{create_mixed_desc,             create_c_plane_hw_acc_desc,  create_auth_only_desc},
+        /* NULL */{create_cipher_only_desc,       create_cipher_only_desc,     create_copy_desc},
+};
 
-static int create_cplane_hw_acc_desc(sec_context_t *ctx)
+static create_desc_fp u_plane_create_desc[NUM_CIPHER_ALGS] ={
+        /*              SNOW                      AES                          NULL */
+        create_u_plane_hw_acc_desc,   create_u_plane_hw_acc_desc,         create_copy_desc
+};
+
+static int create_c_plane_hw_acc_desc(sec_context_t *ctx)
 {
     ASSERT(ctx != NULL);
     ASSERT(ctx->sh_desc != NULL);
@@ -434,18 +433,11 @@ static int create_cplane_hw_acc_desc(sec_context_t *ctx)
     ASSERT(ctx->pdcp_crypto_info->cipher_key != NULL);
     ASSERT(ctx->pdcp_crypto_info->integrity_key != NULL);
 
-    SEC_INFO("Creating descriptor w/enc alg %s & auth alg %s",
+    SEC_INFO("Creating C-PLANE HW Acc. descriptor w/alg %s & auth alg %s",
               ctx->pdcp_crypto_info->cipher_algorithm == SEC_ALG_AES ? "AES" : "SNOW",
               ctx->pdcp_crypto_info->cipher_algorithm == SEC_ALG_AES ? "AES" : "SNOW");
 
     SEC_PDCP_INIT_CPLANE_SD(ctx->sh_desc);
-    // PDB Template:
-    // W1: must set to 0x00000020
-    // W2: HFN (27 bits) | Reserved (5 bits)
-    // W3: Bearer(5 bits)|Dir(1 bit)| Reserved (25 bits)
-    // W4: Threshold (27bits) | Reserved (5 bits)
-    SEC_PDCP_INIT_CPLANE_PDB(ctx->sh_desc->pdb,
-                             ctx->pdcp_crypto_info);
 
     SEC_PDCP_SD_SET_KEY2(ctx->sh_desc,
                          ctx->pdcp_crypto_info->integrity_key,
@@ -455,20 +447,43 @@ static int create_cplane_hw_acc_desc(sec_context_t *ctx)
                          ctx->pdcp_crypto_info->cipher_key,
                          ctx->pdcp_crypto_info->cipher_key_len);
 
-    // Doesn't matter which alg, since they're the same in this case
-    SEC_PDCP_SH_SET_PROT_DIR(ctx->sh_desc, ctx->pdcp_crypto_info->protocol_direction);
+    SEC_PDCP_SH_SET_PROT_DIR(ctx->sh_desc,
+                             ctx->pdcp_crypto_info->protocol_direction);
 
+    // Doesn't matter which alg, since they're the same in this case
     SEC_PDCP_SH_SET_PROT_ALG(ctx->sh_desc,ctx->pdcp_crypto_info->cipher_algorithm);
 
     SEC_PDCP_DUMP_DESC(ctx->sh_desc);
     return SEC_SUCCESS;
 }
 
-static int create_uplane_hw_acc_desc(sec_context_t *crypto_pdb)
+static int create_u_plane_hw_acc_desc(sec_context_t *ctx)
 {
-    SEC_INFO(" Called create_uplane_hw_acc_desc");
 
-    return SEC_OUT_OF_MEMORY;
+    ASSERT(ctx != NULL);
+    ASSERT(ctx->sh_desc != NULL);
+
+    ASSERT(ctx->pdcp_crypto_info->cipher_key != NULL);
+
+    SEC_INFO("Creating U-PLANE HW Acc. descriptor w/alg %s",
+              ctx->pdcp_crypto_info->cipher_algorithm == SEC_ALG_AES ? "AES" : "SNOW",
+              ctx->pdcp_crypto_info->cipher_algorithm == SEC_ALG_AES ? "AES" : "SNOW");
+
+    SEC_PDCP_INIT_UPLANE_SD(ctx->sh_desc);
+
+    SEC_PDCP_SD_SET_KEY1(ctx->sh_desc,
+                         ctx->pdcp_crypto_info->cipher_key,
+                         ctx->pdcp_crypto_info->cipher_key_len);
+
+    SEC_PDCP_SH_SET_PROT_DIR(ctx->sh_desc,
+                                 ctx->pdcp_crypto_info->protocol_direction);
+
+    SEC_PDCP_SH_SET_PROT_ALG(ctx->sh_desc,ctx->pdcp_crypto_info->cipher_algorithm);
+
+    SEC_PDCP_DUMP_DESC(ctx->sh_desc);
+
+    return SEC_SUCCESS;
+
 }
 
 static int create_mixed_desc(sec_context_t *crypto_pdb)
@@ -986,14 +1001,15 @@ static int sec_pdcp_context_create_descriptor(sec_context_t *ctx)
     memset(ctx->sh_desc, 0, sizeof(struct sec_pdcp_sd_t));
     g_dma_mem_free += sizeof(struct sec_pdcp_sd_t);
 
-    SEC_INFO("Created shared descriptor @ 0x%04x",(uint32_t)ctx->sh_desc);
+    SEC_DEBUG("Created shared descriptor @ 0x%04x",(uint32_t)ctx->sh_desc);
 
     // Create a Protocol Data Blob (PDB)
     sec_pdcp_create_pdb(ctx);
 
-    ret = ctrl_plane_create_desc[ctx->pdcp_crypto_info->user_plane]
-                          [ctx->pdcp_crypto_info->cipher_algorithm]
-                          [ctx->pdcp_crypto_info->integrity_algorithm](ctx);
+    ret = (ctx->pdcp_crypto_info->user_plane == PDCP_CONTROL_PLANE) ?             \
+            (c_plane_create_desc[ctx->pdcp_crypto_info->cipher_algorithm]        \
+                          [ctx->pdcp_crypto_info->integrity_algorithm](ctx)) :    \
+            (u_plane_create_desc[ctx->pdcp_crypto_info->cipher_algorithm](ctx));
 
     return ret;
 }
@@ -1505,7 +1521,7 @@ static void sec_pdcp_update_iv_template(sec_crypto_pdb_t *sec_pdb,
     *status = ((sec_pdb->iv_template[iv_offset] & sec_pdb->hfn_mask) >= sec_pdb->hfn_threshold) ? 
                SEC_STATUS_HFN_THRESHOLD_REACHED : SEC_STATUS_SUCCESS;
 }
-
+#ifdef SEC_HW_VERSION_3_1
 static void sec_pdcp_create_pdb(sec_context_t *ctx)
 {
     sec_crypto_pdb_t *sec_pdb = &ctx->crypto_desc_pdb;
@@ -1534,7 +1550,53 @@ static void sec_pdcp_create_pdb(sec_context_t *ctx)
                              PDCP_HEADER_LENGTH_LONG : PDCP_HEADER_LENGTH_SHORT;
     sec_pdb->is_inbound = (ctx->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION) ? FALSE : TRUE;
 }
+#else
+static void sec_pdcp_create_pdb(sec_context_t *ctx)
+{
+    sec_pdcp_context_info_t *pdcp_crypto_info;
+    struct sec_pdcp_pdb_s *sec_pdb;
+    struct cplane_pdb_s *cplane_pdb = NULL;
+    struct uplane_pdb_s *uplane_pdb = NULL;
 
+    ASSERT( ctx != NULL );
+    ASSERT( ctx->pdcp_crypto_info != NULL);
+    ASSERT( ctx->sh_desc != NULL);
+
+    sec_pdb = &ctx->sh_desc->pdb;
+    pdcp_crypto_info = ctx->pdcp_crypto_info;
+
+    if (ctx->pdcp_crypto_info->user_plane == PDCP_CONTROL_PLANE)
+    {
+        cplane_pdb = &sec_pdb->pdb_content.cplane_pdb;
+
+        ASSERT( ctx->pdcp_crypto_info->sn_size == SEC_PDCP_SN_SIZE_5 );
+#warning "This seems to be an issue in HW, bit 30 should be set to 0 for C-Plane"
+        cplane_pdb->res1 = 0x00000002;
+        cplane_pdb->hfn = pdcp_crypto_info->hfn;
+        cplane_pdb->bearer = pdcp_crypto_info->bearer;
+        cplane_pdb->dir = pdcp_crypto_info->packet_direction;
+        cplane_pdb->threshold = pdcp_crypto_info->hfn_threshold;
+    }
+    else
+    {// data plane
+        uplane_pdb = &sec_pdb->pdb_content.uplane_pdb;
+        uplane_pdb->bearer = pdcp_crypto_info->bearer;
+        uplane_pdb->dir = pdcp_crypto_info->packet_direction;
+
+        if( pdcp_crypto_info->sn_size ==  SEC_PDCP_SN_SIZE_12 )
+        {
+            uplane_pdb->sns = 0;
+            uplane_pdb->hfn.hfn_l.hfn = pdcp_crypto_info->hfn;
+            uplane_pdb->threshold.threshold_l.threshold = pdcp_crypto_info->hfn_threshold;
+        }
+        else
+        {
+            uplane_pdb->hfn.hfn_s.hfn = pdcp_crypto_info->hfn;
+            uplane_pdb->threshold.threshold_s.threshold = pdcp_crypto_info->hfn_threshold;
+        }
+    }
+}
+#endif
 /*==================================================================================================
                                      GLOBAL FUNCTIONS
 ==================================================================================================*/
