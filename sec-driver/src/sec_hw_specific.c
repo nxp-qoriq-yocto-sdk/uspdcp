@@ -71,35 +71,74 @@ extern "C" {
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
 ==================================================================================================*/
-
+#ifdef SEC_HW_VERSION_3_3
 /** @brief Identify the SEC descriptor that generated an error
  * on this job ring. Also identify the exact EU that generated the error.
  *
  * @param [in]  job_ring        The job ring
  */
 static void hw_handle_eu_error(sec_job_ring_t *job_ring);
+#else // SEC_HW_VERSION_3_3
+/**
+ * TODO: Write something meaningful here
+ */
+static inline void hw_handle_jmp_halt_cond_err(union hw_error_code error_code)
+{
+    SEC_DEBUG("JMP: %d, Descriptor Index: 0x%x, Condition: 0x%x",
+              error_code.error_desc.jmp_halt_cond_src.jmp,
+              error_code.error_desc.jmp_halt_cond_src.desc_idx,
+              error_code.error_desc.jmp_halt_cond_src.cond);
+}
 
+/**
+ * TODO: Write something meaningful here
+ */
+static inline void hw_handle_deco_err(union hw_error_code error_code)
+{
+    SEC_DEBUG("JMP: %d, Descriptor Index: 0x%x",
+            error_code.error_desc.deco_src.jmp,
+            error_code.error_desc.deco_src.desc_idx);
+
+    switch( error_code.error_desc.deco_src.desc_err )
+    {
+        case SEC_HW_ERR_DECO_HFN_THRESHOLD:
+            SEC_DEBUG(" Warning: Descriptor completed normally, but 3GPP HFN matches or exceeds the Threshold ");
+            break;
+        default:
+            SEC_DEBUG("Not implemented");
+            break;
+    }
+}
+
+/**
+ * TODO: Write something meaningful here
+ */
+static void hw_handle_jmp_halt_user_err(union hw_error_code error_code);
+
+/**
+ * TODO: Write something meaningful here
+ */
+static void hw_handle_ccb_err(union hw_error_code error_code);
+
+/**
+ * TODO: Write something meaningful here
+ */
+static void hw_handle_jr_err(union hw_error_code error_code);
+
+#endif
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
+#ifdef SEC_HW_VERSION_3_1
 static void hw_handle_eu_error(sec_job_ring_t *job_ring)
 {
     int i;
     struct sec_job_t *job = NULL;
     dma_addr_t current_desc_phys_addr;
-#if SEC_HW_VERSION_4_4
-    struct sec_outring_entry   *output_ring_entry;
-
-    output_ring_entry = (struct sec_outring_entry*)job;
-#endif // SEC_HW_VERSION_4_4
 
     // First read job ring register to get current descriptor,
     // that is also the one that generated the error.
-#if SEC_HW_VERSION_4_4
-    current_desc_phys_addr = (dma_addr_t)output_ring_entry->descr;
-#else
     current_desc_phys_addr = hw_get_current_descriptor(job_ring);
-#endif
 
     // Now search the job ring for the descriptor
     for(i = 0; i < SEC_JOB_RING_SIZE; i++)
@@ -119,8 +158,7 @@ static void hw_handle_eu_error(sec_job_ring_t *job_ring)
                   current_desc_phys_addr, job_ring->jr_id);
         return;
     }
-#warning "Do something for SEC 4.4"
-#ifdef SEC_HW_VERSION_3_1
+
     // Read descriptor header and identify the EU(Execution Unit)
     // that generated the error.
     switch (job->descr->hdr & SEC_DESC_HDR_SEL0_MASK)
@@ -146,8 +184,24 @@ static void hw_handle_eu_error(sec_job_ring_t *job_ring)
                       job->descr->hdr);
             break;
     }
-#endif
 }
+#else
+
+static void hw_handle_jmp_halt_user_err(union hw_error_code error_code)
+{
+    SEC_DEBUG(" Not implemented");
+}
+
+static void hw_handle_ccb_err(union hw_error_code hw_error_code)
+{
+    SEC_DEBUG(" Not implemented");
+}
+
+static void hw_handle_jr_err(union hw_error_code hw_error_code)
+{
+    SEC_DEBUG(" Not implemented");
+}
+#endif
 
 /*==================================================================================================
                                      GLOBAL FUNCTIONS
@@ -194,17 +248,16 @@ int hw_reset_job_ring(sec_job_ring_t *job_ring)
     // The driver will poll for descriptor status and read ICV failure if any.
     reg_val = SEC_REG_AESU_IMR_DISABLE_ICE;
     setbits32(job_ring->register_base_addr + SEC_REG_AESU_IMR_LO, reg_val);
-
 #else // SEC_HW_VERSION_3_1
 #warning "I'm sure something has to be done here..."
-#endif
 #if SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE_POLL
     // Enable interrupt generation at job ring level
     // ONLY if NOT in polling mode.
     reg_val |= JR_REG_JRCR_IMSK;
 #endif
 
-    setbits32(job_ring->register_base_addr + JR_REG_JRCR(job_ring), reg_val);
+    setbits32(JR_REG(JRCR,job_ring), reg_val);
+#endif
     return 0;
 }
 
@@ -255,44 +308,45 @@ int hw_shutdown_job_ring(sec_job_ring_t *job_ring)
      * mask interrupts since we are going to poll
      * for reset completion status
      */
-    setbits32(job_ring->register_base_addr + JR_REG_JRCFG_LO(job_ring), JR_REG_JRCFG_LO_IMSK);
+    setbits32(JR_REG_LO(JRCFG,job_ring), JR_REG_JRCFG_LO_IMSK);
 
-    out_be32(job_ring->register_base_addr + JR_REG_JRCR(job_ring), JR_REG_JRCR_VAL_RESET);
+    /* initiate flush (required prior to reset) */
+    SET_JR_REG(JRCR,job_ring, JR_REG_JRCR_VAL_RESET);
 
     do
     {
-        tmp = in_be32(job_ring->register_base_addr + JR_REG_JRINT(job_ring));
+        tmp = GET_JR_REG(JRINT,job_ring);
         usleep(usleep_interval);
     }while ( ((tmp  & JRINT_ERR_HALT_MASK) == JRINT_ERR_HALT_INPROGRESS) && \
                --timeout);
 
-     tmp = in_be32(job_ring->register_base_addr + JR_REG_JRINT(job_ring));
 
-     if( (tmp & JRINT_ERR_HALT_MASK) != JRINT_ERR_HALT_COMPLETE || \
+    tmp = GET_JR_REG(JRINT,job_ring);
+    if( (tmp & JRINT_ERR_HALT_MASK) != JRINT_ERR_HALT_COMPLETE || \
          timeout == 0)
      {
          SEC_ERROR("Failed to flush hw job ring with id  %d\n", job_ring->jr_id);
+         SEC_DEBUG("%x",tmp);
          return -1;
      }
 
-     timeout = SEC_TIMEOUT;
+    /* Initiate reset */
+    timeout = SEC_TIMEOUT;
+    SET_JR_REG(JRCR,job_ring,JR_REG_JRCR_VAL_RESET);
 
-    // Now reset
-    out_be32(job_ring->register_base_addr + JR_REG_JRCR(job_ring), JR_REG_JRCR_VAL_RESET);
+     do
+     {
+        tmp = GET_JR_REG(JRCR,job_ring);
+     }while ( (tmp & JR_REG_JRCR_VAL_RESET) && --timeout);
 
-    do
-    {
-        tmp = in_be32(job_ring->register_base_addr + JR_REG_JRCR(job_ring));
-    }while ( (tmp & JR_REG_JRCR_VAL_RESET) && --timeout);
+     if( timeout ==  0)
+     {
+         SEC_ERROR("Failed to reset hw job ring with id  %d\n", job_ring->jr_id);
+         return -1;
+     }
 
-    if( timeout ==  0)
-    {
-        SEC_ERROR("Failed to reset hw job ring with id  %d\n", job_ring->jr_id);
-        return -1;
-    }
-
-    /* unmask interrupts */
-    clrbits32(job_ring->register_base_addr + JR_REG_JRCFG_LO(job_ring), JR_REG_JRCFG_LO_IMSK);
+     /* unmask interrupts */
+     clrbits32(JR_REG(JRCFG,job_ring), JR_REG_JRCFG_LO_IMSK);
 
     return 0;
 
@@ -414,32 +468,53 @@ void hw_handle_job_ring_error(sec_job_ring_t *job_ring,
 }
 #else // SEC_HW_VERSION_3_1
 
-void hw_handle_job_ring_error(uint32_t error_code,
+void hw_handle_job_ring_error(sec_job_ring_t *job_ring,
+                              uint32_t error_code,
                               uint32_t *reset_required)
 {
-    struct stat_src {
-        void (*report_ssed)(uint32_t status);
-        char *error;
-    } status_src[] = {
-        { NULL, "No error" },
-        { NULL, NULL },
-        { NULL, "CCB" },
-        { NULL, "Jump" },
-        { NULL, "DECO" },
-        { NULL, NULL },
-        { NULL, "Job Queue" },
-        { NULL, "Condition Code" },
-    };
-    uint32_t ssrc = error_code >> JQSTA_SSRC_SHIFT;
+    union hw_error_code hw_err_code;
 
-    ASSERT(reset_required != NULL);
+    ASSERT( reset_required != NULL);
 
-#warning "Must write the code that does the actual checking of the error code \
-and performs the correct action since all I did was copy-paste some code from \
-ks driver"
+    hw_err_code.error = error_code;
 
-    SEC_ERROR("%s: ", status_src[ssrc].error);
-
+    switch( hw_err_code.error_desc.value.ssrc )
+    {
+        case SEC_HW_ERR_SSRC_NO_SRC:
+            ASSERT(hw_err_code.error_desc.no_status_src.res == 0);
+            *reset_required = FALSE;
+            SEC_DEBUG("No Status Source ");
+            break;
+        case SEC_HW_ERR_SSRC_CCB_ERR:
+            SEC_DEBUG("CCB Status Source");
+            *reset_required = FALSE;
+            hw_handle_ccb_err(hw_err_code);
+            break;
+        case SEC_HW_ERR_SSRC_JMP_HALT_U:
+            SEC_DEBUG("Jump Halt User Status Source");
+            *reset_required = FALSE;
+            hw_handle_jmp_halt_user_err(hw_err_code);
+            break;
+        case SEC_HW_ERR_SSRC_DECO:
+            SEC_DEBUG("DECO Status Source");
+            *reset_required = FALSE;
+            hw_handle_deco_err(hw_err_code);
+            break;
+        case SEC_HW_ERR_SSRC_JR:
+            SEC_DEBUG("Job Ring Status Source");
+            *reset_required = TRUE;
+            hw_handle_jr_err(hw_err_code);
+            break;
+        case SEC_HW_ERR_SSRC_JMP_HALT_COND:
+            *reset_required = FALSE;
+            SEC_DEBUG("Jump Halt Condition Codes");
+            hw_handle_jmp_halt_cond_err(hw_err_code);
+            break;
+        default:
+            ASSERT(0);
+            SEC_DEBUG("Unknown SSRC");
+            break;
+    }
 }
 #endif
 /*================================================================================================*/

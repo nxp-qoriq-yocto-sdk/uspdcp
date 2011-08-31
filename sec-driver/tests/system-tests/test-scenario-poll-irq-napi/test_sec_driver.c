@@ -1046,7 +1046,7 @@ static void* pdcp_thread_routine(void* config)
                    test_auth_key_len);
             pdcp_context->pdcp_ctx_cfg_data.integrity_key_len = test_auth_key_len;
         }
-#if 0
+
         if(is_last_context)
         {
             if(pdcp_context->pdcp_ctx_cfg_data.user_plane == PDCP_CONTROL_PLANE)
@@ -1058,7 +1058,6 @@ static void* pdcp_thread_routine(void* config)
                 pdcp_context->pdcp_ctx_cfg_data.integrity_key_len = 0;
             }
         }
-#endif
 
         pdcp_context->thread_id = th_config_local->tid;
 

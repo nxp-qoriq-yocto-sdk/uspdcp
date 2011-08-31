@@ -59,11 +59,7 @@
 /** Memory range assigned for registers of a job ring */
 #ifdef SEC_HW_VERSION_3_1
 #define SEC_CH_REG_RANGE                    0x100
-#else // SEC_HW_VERSION_4_4
-#define SEC_CH_REG_RANGE                    0x1000
-#endif
 
-#ifdef SEC_HW_VERSION_3_1
 /** Offset to the registers of a job ring, as mapped by default by SEC engine */
 #define SEC_CH_REG_RANGE_START_NORMAL       0x1000
 /** Offset to the registers of a job ring, mapped in an alternate 4k page 
@@ -75,8 +71,9 @@
                     SEC_CH_REG_RANGE_START_ALTERNATE : SEC_CH_REG_RANGE_START_NORMAL) \
                     + (job_ring->jr_id * SEC_CH_REG_RANGE))
 #else // SEC_HW_VERSION_4_4
-//#define CHAN_BASE(job_ring) (job_ring->jr_id * SEC_CH_REG_RANGE)
-#define CHAN_BASE(job_ring) (0)
+
+#define CHAN_BASE(jr)   ((jr)->register_base_addr)
+
 #endif // SEC_HW_VERSION_4_4
 /*****************************************************************
  * ISR(Interrupt Status Register) offset
@@ -141,69 +138,37 @@
 
 #ifdef SEC_HW_VERSION_4_4
 
-#define JR_REG_IRSR(jr)        (CHAN_BASE(jr) + JR_REG_IRSR_OFFSET)
+#define JR_REG_IRBA_OFFSET              0x0000
+#define JR_REG_IRBA_OFFSET_LO           0x0004
 
-#define JR_REG_ORSR(jr)        (CHAN_BASE(jr) + JR_REG_ORSR_OFFSET)
+#define JR_REG_IRSR_OFFSET              0x000C
+#define JR_REG_IRSA_OFFSET              0x0014
+#define JR_REG_IRJA_OFFSET              0x001C
 
-#define JR_REG_IRSR_OFFSET      0x000C
+#define JR_REG_ORBA_OFFSET              0x0020
+#define JR_REG_ORBA_OFFSET_LO           0x0024
 
-#define JR_REG_ORSR_OFFSET      0x002C
-
-#define JR_REG_IRBA(jr)             (CHAN_BASE(jr) + JR_REG_IRBA_OFFSET_HI)
-
-#define JR_REG_IRBA_LO(jr)          (CHAN_BASE(jr) + JR_REG_IRBA_OFFSET_LO)
-
-#define JR_REG_IRBA_OFFSET_HI       0x0000
-
-#define JR_REG_IRBA_OFFSET_LO       0x0004
-
-#define JR_REG_ORBA(jr)             (CHAN_BASE(jr) + JR_REG_ORBA_OFFSET_HI)
-
-#define JR_REG_ORBA_LO(jr)          (CHAN_BASE(jr) + JR_REG_ORBA_OFFSET_LO)
-
-#define JR_REG_ORBA_OFFSET_HI       0x0020
-
-#define JR_REG_ORBA_OFFSET_LO       0x0024
-
-#define JR_REG_IRJA(jr)             (CHAN_BASE(jr) + JR_REG_IRJA_OFFSET)
-
-#define JR_REG_IRJA_OFFSET          0x001C
-
-#define JR_REG_IRRI(jr)             (CHAN_BASE(jr) + JR_REG_IRJA_OFFSET)
-
-#define JR_REG_IRRI_OFFSET          0x005C
-
-#define JR_REG_ORJR(jr)                 (CHAN_BASE(jr) + JR_REG_ORJR_OFFSET)
-
-#define JR_REG_ORJR_OFFSET          0x0034
-
-#define JR_REG_JRCR(jr)                 (CHAN_BASE(jr) + JR_REG_JRCR_OFFSET)
-
-#define JR_REG_JRCR_OFFSET          0x006C
-
-#define JR_REG_JRCFG(jr)                (CHAN_BASE(jr) + JR_REG_JRCFG_OFFSET)
-
-#define JR_REG_JRCFG_OFFSET         0x0050
-
-#define JR_REG_JRCFG_LO(jr)                (CHAN_BASE(jr) + JR_REG_JRCFG_OFFSET_LO)
-
-#define JR_REG_JRCFG_OFFSET_LO      0x0054
-
-#define JR_REG_JRINT(jr)                (CHAN_BASE(jr) + JR_REG_JRINT_OFFSET)
-
-#define JR_REG_JRINT_OFFSET         0x004C
-
-#define JR_REG_ORSFR(jr)                 (CHAN_BASE(jr) + JR_REG_ORSFR_OFFSET)
-
-#define JR_REG_ORSFR_OFFSET          0x003C
-
-#define JR_REG_JROSR(jr)                 (CHAN_BASE(jr) + JR_REG_JROSR_OFFSET)
-
+#define JR_REG_ORSR_OFFSET              0x002C
+#define JR_REG_ORJR_OFFSET              0x0034
+#define JR_REG_ORSFR_OFFSET             0x003C
 #define JR_REG_JROSR_OFFSET             0x0044
+#define JR_REG_JRINT_OFFSET             0x004C
 
-#define JR_REG_ORWI(jr)                 (CHAN_BASE(jr) + JR_REG_ORWI_OFFSET)
+#define JR_REG_JRCFG_OFFSET             0x0050
+#define JR_REG_JRCFG_OFFSET_LO          0x0054
 
+#define JR_REG_IRRI_OFFSET              0x005C
 #define JR_REG_ORWI_OFFSET              0x0064
+#define JR_REG_JRCR_OFFSET              0x006C
+
+#define JR_REG(name,jr)                    (CHAN_BASE(jr) + JR_REG_##name##_OFFSET)
+#define JR_REG_LO(name,jr)                 (CHAN_BASE(jr) + JR_REG_##name##_OFFSET_LO)
+
+#define GET_JR_REG(name,jr)                 ( in_be32( JR_REG( name,(jr) ) ) )
+#define GET_JR_REG_LO(name,jr)              ( in_be32( JR_REG_LO( name,(jr) ) ) )
+
+#define SET_JR_REG(name,jr,value)           ( out_be32( JR_REG( name,(jr) ),value  ) )
+#define SET_JR_REG_LO(name,jr,value)        ( out_be32( JR_REG_LO( name,(jr) ),value ) )
 
 #endif // SEC_HW_VERSION_4_4
 
@@ -306,87 +271,70 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 #define SEC_REG_CSR_LO_RSG    0x0010 /* RAID scatter/gather error */
 
 #ifdef SEC_HW_VERSION_4_4
-#define JQSTA_SSRC_SHIFT            28
-#define JQSTA_SSRC_MASK             0xf0000000
 
-#define JQSTA_SSRC_NONE             0x00000000
-#define JQSTA_SSRC_CCB_ERROR        0x20000000
-#define JQSTA_SSRC_JUMP_HALT_USER   0x30000000
-#define JQSTA_SSRC_DECO             0x40000000
-#define JQSTA_SSRC_JQERROR          0x60000000
-#define JQSTA_SSRC_JUMP_HALT_CC     0x70000000
+union hw_error_code{
+    uint32_t    error;
+    union{
+        struct{
+            uint32_t    ssrc:4;
+            uint32_t    ssed_val:28;
+        }PACKED value;
+        struct {
+            uint32_t    ssrc:4;
+            uint32_t     res:28;
+        }PACKED no_status_src;
+        struct {
+            uint32_t    ssrc:4;
+            uint32_t    jmp:1;
+            uint32_t    res:11;
+            uint32_t    desc_idx:8;
+            uint32_t    cha_id:4;
+            uint32_t    err_id:4;
+        }PACKED ccb_status_src;
+        struct {
+            uint32_t    ssrc:4;
+            uint32_t    jmp:1;
+            uint32_t    res:11;
+            uint32_t    desc_idx:8;
+            uint32_t    offset:8;
+        }PACKED jmp_halt_user_src;
+        struct {
+            uint32_t    ssrc:4;
+            uint32_t    jmp:1;
+            uint32_t    res:11;
+            uint32_t    desc_idx:8;
+            uint32_t    desc_err:8;
+        }PACKED deco_src;
+        struct {
+            uint32_t    ssrc:4;
+            uint32_t    res:17;
+            uint32_t    naddr:3;
+            uint32_t    desc_err:8;
+        }PACKED jr_src;
+        struct {
+            uint32_t    ssrc:4;
+            uint32_t    jmp:1;
+            uint32_t    res:11;
+            uint32_t    desc_idx:8;
+            uint32_t    cond:8;
+        }PACKED jmp_halt_cond_src;
+    }PACKED error_desc;
+}PACKED;
 
-#define JQSTA_DECOERR_JUMP          0x08000000
-#define JQSTA_DECOERR_INDEX_SHIFT   8
-#define JQSTA_DECOERR_INDEX_MASK    0xff00
-#define JQSTA_DECOERR_ERROR_MASK    0x00ff
+#define HFN_THRESHOLD_MATCH(error)                                            \
+    ( ( ((union hw_error_code)(error)).error_desc.deco_src.ssrc ==            \
+            SEC_HW_ERR_SSRC_DECO) &&                                          \
+        (((union hw_error_code)(error)).error_desc.deco_src.desc_err ==      \
+            SEC_HW_ERR_DECO_HFN_THRESHOLD) )
 
-#define JQSTA_DECOERR_NONE          0x00
-#define JQSTA_DECOERR_LINKLEN       0x01
-#define JQSTA_DECOERR_LINKPTR       0x02
-#define JQSTA_DECOERR_JQCTRL        0x03
-#define JQSTA_DECOERR_DESCCMD       0x04
-#define JQSTA_DECOERR_ORDER         0x05
-#define JQSTA_DECOERR_KEYCMD        0x06
-#define JQSTA_DECOERR_LOADCMD       0x07
-#define JQSTA_DECOERR_STORECMD      0x08
-#define JQSTA_DECOERR_OPCMD         0x09
-#define JQSTA_DECOERR_FIFOLDCMD     0x0a
-#define JQSTA_DECOERR_FIFOSTCMD     0x0b
-#define JQSTA_DECOERR_MOVECMD       0x0c
-#define JQSTA_DECOERR_JUMPCMD       0x0d
-#define JQSTA_DECOERR_MATHCMD       0x0e
-#define JQSTA_DECOERR_SHASHCMD      0x0f
-#define JQSTA_DECOERR_SEQCMD        0x10
-#define JQSTA_DECOERR_DECOINTERNAL  0x11
-#define JQSTA_DECOERR_SHDESCHDR     0x12
-#define JQSTA_DECOERR_HDRLEN        0x13
-#define JQSTA_DECOERR_BURSTER       0x14
-#define JQSTA_DECOERR_DESCSIGNATURE 0x15
-#define JQSTA_DECOERR_DMA           0x16
-#define JQSTA_DECOERR_BURSTFIFO     0x17
-#define JQSTA_DECOERR_JQRESET       0x1a
-#define JQSTA_DECOERR_JOBFAIL       0x1b
-#define JQSTA_DECOERR_DNRERR        0x80
-#define JQSTA_DECOERR_UNDEFPCL      0x81
-#define JQSTA_DECOERR_PDBERR        0x82
-#define JQSTA_DECOERR_ANRPLY_LATE   0x83
-#define JQSTA_DECOERR_ANRPLY_REPLAY 0x84
-#define JQSTA_DECOERR_SEQOVF        0x85
-#define JQSTA_DECOERR_INVSIGN       0x86
-#define JQSTA_DECOERR_DSASIGN       0x87
+#define SEC_HW_ERR_SSRC_NO_SRC          0x00
+#define SEC_HW_ERR_SSRC_CCB_ERR         0x02
+#define SEC_HW_ERR_SSRC_JMP_HALT_U      0x03
+#define SEC_HW_ERR_SSRC_DECO            0x04
+#define SEC_HW_ERR_SSRC_JR              0x06
+#define SEC_HW_ERR_SSRC_JMP_HALT_COND   0x07
 
-#define JQSTA_CCBERR_JUMP           0x08000000
-#define JQSTA_CCBERR_INDEX_MASK     0xff00
-#define JQSTA_CCBERR_INDEX_SHIFT    8
-#define JQSTA_CCBERR_CHAID_MASK     0x00f0
-#define JQSTA_CCBERR_CHAID_SHIFT    4
-#define JQSTA_CCBERR_ERRID_MASK     0x000f
-
-#define JQSTA_CCBERR_CHAID_AES      (0x01 << JQSTA_CCBERR_CHAID_SHIFT)
-#define JQSTA_CCBERR_CHAID_DES      (0x02 << JQSTA_CCBERR_CHAID_SHIFT)
-#define JQSTA_CCBERR_CHAID_ARC4     (0x03 << JQSTA_CCBERR_CHAID_SHIFT)
-#define JQSTA_CCBERR_CHAID_MD       (0x04 << JQSTA_CCBERR_CHAID_SHIFT)
-#define JQSTA_CCBERR_CHAID_RNG      (0x05 << JQSTA_CCBERR_CHAID_SHIFT)
-#define JQSTA_CCBERR_CHAID_SNOW     (0x06 << JQSTA_CCBERR_CHAID_SHIFT)
-#define JQSTA_CCBERR_CHAID_KASUMI   (0x07 << JQSTA_CCBERR_CHAID_SHIFT)
-#define JQSTA_CCBERR_CHAID_PK       (0x08 << JQSTA_CCBERR_CHAID_SHIFT)
-#define JQSTA_CCBERR_CHAID_CRC      (0x09 << JQSTA_CCBERR_CHAID_SHIFT)
-
-#define JQSTA_CCBERR_ERRID_NONE     0x00
-#define JQSTA_CCBERR_ERRID_MODE     0x01
-#define JQSTA_CCBERR_ERRID_DATASIZ  0x02
-#define JQSTA_CCBERR_ERRID_KEYSIZ   0x03
-#define JQSTA_CCBERR_ERRID_PKAMEMSZ 0x04
-#define JQSTA_CCBERR_ERRID_PKBMEMSZ 0x05
-#define JQSTA_CCBERR_ERRID_SEQUENCE 0x06
-#define JQSTA_CCBERR_ERRID_PKDIVZRO 0x07
-#define JQSTA_CCBERR_ERRID_PKMODEVN 0x08
-#define JQSTA_CCBERR_ERRID_KEYPARIT 0x09
-#define JQSTA_CCBERR_ERRID_ICVCHK   0x0a
-#define JQSTA_CCBERR_ERRID_HARDWARE 0x0b
-#define JQSTA_CCBERR_ERRID_CCMAAD   0x0c
-#define JQSTA_CCBERR_ERRID_INVCHA   0x0f
+#define SEC_HW_ERR_DECO_HFN_THRESHOLD       0xF1
 
 #endif
 
@@ -553,7 +501,7 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 #if SEC_HW_VERSION_3_1
 #define hw_job_ring_error(jr) (in_be32((jr)->register_base_addr + SEC_REG_CSR_LO(jr)) & SEC_REG_CSR_ERROR_MASK)
 #else // SEC_HW_VERSION_3_1
-#define hw_job_error(jr)    ((*((job)->out_status)) & JR_JOB_STATUS_MASK)
+#define hw_job_error(jr)      (*((jr)->out_status))
 #endif
 
  /** Some error types require that the same error bit is set to 1 to clear the error source.
@@ -635,9 +583,9 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 #define hw_get_out_queue_base(jr)   ( (dma_addr_t)((in_be32((jr)->register_base_addr + JR_REG_ORBA(jr)) << 32) | \
                                        (in_be32((jr)->register_base_addr + JR_REG_ORBA_LO(jr)))))
 #else
-#define hw_get_inp_queue_base(jr)   ( (dma_addr_t)(in_be32((jr)->register_base_addr + JR_REG_IRBA_LO(jr))))
+#define hw_get_inp_queue_base(jr)       ( (dma_addr_t)(GET_JR_REG_LO(IRBA,(jr)) ) )
 
-#define hw_get_out_queue_base(jr)   ( (dma_addr_t)((in_be32((jr)->register_base_addr + JR_REG_ORBA_LO(jr)))))
+#define hw_get_out_queue_base(jr)       ( (dma_addr_t)(GET_JR_REG_LO(ORBA,(jr)) ) )
 #endif
 
 #define hw_get_current_inp_descriptor(jr) ( (dma_addr_t)(hw_get_inp_queue_base(jr) + \
@@ -645,8 +593,6 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 
 #define hw_get_current_out_descriptor(jr) ( (dma_addr_t)(hw_get_out_queue_base(jr) + \
                                          hw_get_current_out_index(jr)))
-
-#define hw_get_no_finished_jobs(jr) ( *(uint32_t*)((jr)->register_base_addr +  JR_REG_ORSFR(jr)) )
 
 #if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
 #define hw_enqueue_packet_on_job_ring(job_ring, descriptor) \
@@ -656,27 +602,22 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
     out_be32(job_ring->register_base_addr + JR_REG_IRJA(job_ring),1);\
 }
 #else
-//    out_be32((job_ring)->register_base_addr + JR_REG_IRBA_LO(job_ring),PHYS_ADDR_LO(descriptor));
+
 #define hw_enqueue_packet_on_job_ring(job_ring, descriptor) \
 { \
-    out_be32((job_ring)->register_base_addr + JR_REG_IRJA(job_ring),1); \
+    out_be32( (GET_JR_REG_LO(IRBA,(job_ring)) + GET_JR_REG(IRRI,(job_ring))),           \
+              (descriptor) );                                                           \
+    SET_JR_REG(IRJA, (job_ring), 1);                                                    \
+    (job_ring)->hw_idx = ((job_ring)->hw_idx + 1 ) & SEC_JOB_RING_SIZE;                 \
 }
 #endif
 #endif //SEC_HW_VERSION_3_1
 
 #ifdef SEC_HW_VERSION_4_4
 
-#define hw_set_input_ring_size(job_ring,size) \
-{   \
-    out_be32(job_ring->register_base_addr + JR_REG_IRSR(job_ring),\
-             (size));\
-}
+#define hw_set_input_ring_size(job_ring,size)   SET_JR_REG(IRSR,job_ring,(size))
 
-#define hw_set_output_ring_size(job_ring,size) \
-{   \
-    out_be32(job_ring->register_base_addr + JR_REG_ORSR(job_ring),\
-             (size));\
-}
+#define hw_set_output_ring_size(job_ring,size)  SET_JR_REG(ORSR,job_ring,(size))
 
 #if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
 #define hw_set_input_ring_start_addr(job_ring, descriptor) \
@@ -689,74 +630,39 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 
 #define hw_set_output_ring_start_addr(job_ring, descriptor) \
 {   \
-    out_be32(job_ring->register_base_addr + JR_REG_ORBA(job_ring),\
+    out_be32(job_ring->  + JR_REG_ORBA(job_ring),\
              PHYS_ADDR_HI(descriptor));\
     out_be32(job_ring->register_base_addr + JR_REG_ORBA_LO(job_ring),\
              PHYS_ADDR_LO(descriptor));\
 }
 
 #else //#if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
-#define hw_set_input_ring_start_addr(job_ring, descriptor) \
-{   \
-    out_be32(job_ring->register_base_addr + JR_REG_IRBA_LO(job_ring),\
-             (descriptor));\
-}
+#define hw_set_input_ring_start_addr(job_ring, start_addr) \
+        SET_JR_REG_LO(IRBA,job_ring,start_addr)
 
-#define hw_set_output_ring_start_addr(job_ring, descriptor) \
-{   \
-    out_be32(job_ring->register_base_addr + JR_REG_ORBA_LO(job_ring),\
-             (descriptor));\
-}
+#define hw_set_output_ring_start_addr(job_ring, start_addr) \
+        SET_JR_REG_LO(ORBA,job_ring,start_addr)
+
 #endif
 
-#define JR_HW_REMOVE_ONE_ENTRY(jr) ( out_be32((jr)->register_base_addr + JR_REG_ORJR(jr),1) )
+#define JR_HW_REMOVE_ONE_ENTRY(jr)              SET_JR_REG(ORJR,(jr),1)
 
-#define JR_HW_REMOVE_ENTRIES(jr,no_entries) ( out_be32((jr)->register_base_addr + JR_REG_ORJR(jr),(no_entries)))
+#define JR_HW_REMOVE_ENTRIES(jr,no_entries)     SET_JR_REG(ORJR,(jr),(no_entries))
 
-#endif // SEC_HW_VERSION_4_4
-/*==============================================================================
-                                    ENUMS
-==============================================================================*/
+#define hw_get_available_slots(jr)              GET_JR_REG(IRSA,jr)
 
-/*==============================================================================
-                         STRUCTURES AND OTHER TYPEDEFS
-==============================================================================*/
-/** Forward structure declaration */
-typedef struct sec_job_ring_t sec_job_ring_t;
+#define hw_get_no_finished_jobs(jr)             GET_JR_REG(ORSFR, jr)
 
-#ifdef SEC_HW_VERSION_3_1
-/** SEC Descriptor pointer entry */
-struct sec_ptr {
-    uint16_t len;       /*< length */
-    uint8_t j_extent;   /*< jump to sg link table and/or extent */
-    uint8_t eptr;       /*< extended address */
-    uint32_t ptr;       /*< address */
-};
 
-/** A descriptor that instructs SEC engine how to process a packet.
- * On SEC 3.1 a descriptor consists of 8 double-words: 
- * one header dword and seven pointer dwords. */
-struct sec_descriptor_t
-{
-    volatile uint32_t hdr;      /*< header high bits */
-    uint32_t hdr_lo;            /*< header low bits */
-    struct sec_ptr ptr[7];      /*< ptr/len pair array */
-    /*< Initialization Vector. Need to have it here because it 
-     * is updated with info from each packet!!! */
-    uint32_t __CACHELINE_ALIGNED iv[SEC_IV_MAX_LENGTH];
 
-} __CACHELINE_ALIGNED;
-#else
-#define __PACKED __attribute__((__packed__))
+#define CMD_HDR_CTYPE_SD                        0x16
+#define CMD_HDR_CTYPE_JD                        0x17
 
-#define CMD_HDR_CTYPE_SD        0x16
-#define CMD_HDR_CTYPE_JD        0x17
+#define CMD_PROTO_SNOW_ALG                      0x01
+#define CMD_PROTO_AES_ALG                       0x02
 
-#define CMD_PROTO_SNOW_ALG       0x01
-#define CMD_PROTO_AES_ALG        0x02
-
-#define CMD_PROTO_DECAP         0x06
-#define CMD_PROTO_ENCAP         0x07
+#define CMD_PROTO_DECAP                         0x06
+#define CMD_PROTO_ENCAP                         0x07
 
 #define PDCP_JD_SET_SD(descriptor,ptr,sd_len)           { \
     (descriptor)->sd_ptr = (ptr);                         \
@@ -768,158 +674,6 @@ struct sec_descriptor_t
         (descriptor)->seq_out.command.word = 0xF8400000; \
         (descriptor)->seq_in.command.word  = 0xF0400000; \
 }
-
-struct descriptor_header_s {
-    union {
-        uint32_t word;
-        struct {
-            /* 4  */ unsigned int ctype:5;
-            /* 5  */ unsigned int res1:2;
-            /* 7  */ unsigned int dnr:1;
-            /* 8  */ unsigned int one:1;
-            /* 9  */ unsigned int res2:1;
-            /* 10 */ unsigned int start_idx:6;
-            /* 16 */ unsigned int res3:2;
-            /* 18 */ unsigned int cif:1;
-            /* 19 */ unsigned int sc:1;
-            /* 20 */ unsigned int pd:1;
-            /* 21 */ unsigned int res4:1;
-            /* 22 */ unsigned int share:2;
-            /* 24 */ unsigned int res5:2;
-            /* 26 */ unsigned int desclen:6;
-        } sd;
-        struct {
-            /* 4  */ unsigned int ctype:5;
-            /* 5  */ unsigned int res1:1;
-            /* 6  */ unsigned int rsms:1;
-            /* 7  */ unsigned int dnr:1;
-            /* 8  */ unsigned int one:1;
-            /* 9  */ unsigned int res2:1;
-            /* 10 */ unsigned int shr_desc_len:6;
-            /* 16 */ unsigned int zero:1;
-            /* 17 */ unsigned int td:1;
-            /* 18 */ unsigned int mtd:1;
-            /* 19 */ unsigned int shr:1;
-            /* 20 */ unsigned int reo:1;
-            /* 21 */ unsigned int share:3;
-            /* 24 */ unsigned int res4:1;
-            /* 25 */ unsigned int desclen:7;
-        } jd;
-    } __PACKED command;
-} __PACKED;
-
-struct key_command_s {
-    union {
-        uint32_t word;
-        struct {
-            unsigned int ctype:5;
-            unsigned int cls:2;
-            unsigned int sgf:1;
-            unsigned int imm:1;
-            unsigned int enc:1;
-            unsigned int nwb:1;
-            unsigned int ekt:1;
-            unsigned int kdest:4;
-            unsigned int tk:1;
-            unsigned int rsvd1:5;
-            unsigned int length:10;
-        } __PACKED field;
-    } __PACKED command;
-} __PACKED;
-
-struct protocol_operation_command_s {
-    union {
-        uint32_t word;
-        struct {
-            unsigned int ctype:5;
-            unsigned int optype:3;
-            unsigned char protid;
-            unsigned short protinfo;
-        } __PACKED field;
-    } __PACKED command;
-} __PACKED;
-
-struct seq_in_command_s {
-    union {
-        uint32_t word;
-        struct {
-            unsigned int ctype:5;
-            unsigned int res1:1;
-            unsigned int inl:1;
-            unsigned int sgf:1;
-            unsigned int pre:1;
-            unsigned int ext:1;
-            unsigned int rto:1;
-            unsigned int rjd:1;
-            unsigned int res2:4;
-        } field;
-    } __PACKED command;
-}__PACKED;
-
-struct seq_out_command_s{
-    union {
-        uint32_t word;
-        struct {
-            unsigned int ctype:5;
-            unsigned int res1:2;
-            unsigned int sgf:1;
-            unsigned int pre:1;
-            unsigned int ext:1;
-            unsigned int rto:1;
-            unsigned int res2:5;
-        } field;
-    } __PACKED command;
-} __PACKED;
-
-struct cplane_pdb_s{
-    unsigned int res1;
-    unsigned int hfn:27;
-    unsigned int res2:5;
-    unsigned int bearer:5;
-    unsigned int dir:1;
-    unsigned int res3:26;
-    unsigned int threshold:27;
-    unsigned int res4:5;
-}__PACKED;
-
-struct uplane_pdb_s{
-    unsigned int res1:30;
-    unsigned int sns:1;
-    unsigned int res2:1;
-    union{
-        struct{
-            unsigned int hfn:20;
-            unsigned int res:12;
-        }__PACKED hfn_l;
-        struct{
-            unsigned int hfn:25;
-            unsigned int res:7;
-        }__PACKED hfn_s;
-        unsigned int word;
-    } __PACKED hfn;
-    unsigned int bearer:5;
-    unsigned int dir:1;
-    unsigned int res3:26;
-    union{
-        struct{
-            unsigned int threshold:20;
-            unsigned int res:12;
-        }__PACKED threshold_l;
-        struct{
-            unsigned int threshold:25;
-            unsigned int res:7;
-        }__PACKED threshold_s;
-    } __PACKED threshold;
-}__PACKED;
-
-struct sec_pdcp_pdb_s
-{
-    union{
-        uint32_t    content[4];
-        struct cplane_pdb_s cplane_pdb;
-        struct uplane_pdb_s uplane_pdb;
-    }__PACKED pdb_content;
-} __PACKED;
 
 #define SEC_PDCP_INIT_CPLANE_SD(descriptor){ \
         (descriptor)->deschdr.command.word  = 0xBA850210;    \
@@ -988,35 +742,43 @@ struct sec_pdcp_pdb_s
         }                                                                   \
 }
 
-
-#define SD_LEN      0x10
-
-struct sec_pdcp_sd_t{
-    struct descriptor_header_s  deschdr;
-    struct sec_pdcp_pdb_s       pdb;
-    struct key_command_s        key2_cmd;
-#warning "Update to define"
-    uint32_t                    key2[4];
-    struct key_command_s        key1_cmd;
-#warning "Update to define"
-    uint32_t                    key1[4];
-    struct protocol_operation_command_s protocol;
-} __PACKED;
-
-struct sec_descriptor_t {
-    struct descriptor_header_s deschdr;
-#warning "Update for 36 bits addresses"
-    dma_addr_t    sd_ptr;
-    struct seq_out_command_s seq_out;
-#warning "Update for 36 bits addresses"
-    dma_addr_t    seq_out_ptr;
-    uint32_t      out_ext_length;
-    struct seq_in_command_s seq_in;
-    dma_addr_t    seq_in_ptr;
-    uint32_t    in_ext_length;
-} __PACKED;
+#define PDCP_SD_LEN         0x10
+#define PDCP_SD_KEY_LEN     0x4
 
 #endif
+/*==============================================================================
+                                    ENUMS
+==============================================================================*/
+
+/*==============================================================================
+                         STRUCTURES AND OTHER TYPEDEFS
+==============================================================================*/
+/** Forward structure declaration */
+typedef struct sec_job_ring_t sec_job_ring_t;
+
+#ifdef SEC_HW_VERSION_3_1
+/** SEC Descriptor pointer entry */
+struct sec_ptr {
+    uint16_t len;       /*< length */
+    uint8_t j_extent;   /*< jump to sg link table and/or extent */
+    uint8_t eptr;       /*< extended address */
+    uint32_t ptr;       /*< address */
+};
+
+/** A descriptor that instructs SEC engine how to process a packet.
+ * On SEC 3.1 a descriptor consists of 8 double-words:
+ * one header dword and seven pointer dwords. */
+struct sec_descriptor_t
+{
+    volatile uint32_t hdr;      /*< header high bits */
+    uint32_t hdr_lo;            /*< header low bits */
+    struct sec_ptr ptr[7];      /*< ptr/len pair array */
+    /*< Initialization Vector. Need to have it here because it
+     * is updated with info from each packet!!! */
+    uint32_t __CACHELINE_ALIGNED iv[SEC_IV_MAX_LENGTH];
+
+} __CACHELINE_ALIGNED;
+
 /** Cryptographic data belonging to a SEC context.
  * Can be considered a joint venture between:
  * - a 'shared descriptor' (the descriptor header word)
@@ -1027,9 +789,9 @@ typedef struct sec_crypto_pdb_s
                                 Lower 32 bits are reserved and unused. */
     uint32_t auth_hdr;      /*< Higher 32 bits of Descriptor Header dword, used for authentication operations.
                                 Lower 32 bits are reserved and unused. */
-    uint32_t iv_template[SEC_IV_TEMPLATE_MAX_LENGTH];       /*< Template for Initialization Vector. 
+    uint32_t iv_template[SEC_IV_TEMPLATE_MAX_LENGTH];       /*< Template for Initialization Vector.
                                                                 HFN is stored and maintained here. */
-    uint32_t hfn_threshold; /*< Threshold for HFN configured by User Application. 
+    uint32_t hfn_threshold; /*< Threshold for HFN configured by User Application.
                                 Bitshifted left to skip SN bits from first word of IV. */
     uint32_t hfn_mask;      /*< Mask applied on IV to extract HFN */
     uint32_t sn_mask;       /*< Mask applied on PDCP header to extract SN */
@@ -1042,6 +804,215 @@ typedef struct sec_crypto_pdb_s
                                 and #FALSE for outbound data flows(performing encapsulation on packets). */
 
 }sec_crypto_pdb_t;
+#else
+/**
+ * TODO: Write something meaningful here
+ */
+struct descriptor_header_s {
+    union {
+        uint32_t word;
+        struct {
+            /* 4  */ unsigned int ctype:5;
+            /* 5  */ unsigned int res1:2;
+            /* 7  */ unsigned int dnr:1;
+            /* 8  */ unsigned int one:1;
+            /* 9  */ unsigned int res2:1;
+            /* 10 */ unsigned int start_idx:6;
+            /* 16 */ unsigned int res3:2;
+            /* 18 */ unsigned int cif:1;
+            /* 19 */ unsigned int sc:1;
+            /* 20 */ unsigned int pd:1;
+            /* 21 */ unsigned int res4:1;
+            /* 22 */ unsigned int share:2;
+            /* 24 */ unsigned int res5:2;
+            /* 26 */ unsigned int desclen:6;
+        } sd;
+        struct {
+            /* 4  */ unsigned int ctype:5;
+            /* 5  */ unsigned int res1:1;
+            /* 6  */ unsigned int rsms:1;
+            /* 7  */ unsigned int dnr:1;
+            /* 8  */ unsigned int one:1;
+            /* 9  */ unsigned int res2:1;
+            /* 10 */ unsigned int shr_desc_len:6;
+            /* 16 */ unsigned int zero:1;
+            /* 17 */ unsigned int td:1;
+            /* 18 */ unsigned int mtd:1;
+            /* 19 */ unsigned int shr:1;
+            /* 20 */ unsigned int reo:1;
+            /* 21 */ unsigned int share:3;
+            /* 24 */ unsigned int res4:1;
+            /* 25 */ unsigned int desclen:7;
+        } jd;
+    } PACKED command;
+} PACKED;
+
+/**
+ * TODO: Write something meaningful here
+ */
+struct key_command_s {
+    union {
+        uint32_t word;
+        struct {
+            unsigned int ctype:5;
+            unsigned int cls:2;
+            unsigned int sgf:1;
+            unsigned int imm:1;
+            unsigned int enc:1;
+            unsigned int nwb:1;
+            unsigned int ekt:1;
+            unsigned int kdest:4;
+            unsigned int tk:1;
+            unsigned int rsvd1:5;
+            unsigned int length:10;
+        } PACKED field;
+    } PACKED command;
+} PACKED;
+
+/**
+ * TODO: Write something meaningful here
+ */
+struct protocol_operation_command_s {
+    union {
+        uint32_t word;
+        struct {
+            unsigned int ctype:5;
+            unsigned int optype:3;
+            unsigned char protid;
+            unsigned short protinfo;
+        } PACKED field;
+    } PACKED command;
+} PACKED;
+
+/**
+ * TODO: Write something meaningful here
+ */
+struct seq_in_command_s {
+    union {
+        uint32_t word;
+        struct {
+            unsigned int ctype:5;
+            unsigned int res1:1;
+            unsigned int inl:1;
+            unsigned int sgf:1;
+            unsigned int pre:1;
+            unsigned int ext:1;
+            unsigned int rto:1;
+            unsigned int rjd:1;
+            unsigned int res2:4;
+            unsigned int length:16;
+        } field;
+    } PACKED command;
+}PACKED;
+
+/**
+ * TODO: Write something meaningful here
+ */
+struct seq_out_command_s{
+    union {
+        uint32_t word;
+        struct {
+            unsigned int ctype:5;
+            unsigned int res1:2;
+            unsigned int sgf:1;
+            unsigned int pre:1;
+            unsigned int ext:1;
+            unsigned int rto:1;
+            unsigned int res2:5;
+            unsigned int length:16;
+        } field;
+    } PACKED command;
+} PACKED;
+
+/**
+ * TODO: Write something meaningful here
+ */
+struct cplane_pdb_s{
+    unsigned int res1;
+    unsigned int hfn:27;
+    unsigned int res2:5;
+    unsigned int bearer:5;
+    unsigned int dir:1;
+    unsigned int res3:26;
+    unsigned int threshold:27;
+    unsigned int res4:5;
+}PACKED;
+
+/**
+ * TODO: Write something meaningful here
+ */
+struct uplane_pdb_s{
+    unsigned int res1:30;
+    unsigned int sns:1;
+    unsigned int res2:1;
+    union{
+        struct{
+            unsigned int hfn:20;
+            unsigned int res:12;
+        }PACKED hfn_l;
+        struct{
+            unsigned int hfn:25;
+            unsigned int res:7;
+        }PACKED hfn_s;
+        unsigned int word;
+    } PACKED hfn;
+    unsigned int bearer:5;
+    unsigned int dir:1;
+    unsigned int res3:26;
+    union{
+        struct{
+            unsigned int threshold:20;
+            unsigned int res:12;
+        }PACKED threshold_l;
+        struct{
+            unsigned int threshold:25;
+            unsigned int res:7;
+        }PACKED threshold_s;
+    } PACKED threshold;
+}PACKED;
+
+/**
+ * TODO: Write something meaningful here
+ */
+typedef struct sec_crypto_pdb_s
+{
+    union{
+        uint32_t    content[4];
+        struct cplane_pdb_s cplane_pdb;
+        struct uplane_pdb_s uplane_pdb;
+    }PACKED pdb_content;
+}PACKED sec_crypto_pdb_t;
+
+/**
+ * TODO: Write something meaningful here
+ */
+struct sec_pdcp_sd_t{
+    struct descriptor_header_s  deschdr;
+    sec_crypto_pdb_t            pdb;
+    struct key_command_s        key2_cmd;
+    uint32_t                    key2[PDCP_SD_KEY_LEN];
+    struct key_command_s        key1_cmd;
+    uint32_t                    key1[PDCP_SD_KEY_LEN];
+    struct protocol_operation_command_s protocol;
+} PACKED;
+
+/**
+ * TODO: Write something meaningful here
+ */
+struct sec_descriptor_t {
+    struct descriptor_header_s deschdr;
+#warning "Update for 36 bits addresses"
+    dma_addr_t    sd_ptr;
+    struct seq_out_command_s seq_out;
+#warning "Update for 36 bits addresses"
+    dma_addr_t    seq_out_ptr;
+    uint32_t      out_ext_length;
+    struct seq_in_command_s seq_in;
+    dma_addr_t    seq_in_ptr;
+    uint32_t    in_ext_length;
+} PACKED;
+
+#endif
 /*==============================================================================
                                  CONSTANTS
 ==============================================================================*/
@@ -1094,14 +1065,10 @@ int hw_reset_and_continue_job_ring(sec_job_ring_t *job_ring);
  * @param [in]  sec_error_code  The job ring's error code as first read from SEC engine
  * @param [out] reset_required  If set to #TRUE, the job ring must be reset.
  */
-#ifdef SEC_HW_VERSION_3_1
 void hw_handle_job_ring_error(sec_job_ring_t *job_ring,
                               uint32_t sec_error_code,
                               uint32_t *reset_required);
-#else // SEC_HW_VERSION_3_1
-void hw_handle_job_ring_error (uint32_t sec_error_code,
-                              uint32_t *reset_required);
-#endif
+
 /*============================================================================*/
 
 

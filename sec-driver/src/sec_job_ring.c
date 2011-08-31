@@ -144,44 +144,45 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
     ASSERT(job_ring->descriptors == NULL);
 
     job_ring->descriptors = *dma_mem;
-#ifdef SEC_HW_VERSION_3_3
+
     memset(job_ring->descriptors, 0, SEC_JOB_RING_SIZE * sizeof(struct sec_descriptor_t));
     *dma_mem += SEC_JOB_RING_SIZE * sizeof(struct sec_descriptor_t);
-#else
-    memset(job_ring->descriptors, 0, SEC_JOB_RING_HW_SIZE * sizeof(struct sec_descriptor_t));
-    *dma_mem += SEC_JOB_RING_HW_SIZE * sizeof(struct sec_descriptor_t);
-#endif
+
 #ifdef SEC_HW_VERSION_4_4
     // Got to allocate some mem for input & output ring
     ASSERT(job_ring->input_ring == NULL);
 
     job_ring->input_ring = *dma_mem;
-    memset(job_ring->input_ring, 0, SEC_JOB_RING_HW_SIZE * sizeof(dma_addr_t));
-    *dma_mem += SEC_JOB_RING_HW_SIZE * sizeof(dma_addr_t);
+    memset(job_ring->input_ring, 0, SEC_JOB_RING_SIZE * sizeof(dma_addr_t));
+    *dma_mem += SEC_JOB_RING_SIZE * sizeof(dma_addr_t);
 
     ASSERT(job_ring->output_ring == NULL);
 
     job_ring->output_ring = *dma_mem;
-    memset(job_ring->output_ring, 0, SEC_JOB_RING_HW_SIZE * sizeof(struct sec_outring_entry));
-    *dma_mem += SEC_JOB_RING_HW_SIZE * sizeof(struct sec_outring_entry);
+    memset(job_ring->output_ring, 0, SEC_JOB_RING_SIZE * sizeof(struct sec_outring_entry));
+    *dma_mem += SEC_JOB_RING_SIZE * sizeof(struct sec_outring_entry);
 
     // Got to write the actual jobring size to the hw registers
-    hw_set_input_ring_size(job_ring,SEC_JOB_RING_HW_SIZE - 1);
-    hw_set_output_ring_size(job_ring,SEC_JOB_RING_HW_SIZE - 1);
+    hw_set_input_ring_size(job_ring,SEC_JOB_RING_SIZE - 1);
+    hw_set_output_ring_size(job_ring,SEC_JOB_RING_SIZE - 1);
 
     // Now write the ptrs to the input and output ring
     hw_set_input_ring_start_addr(job_ring, sec_vtop(job_ring->input_ring));
-    SEC_DEBUG(" Set input ring base address to: Virtual: 0x%x, Physical: 0x%x, Read from HW: 0x%x",
+    hw_set_output_ring_start_addr(job_ring, sec_vtop(job_ring->output_ring));
+
+    SEC_DEBUG(" Set input ring base address to: Virtual: 0x%x, Physical: 0x%x, Read from HW: 0x%08x",
             (dma_addr_t)job_ring->input_ring,
             sec_vtop(job_ring->input_ring),
             hw_get_inp_queue_base(job_ring));
 
     hw_set_output_ring_start_addr(job_ring, sec_vtop(job_ring->output_ring));
-    SEC_DEBUG(" Set output ring base address to: Virtual: 0x%x, Physical: 0x%x, Read from HW: 0x%x",
+    SEC_DEBUG(" Set output ring base address to: Virtual: 0x%x, Physical: 0x%x, Read from HW: 0x%08x",
             (dma_addr_t)job_ring->output_ring,
             sec_vtop(job_ring->output_ring),
             hw_get_out_queue_base(job_ring));
 
+    // Set HW index to 0
+    job_ring->hw_idx = 0;
 #endif
 
     // TODO: check that we do not use more DMA mem than actually allocated/reserved for us by User App.
@@ -203,9 +204,9 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
                 "Current jobs[i]->mac_i [i=%d] position is not cacheline aligned.", i);
 #if SEC_HW_VERSION_4_4
         // Set pointers to descriptors in input ring
-        job_ring->input_ring[i] = (dma_addr_t)&job_ring->descriptors[i];
+        //job_ring->input_ring[i] = (dma_addr_t)&job_ring->descriptors[i];
         // Need to store pointer to output ring status
-        job_ring->jobs[i].out_status = &job_ring->output_ring[i].status;
+        //job_ring->jobs[i].out_status = &job_ring->output_ring[i].status;
 #else
         // Allocate DMA-capable memory where SEC 3.1 will generate MAC-I for
         // SNOW F9 and AES CMAC integrity check algorithms (PDCP control-plane).

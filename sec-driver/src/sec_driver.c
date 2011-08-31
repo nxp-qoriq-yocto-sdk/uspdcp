@@ -46,7 +46,9 @@ extern "C" {
 #include "sec_atomic.h"
 #include "sec_pdcp.h"
 #include "sec_hw_specific.h"
-
+#ifdef SEC_HW_VERSION_4_4
+#include "external_mem_management.h"
+#endif
 #include <stdio.h>
 
 /*==================================================================================================
@@ -475,53 +477,70 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
     uint32_t number_of_jobs_available = 0;
     uint32_t sec_error_code = 0;
     int ret = 0;
+#ifdef SEC_HW_VERSION_3_1
     uint8_t notify_pkt = TRUE;
+#endif
     uint32_t do_driver_shutdown = FALSE;
-
-    
-
+#ifdef SEC_HW_VERSION_4_4
+    int hw_idx = job_ring->hw_idx;
+    int sw_idx = job_ring->cidx;
+    int tail = job_ring->cidx;
+    int i;
+#endif
     // Compute the number of notifications that need to be raised to UA
-    // If limit < 0 -> notify all done jobs
+    // If limit < 0 -> notify all done jobs1h
     // If limit > total number of done jobs -> notify all done jobs
     // If limit = 0 -> error
     // If limit > 0 && limit < total number of done jobs -> notify a number of done jobs equal with limit
 
     // compute the number of jobs available in the job ring based on the
     // producer and consumer index values.
-
+#ifdef SEC_HW_VERSION_3_1
     number_of_jobs_available = SEC_JOB_RING_NUMBER_OF_ITEMS(SEC_JOB_RING_SIZE, job_ring->pidx, job_ring->cidx);
-
+#else
+    number_of_jobs_available = hw_get_no_finished_jobs(job_ring);
+#endif
     jobs_no_to_notify = (limit < 0 || limit > number_of_jobs_available) ? number_of_jobs_available : limit;
 
     SEC_DEBUG("Jr[%p] pi[%d] ci[%d].Jobs submitted %d.Jobs to notify %d",
               job_ring, job_ring->pidx, job_ring->cidx,
               number_of_jobs_available, jobs_no_to_notify);
-
-    while(jobs_no_to_notify > notified_packets_no)
+    while(jobs_no_to_notify > notified_packets_no
+#ifdef SEC_HW_VERSION_4_4
+          && hw_get_no_finished_jobs(job_ring)
+#endif
+          )
     {
 #ifdef SEC_HW_VERSION_4_4
-        if(hw_get_no_finished_jobs(job_ring) == 0 )
+        for (i = 0;
+             SEC_JOB_RING_NUMBER_OF_ITEMS(SEC_JOB_RING_SIZE,job_ring->pidx, tail + i) >= 1;
+             i++)
         {
-            SEC_DEBUG("No jobs completed yet...");
-            continue;
+                sw_idx = SEC_CIRCULAR_COUNTER(tail + i - 1,SEC_JOB_RING_SIZE);
+                SEC_DEBUG("%d,%d,%d,%p",hw_idx,sw_idx,job_ring->cidx,(uint32_t*)job_ring->output_ring[hw_idx].desc);
+                 if (job_ring->output_ring[hw_idx].desc ==
+                     job_ring->jobs[sw_idx].descr_phys_addr)
+                 {
+                     SEC_DEBUG("Found matching descriptor 0x%08x",job_ring->jobs[sw_idx].descr_phys_addr);
+                     break; /* found */
+                 }
         }
 
-        SEC_DEBUG("Found a job! Total # of jobs waiting: %d", hw_get_no_finished_jobs(job_ring) );
+        /* mark completed, avoid matching on a recycled desc addr */
+        job_ring->jobs[sw_idx].descr_phys_addr = 0;
+
+        // Get completed job
+        job = &job_ring->jobs[sw_idx];
+
+        // Get job status here
+        sec_error_code = job_ring->output_ring[hw_idx].status;
+
+        // Test here for HFN gte HFN treshold
+        // If so, this is not an error, signal to upper layer
+        if( HFN_THRESHOLD_MATCH(sec_error_code) )
         {
-            dma_addr_t out_descr = hw_get_current_out_descriptor(job_ring);
-            int i = 0;
-
-            out_descr -= sizeof(struct sec_outring_entry);
-            SEC_DEBUG("Last output descriptor @ addr: 0x%x",out_descr);
-            SEC_DEBUG("Last descriptor status: 0x%x",((struct sec_outring_entry*)out_descr)->status);
-            SEC_DEBUG("Last processed descriptor status (from register): 0x%x",hw_get_jr_status(job_ring));
-
-            SEC_DEBUG("descriptor @ 0x%06x",(uint32_t)(((struct sec_outring_entry*)out_descr)->descr));
-            for(;i < sizeof(sec_descriptor_t)/sizeof(uint32_t);i++)
-            {
-                SEC_DEBUG("descriptor[%x] = 0x%08x",i,*(((uint32_t*)(((struct sec_outring_entry*)out_descr)->descr)) + i));
-            }
-
+            sec_error_code = 0;
+            status = SEC_STATUS_HFN_THRESHOLD_REACHED;
         }
 
 #else
@@ -531,31 +550,28 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
                       job_ring);
             break;
         }
-#endif
         // get the first un-notified job from the job ring
         job = &job_ring->jobs[job_ring->cidx];
-
-        {
-            int i = 0;
-            SEC_DEBUG("out pkt @ 0x%06x (length: %d,offset %d)",job->out_packet->address, job->out_packet->length, job->out_packet->offset);
-            for(i = 0; i < job->out_packet->length  ; i++ )
-            {
-                SEC_DEBUG("0x%x",*(job->out_packet->address + i));
-            }
-        }
-
-        // check if job is DONE
-#if SEC_HW_VERSION_4_4
-        if(!hw_job_is_done(job))
-#else
-        if(!hw_job_is_done(job->descr))
 #endif
         {
-            // check if any job generated error, not only this job.
+            int __i = 0;
+            SEC_DEBUG("out pkt @ 0x%06x (length: %d,offset %d)",
+                      (uint32_t)job->out_packet->address,
+                      job->out_packet->length,
+                      job->out_packet->offset);
+            for(__i = 0; __i < job->out_packet->length  ; __i++ )
+            {
+                SEC_DEBUG("0x%x",*(job->out_packet->address + __i));
+            }
+        }
 #if SEC_HW_VERSION_3_1
+        // check if job is DONE
+        if(!hw_job_is_done(job))
+#endif
+        {
+#if SEC_HW_VERSION_3_1
+            // check if any job generated error, not only this job.
             sec_error_code = hw_job_ring_error(job_ring);
-#else
-            sec_error_code = hw_job_error(job);
 #endif
             if (sec_error_code)
             {
@@ -565,7 +581,6 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
 
                 SEC_ERROR("Packet at cidx %d generated error 0x%x on job ring with id %d\n",
                           job_ring->cidx, sec_error_code, job_ring->jr_id);
-                SEC_DEBUG("Job status: 0x%x",*(uint32_t*)(job->out_status));
 
                 // flush jobs from JR, with error code set to callback
                 sec_handle_packet_error(job_ring, sec_error_code, &error_packets_no, &do_driver_shutdown);
@@ -582,16 +597,18 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
                 // Packet is not processed yet, exit
                 SEC_DEBUG("Jr[%p]. packet not done, exit. job descr hdr = 0x%x \n",
                           job_ring, job->descr->hdr);
-#endif
+
                 break;
+#endif
             }
         }
         
+        sec_context = job->sec_context;
+#ifdef SEC_HW_VERSION_3_1
         // Used only for #SEC_STATUS_HFN_THRESHOLD_REACHED code, which is set by the driver,
         // before the packet is sent to SEC.
         status = job->job_status;
-        sec_context = job->sec_context;
-#ifdef SEC_HW_VERSION_3_1
+
         // Packet processing is DONE. See if it's a data-plane or control-plane packet
         if(sec_context->pdcp_crypto_info->user_plane == PDCP_CONTROL_PLANE)
         {
@@ -621,6 +638,19 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
         // AFTER saving job in temporary location!
         job_ring->cidx = SEC_CIRCULAR_COUNTER(job_ring->cidx, SEC_JOB_RING_SIZE);
 #if SEC_HW_VERSION_4_4
+        /* Increment HW read index */
+        job_ring->hw_idx = SEC_CIRCULAR_COUNTER(job_ring->hw_idx, SEC_JOB_RING_SIZE);
+        if( sw_idx == job_ring->cidx)
+        {
+            do{
+                tail = SEC_CIRCULAR_COUNTER(tail,SEC_JOB_RING_SIZE);
+            }while(SEC_JOB_RING_NUMBER_OF_ITEMS(SEC_JOB_RING_SIZE,job_ring->pidx, tail) >= 1 &&
+                   job_ring->jobs[tail].descr_phys_addr == 0);
+
+            job_ring->cidx = tail;
+        }
+
+        /* Restore descriptor address */
         JR_HW_REMOVE_ONE_ENTRY(job_ring);
 #endif
 
@@ -642,7 +672,9 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
                                              saved_job.ua_handle,
                                              status,
                                              0); // no error
-
+#ifdef SEC_HW_VERSION_4_4
+        sw_idx = tail = job_ring->cidx;
+#endif
         // consume processed packet for this sec context
         CONTEXT_CONSUME_PACKET(sec_context);
         notified_packets_no++;
@@ -995,11 +1027,8 @@ static void sec_handle_packet_error(sec_job_ring_t *job_ring,
 
     // Analyze the SEC error on this job ring
     // and see if a job ring reset is required.
-#ifdef SEC_HW_VERSION_3_1
     hw_handle_job_ring_error(job_ring, sec_error_code, &reset_cont_job_ring);
-#else
-    hw_handle_job_ring_error(sec_error_code, &reset_cont_job_ring);
-#endif
+
     // Flush the channel no matter the error type.
     // Notify all submitted jobs to UA, setting corresponding error cause
     hw_flush_job_ring(job_ring,
@@ -1316,84 +1345,6 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
     }
 #endif
 
-#ifdef SEC_HW_VERSION_4_4
-#if 0
-    {
-        int i = 0;
-#if 1
-        //ctx->sh_desc->desc[i++] = 0xBA850210; // hdr, share=serial
-        ctx->sh_desc->desc[i++] = 0xBA85020B; // hdr, share=serial
-#if 1
-        ctx->sh_desc->desc[i++] = 0x00000000; // opts
-        ctx->sh_desc->desc[i++] = 0x398A5000;
-        ctx->sh_desc->desc[i++] = 0xAC000000; // bearer,dir
-        ctx->sh_desc->desc[i++] = 0xFF000000; // threshold
-#else
-        ctx->sh_desc->desc[i++] = 0x00000002; // opts
-        ctx->sh_desc->desc[i++] = 0x00000020; // hfn
-        ctx->sh_desc->desc[i++] = 0xB4000000; // bearer,dir
-        ctx->sh_desc->desc[i++] = 0xFFFFFF60; // threshold
-#endif
-
-#if 0
-        ctx->sh_desc->desc[i++] = 0x04800010; // key 2 cmd, imm
-#if 1
-        ctx->sh_desc->desc[i++] = 0xC736C6AA;
-        ctx->sh_desc->desc[i++] = 0xB22BFFF9;
-        ctx->sh_desc->desc[i++] = 0x1E2698D2;
-        ctx->sh_desc->desc[i++] = 0xE22AD57E;
-#else
-        ctx->sh_desc->desc[i++] = 0xA1010C81;
-        ctx->sh_desc->desc[i++] = 0x3B52BEC0;
-        ctx->sh_desc->desc[i++] = 0x962EBF2D;
-        ctx->sh_desc->desc[i++] = 0xF0B27895; // key2
-#endif
-#endif
-        ctx->sh_desc->desc[i++] = 0x02800010; // key1 cmd, imm
-#if 1
-        ctx->sh_desc->desc[i++] = 0xd3c5d592;
-        ctx->sh_desc->desc[i++] = 0x327fb11c;
-        ctx->sh_desc->desc[i++] = 0x4035c668;
-        ctx->sh_desc->desc[i++] = 0x0af8c6d1;
-#else
-        ctx->sh_desc->desc[i++] = 0xB9D0FAD6;
-        ctx->sh_desc->desc[i++] = 0x860BDDF1;
-        ctx->sh_desc->desc[i++] = 0x2CBE5EFC;
-        ctx->sh_desc->desc[i++] = 0x95946313; // key1
-#endif
-
-        //ctx->sh_desc->desc[i++] = 0x87430001; // pdcp-cplane enc w/snow
-        ctx->sh_desc->desc[i++] = 0x87420002 ; // pdcp-dplane enc w/aes
-#else
-        ctx->sh_desc->desc[i++] = 0xB8801011;    /* Job Descriptor Header */
-
-        ctx->sh_desc->desc[i++] = 0xA8084A04;    /* CMD MATH: VSIL <- SEQ_IN_Length + Immediate(0x0) = Data_length */
-        ctx->sh_desc->desc[i++] = 0x00000000;    /* Immediate    = 0x0 */
-        ctx->sh_desc->desc[i++] = 0xA8084B04;    /* CMD MATH: VSOL <- SEQ_IN_Length + Immediate(0x0) = Data_length */
-        ctx->sh_desc->desc[i++] = 0x00000000;    /* Immediate    = 0x0 */
-
-        ctx->sh_desc->desc[i++] = 0x16860800;    /* CMD LOAD: Disable Automatic Info FIFO entries */
-        ctx->sh_desc->desc[i++] = 0x2B120000;    /* CMD SEQ FIFO LOAD */
-
-        ctx->sh_desc->desc[i++] = 0x69300000;    /* CMD SEQ FIFO STORE */
-        ctx->sh_desc->desc[i++] = 0x16860400;    /* CMD LOAD: Enable Automatic Info FIFO entries */
-
-        ctx->sh_desc->desc[i++] = 0xA80C4104;    /* CMD MATH: Math_reg_1 <- ZERO + Immediate(Move_size) = Move_size */
-        ctx->sh_desc->desc[i++] = 0x00000008;    /* Immediate = Move_size -> 8 bytes */
-
-        /* LOOP */
-        ctx->sh_desc->desc[i++] = 0xA82A1F04;    /* CMD MATH: VSIL - Math_reg1 */
-        ctx->sh_desc->desc[i++] = 0xA0020C04;    /* CMD JUMP: if Z or N, Jump forward 4 [last chunk of data - JMP to 19] */
-        ctx->sh_desc->desc[i++] = 0x78820008;    /* CMD MOVE: Move Data from FIFO IN to FIFO out (length:Move_size -> 8 bytes) */
-        ctx->sh_desc->desc[i++] = 0xA82A1A04;    /* CMD MATH: VSIL = VSIL - Math_Reg1 (Remaining Len - Move Len -> Remaining Length) */
-        ctx->sh_desc->desc[i++] = 0xA00000FC;    /* CMD JUMP: LOOP - jump backward 4 */
-        ctx->sh_desc->desc[i++] = 0x7C820008; /* CMD MOVE: Move Data from FIFO IN to FIFO out with FLUSH set */
-#endif
-    }
-#endif // if 0
-
-#endif
-
     // provide to UA a SEC ctx handle
 	*sec_ctx_handle = (sec_context_handle_t)ctx;
     return SEC_SUCCESS;
@@ -1457,9 +1408,15 @@ sec_return_code_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
     // To skip the round robin algorithm, UA can call sec_poll_per_jr for each JR and thus
     // implement its own algorithm.
     // - A limit smaller or equal than weight is considered invalid.
+#ifdef SEC_HW_VERSION_3_1
     SEC_ASSERT(!(limit == 0 || weight == 0 || (limit <= weight) || (weight > SEC_JOB_RING_HW_SIZE)),
                SEC_INVALID_INPUT_PARAM,
                "Invalid limit/weight parameter configuration");
+#else
+    SEC_ASSERT(!(limit == 0 || weight == 0 || (limit <= weight) || (weight > SEC_JOB_RING_SIZE)),
+               SEC_INVALID_INPUT_PARAM,
+               "Invalid limit/weight parameter configuration");
+#endif
 
     // Poll job rings
     // If limit < 0 -> poll JRs in round robin fashion until no more notifications are available.
@@ -1543,10 +1500,15 @@ sec_return_code_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle,
 
     // Validate input arguments
     SEC_ASSERT(job_ring != NULL, SEC_INVALID_INPUT_PARAM, "job_ring_handle is NULL");
+#ifdef SEC_HW_VERSION_3_1
     SEC_ASSERT(!((limit == 0) || (limit > SEC_JOB_RING_HW_SIZE)),
                SEC_INVALID_INPUT_PARAM,
                "Invalid limit parameter configuration");
-
+#else
+    SEC_ASSERT(!((limit == 0) || (limit > SEC_JOB_RING_SIZE)),
+                   SEC_INVALID_INPUT_PARAM,
+                   "Invalid limit parameter configuration");
+#endif
     // Poll job ring
     // If limit < 0 -> poll JR until no more notifications are available.
     // If limit > 0 -> poll JR until limit is reached.
@@ -1634,7 +1596,7 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
     ret = sec_process_pdcp_c_plane_packets(job_ring);
     SEC_ASSERT_CONT(ret == SEC_SUCCESS,
                     "sec_process_pdcp_c_plane_packets returned error code %d", ret);
-#endif
+
     // check if the Job Ring is full
     if(SEC_JOB_RING_IS_FULL(job_ring->pidx, job_ring->cidx,
                             SEC_JOB_RING_SIZE, SEC_JOB_RING_HW_SIZE + 1))
@@ -1643,7 +1605,14 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
                   job_ring, job_ring->pidx, job_ring->cidx);
         return SEC_JR_IS_FULL;
     }
-
+#else
+    if( SEC_JOB_RING_IS_FULL(job_ring) )
+    {
+        SEC_DEBUG("Jr[%p] pi[%d] ci[%d].Job Ring is full.",
+                          job_ring, job_ring->pidx, job_ring->cidx);
+                return SEC_JR_IS_FULL;
+    }
+#endif
     SEC_DEBUG("Jr[%p] pi[%d] ci[%d].Before sending packet",
               job_ring, job_ring->pidx, job_ring->cidx);
 
@@ -1670,6 +1639,9 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
     SEC_DEBUG("Jr[%p] pi[%d] ci[%d].in packet[%p].is_integrity_algo[%d]",
               job_ring, job_ring->pidx, job_ring->cidx,
               job->in_packet,job->is_integrity_algo);
+
+    // Descriptor Phy Addr will be set to 0 during the search, must updated here
+    job->descr_phys_addr = sec_vtop(&job_ring->descriptors[job_ring->pidx]);
 #endif
 
     // update descriptor with pointers to input/output data and pointers to crypto information
@@ -1686,7 +1658,6 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
 
     // increment the producer index for the current job ring
     job_ring->pidx = SEC_CIRCULAR_COUNTER(job_ring->pidx, SEC_JOB_RING_SIZE);
-
 
     // Enqueue this descriptor into the Fetch FIFO of this JR
     // Need write memory barrier here so that descriptor is written before

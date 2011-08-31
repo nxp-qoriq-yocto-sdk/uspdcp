@@ -269,10 +269,8 @@ extern "C"{
  * @note Round up to nearest power of 2 for optimized update
  * of producer/consumer indexes of each job ring
  */
-//#define SEC_JOB_RING_SIZE  2048
-//#define SEC_JOB_RING_HW_SIZE    1024 //SEC_JOB_RING_SIZE
-#define SEC_JOB_RING_SIZE  64
-#define SEC_JOB_RING_HW_SIZE    32 //SEC_JOB_RING_SIZE
+#define SEC_JOB_RING_SIZE       32
+//#define SEC_JOB_RING_HW_SIZE    SEC_JOB_RING_SIZE
 
 #else
 

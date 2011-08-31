@@ -56,7 +56,11 @@
 /** Test if job ring is full. Used job ring capacity to be 32 = a power of 2.
  * A job ring is full when there are 24 entries, which is the maximum
  * capacity of SEC's hardware FIFO. */
+#ifdef SEC_HW_VERSION_3_1
 #define SEC_JOB_RING_IS_FULL            FIFO_IS_FULL
+#else
+#define SEC_JOB_RING_IS_FULL(jr)        ( hw_get_available_slots((jr)) == 0 )
+#endif
 
 /*==============================================================================
                                     ENUMS
@@ -65,12 +69,13 @@
 /*==============================================================================
                          STRUCTURES AND OTHER TYPEDEFS
 ==============================================================================*/
-
+#ifdef SEC_HW_VERSION_3_1
 /** MAC-I, encapsulated in a structure to ensure cacheline-alignment.*/
 typedef struct sec_mac_i_s
 {
     volatile uint8_t code[SEC_3_1_MAC_I_REQUIRED_LEN];
 }__CACHELINE_ALIGNED sec_mac_i_t;
+#endif
 
 /** SEC job */
 struct sec_job_t
@@ -84,22 +89,22 @@ struct sec_job_t
 #ifdef SEC_HW_VERSION_3_1
     sec_mac_i_t *mac_i;                 /*< SEC 3.1 generates only 8 bytes MAC-I. SEC generates here the MAC-I.
                                             Later the driver will copy it to packet, as necessary. */
-#endif
     sec_status_t job_status;            /*< Processing status for the packet indicated by this job.
                                             Is required for indication that HFN reached threshold.
                                             TODO: remove this field when migrating on 9132!*/
+#endif
     volatile uint8_t is_integrity_algo; /*< Is set to value #TRUE for jobs with integrity algorithm configured.
                                             Set to #FALSE for crypto algorithm. */
 #if SEC_HW_VERSION_4_4
-    uint32_t    *out_status;
+    //uint32_t    *out_status;
 #endif // SEC_HW_VERSION_4_4
 }__CACHELINE_ALIGNED;
 
 #if SEC_HW_VERSION_4_4
 struct sec_outring_entry {
-    struct sec_descriptor_t *descr;     /*< Pointer to completed descriptor */
+    dma_addr_t  desc;     /*< Pointer to completed descriptor */
     uint32_t    status;                 /*< Status for completed descriptor */
-} __PACKED;
+} PACKED;
 #endif // SEC_HW_VERSION_4_4
 /** Lists the possible states for a job ring. */
 typedef enum sec_job_ring_state_e
@@ -136,6 +141,7 @@ struct sec_job_ring_t
     struct sec_outring_entry *output_ring;       /*< Ring of output descriptors received from SEC.
                                                    Size of array is power of 2 to allow fast update of
                                                    producer/consumer indexes with bitwise operations. */
+    volatile uint32_t   hw_idx;
 #endif // SEC_HW_VERSION_4_4
     uint32_t uio_fd;                        /*< The file descriptor used for polling from user space
                                                 for interrupts notifications */
