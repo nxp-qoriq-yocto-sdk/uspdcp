@@ -195,7 +195,10 @@ static void free_in_use_context(sec_contexts_pool_t * pool, sec_context_t * ctx)
     ctx->jr_handle = NULL;
     ctx->pdcp_crypto_info = NULL;
     ctx->update_crypto_descriptor = NULL;
-
+    ctx->update_auth_descriptor = NULL;
+#ifdef SEC_HW_VERSION_4_4
+    ctx->sh_desc = NULL;
+#endif
     // add context to free list
     // TODO: maybe add new context to head -> better chance for a cache hit if same element is reused next
     pool->free_list.add_tail(&pool->free_list, &ctx->node);
@@ -272,7 +275,6 @@ static void run_contexts_garbage_colector(sec_contexts_pool_t * pool)
 ==================================================================================================*/
 
 sec_return_code_t init_contexts_pool(sec_contexts_pool_t * pool,
-                                     void **dma_mem,
                                      uint32_t number_of_contexts,
                                      uint8_t thread_safe)
 {
@@ -280,7 +282,6 @@ sec_return_code_t init_contexts_pool(sec_contexts_pool_t * pool,
     sec_context_t * ctx = NULL;
 
     ASSERT(pool != NULL);
-    ASSERT(dma_mem != NULL);
     ASSERT(thread_safe == THREAD_SAFE_POOL || thread_safe == THREAD_UNSAFE_POOL);
 
     if (number_of_contexts == 0)
@@ -326,12 +327,20 @@ sec_return_code_t init_contexts_pool(sec_contexts_pool_t * pool,
         pool->free_list.add_tail(&pool->free_list, &ctx->node);
     }
 
+    pool->is_initialized = TRUE;
+
     return SEC_SUCCESS;
 }
 
 void destroy_contexts_pool(sec_contexts_pool_t * pool)
 {
     ASSERT(pool != NULL);
+
+    if (pool->is_initialized == FALSE)
+    {
+        SEC_DEBUG("Pool not yet initialized\n");
+        return;
+    }
 
     // destroy the lists
     destroy_pool_list(&pool->free_list);
@@ -342,6 +351,7 @@ void destroy_contexts_pool(sec_contexts_pool_t * pool)
     if(pool->sec_contexts != NULL)
     {
         free(pool->sec_contexts);
+        pool->sec_contexts = NULL;
     }
 
     memset(pool, 0, sizeof(sec_contexts_pool_t));
@@ -404,7 +414,7 @@ sec_return_code_t free_or_retire_context(sec_contexts_pool_t * pool, sec_context
     ASSERT(ctx->state == SEC_CONTEXT_USED);
     ASSERT(SEC_CONTEXT_USED < SEC_CONTEXT_RETIRING);
 
-    // Set state to retire. 
+    // Set state to retire.
     ctx->state = SEC_CONTEXT_RETIRING;
 
     // If packets in flight, do not release the context yet, move it to retiring.
@@ -421,7 +431,6 @@ sec_return_code_t free_or_retire_context(sec_contexts_pool_t * pool, sec_context
 
     // Run the contexts garbage collector
     run_contexts_garbage_colector(pool);
-
     return SEC_SUCCESS;
 }
 

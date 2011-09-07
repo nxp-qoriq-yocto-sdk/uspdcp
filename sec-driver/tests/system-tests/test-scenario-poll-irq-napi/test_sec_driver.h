@@ -80,7 +80,7 @@
 
 // Test PDCP control plane encapsulation with SNOW F8 ciphering
 // and SNOW F9 authentication
-#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_SNOW_F8_SNOW_F9_ENC
+//#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_SNOW_F8_SNOW_F9_ENC
 // Test PDCP control plane decapsulation with SNOW F8 ciphering
 // and SNOW F9 authentication
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_SNOW_F8_SNOW_F9_DEC
@@ -88,7 +88,7 @@
 
 // Test PDCP control plane encapsulation with AES CTR ciphering
 // and AES CMAC authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_AES_CTR_AES_CMAC_ENC
+#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_AES_CTR_AES_CMAC_ENC
 // Test PDCP control plane decapsulation with AES CTR ciphering
 // and AES CMAC authentication
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_AES_CTR_AES_CMAC_DEC
@@ -121,18 +121,17 @@
 
 // Higher limit for number of PDCP contexts
 //#define MAX_PDCP_CONTEXT_NUMBER         15
-#define MAX_PDCP_CONTEXT_NUMBER         1
+//#define MAX_PDCP_CONTEXT_NUMBER         2
 // Lower limit for number of PDCP contexts
 //#define MIN_PDCP_CONTEXT_NUMBER         5
 #define MIN_PDCP_CONTEXT_NUMBER         1
-
+#define MAX_PDCP_CONTEXT_NUMBER         3
 
 // The maximum number of packets processed per context
 // This test application will process a random number of packets per context ranging
 // from a #MIN_PACKET_NUMBER_PER_CTX to #MAX_PACKET_NUMBER_PER_CTX value.
 // Higher limit for number of packets per PDCP context
-//#define MAX_PACKET_NUMBER_PER_CTX   10
-#define MAX_PACKET_NUMBER_PER_CTX   1
+#define MAX_PACKET_NUMBER_PER_CTX   30
 // Lower limit for number of packets per PDCP context
 #define MIN_PACKET_NUMBER_PER_CTX   1
 

@@ -58,12 +58,12 @@ extern "C" {
  * Path for UIO device X is /sys/class/uio/uioX */
 #define SEC_UIO_DEVICE_SYS_ATTR_PATH    "/sys/class/uio"
 
-/** Subfolder in sysfs where mapping attributes are exported 
+/** Subfolder in sysfs where mapping attributes are exported
  * for each UIO device. Path for mapping Y for device X is:
  *      /sys/class/uio/uioX/maps/mapY */
 #define SEC_UIO_DEVICE_SYS_MAP_ATTR     "maps/map"
 
-/** Name of UIO device file prefix. Each UIO device will have a device file /dev/uioX, 
+/** Name of UIO device file prefix. Each UIO device will have a device file /dev/uioX,
  * where X is the minor device number. */
 #define SEC_UIO_DEVICE_FILE_NAME    "/dev/uio"
 
@@ -77,7 +77,7 @@ extern "C" {
  */
 #define SEC_UIO_MAX_ATTR_FILE_NAME  100
 
-/** The id for the mapping used to export SEC's registers to 
+/** The id for the mapping used to export SEC's registers to
  * user space through UIO devices. */
 #define SEC_UIO_MAP_ID              0
 
@@ -164,26 +164,26 @@ static bool uio_find_device_file(int jr_id, char *device_file, int *uio_device_i
     int ret = 0;
 
     uio_root_dir = opendir(SEC_UIO_DEVICE_SYS_ATTR_PATH);
-    SEC_ASSERT(uio_root_dir != NULL, 
-            SEC_INVALID_INPUT_PARAM, 
-            "Failed to open dir %s", 
+    SEC_ASSERT(uio_root_dir != NULL,
+            SEC_INVALID_INPUT_PARAM,
+            "Failed to open dir %s",
             SEC_UIO_DEVICE_SYS_ATTR_PATH);
 
     // Iterate through all subdirs
     while((uio_dp=readdir(uio_root_dir)) != NULL)
     {
         // This subdirectory is for an uio device if it contains substring 'uio'.
-        // If so, extract X = minor number. The subdir names are of form: 
+        // If so, extract X = minor number. The subdir names are of form:
         // uioX, where X is the minor number for the UIO char driver.
         if(file_name_match_extract(uio_dp->d_name, "uio", &uio_minor_number))
         {
             // Open file uioX/name and read first line which contains the name for the
-            // device. Based on the name check if this UIO device is UIO device for 
+            // device. Based on the name check if this UIO device is UIO device for
             // job ring with id jr_id.
             memset(uio_name,  0, sizeof(uio_name));
-            ret = file_read_first_line(SEC_UIO_DEVICE_SYS_ATTR_PATH, 
-                    uio_dp->d_name, 
-                    "name", 
+            ret = file_read_first_line(SEC_UIO_DEVICE_SYS_ATTR_PATH,
+                    uio_dp->d_name,
+                    "name",
                     uio_name);
             SEC_ASSERT(ret == 0, SEC_INVALID_INPUT_PARAM, "file_read_first_line() failed");
 
@@ -194,7 +194,7 @@ static bool uio_find_device_file(int jr_id, char *device_file, int *uio_device_i
                 if(jr_number == jr_id)
                 {
                     sprintf(device_file, "%s%d", SEC_UIO_DEVICE_FILE_NAME, uio_minor_number);
-                    SEC_INFO("Found UIO device %s for job ring id %d",
+                    SEC_INFO("Found UIO device %s for job ring id %d\n",
                             device_file,
                             jr_id);
                     device_file_found = true;
@@ -204,6 +204,8 @@ static bool uio_find_device_file(int jr_id, char *device_file, int *uio_device_i
             }
         }
     }
+
+    closedir(uio_root_dir);
     return device_file_found;
 }
 
@@ -238,7 +240,7 @@ static int file_read_first_line(char root[], char subdir[], char filename[], cha
     // read UIO device name from first line in file
     ret = read(fd, line, SEC_UIO_MAX_DEVICE_FILE_NAME_LENGTH);
     SEC_ASSERT(ret != 0, -1, "Error reading from file %s", absolute_file_name);
-    
+
     close(fd);
     return 0;
 }
@@ -279,7 +281,7 @@ static void* uio_map_registers(int uio_device_fd, int uio_device_id, int uio_map
     if (mapped_address == MAP_FAILED)
     {
         SEC_ERROR("Failed to map registers! errno = %d job ring fd  = %d, "
-                  "uio device id = %d, uio map id = %d", 
+                  "uio device id = %d, uio map id = %d",
                   errno, uio_device_fd, uio_device_id, uio_map_id);
         return NULL;
     }
@@ -297,15 +299,15 @@ int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
 {
     struct device_node *dpa_node = NULL;
     uint32_t *prop = NULL;
-#ifdef SEC_HW_VERSION_3_1
-    uint32_t channel_remap = 0;
-#endif // SEC_HW_VERSION_3_1
     uint32_t kernel_usr_channel_map = 0;
-    uint32_t usr_channel_map = 0; 
+    uint32_t usr_channel_map = 0;
     uint32_t len = 0;
     uint8_t config_jr_no = 0;
     int jr_idx = 0, jr_no = 0;
- 
+#ifdef SEC_HW_VERSION_3_1
+    uint32_t channel_remap = 0;
+    int my_map = 0;
+#endif // SEC_HW_VERSION_3_1
 
 #if SEC_NOTIFICATION_TYPE == SEC_NOTIFICATION_TYPE_POLL
     SEC_INFO("SEC driver configured with SEC_NOTIFICATION_TYPE_POLL enabled");
@@ -346,8 +348,13 @@ int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
             return SEC_INVALID_INPUT_PARAM;
         }
 
+        SEC_DEBUG("Read from DTS <fsl,channel-kernel-user-space-map> = 0x%x", *prop);
+        my_map = *prop;
+
         kernel_usr_channel_map = *prop;
-#elif defined(SEC_HW_VERSION_4_4) // SEC_HW_VERSION_3_1
+#endif // SEC_HW_VERSION_3_1
+
+#ifdef SEC_HW_VERSION_4_4
     // Get device node for SEC 4.4
 	for_each_compatible_node(dpa_node, NULL, "fsl,p4080-sec4.0")
     {
@@ -358,23 +365,28 @@ int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
             continue;
         }
 
-		for_each_compatible_node(child_node, NULL, "fsl,p4080-sec4.0-job-ring")
-		{
-			prop = of_get_property(child_node,"kernel-user-space-flag",&len);
-			if( prop == NULL )
-			{
-				SEC_ERROR("Error reading kernel-user-space-flag property from DTS!");
-				return SEC_INVALID_INPUT_PARAM;
-			}
-
-			if( (*prop) )
-			{
-			    kernel_usr_channel_map |= (*prop) << jr_idx++;
-			}
-		}
+        for_each_compatible_node(child_node, NULL, "fsl,p4080-sec4.0-job-ring")
+        {
+            prop = of_get_property(child_node,"kernel-user-space-flag",&len);
+            if( prop == NULL )
+            {
+                SEC_ERROR("Error reading kernel-user-space-flag property from DTS!");
+                return SEC_INVALID_INPUT_PARAM;
+            }
+            /* TODO: This code assumes that the JRs are added in order in DTS.
+             * The same assumption is done in kernel driver, though it's not
+             * correct
+             */
+            if( *prop == 0 )
+            {
+                kernel_usr_channel_map |= 1 << jr_idx++;
+            }
+        }
 #endif // SEC_HW_VERSION_4_4
-		// bit mask format is common b/w architectures
-		usr_channel_map = ~kernel_usr_channel_map;
+        /* Kept so that the code is similar between SEC 3.1 and
+         * SEC 4.4 architectures
+         */
+        usr_channel_map = ~kernel_usr_channel_map;
 
         // Calculate the number of available job rings for user space usage.
         config_jr_no = SEC_NUMBER_JOB_RINGS(usr_channel_map);
@@ -427,9 +439,12 @@ int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
 for_each_compatible_node calls. Till this is fixed, the break \
 will remain here.
 		break;
-#endif 
+#endif
     }
-    return SEC_SUCCESS; 
+#ifdef SEC_HW_VERSION_3_1
+    SEC_DEBUG("Read from DTS <fsl,channel-kernel-user-space-map> = 0x%x", my_map);
+#endif
+    return SEC_SUCCESS;
 }
 
 sec_return_code_t sec_config_uio_job_ring(sec_job_ring_t *job_ring)
@@ -440,7 +455,7 @@ sec_return_code_t sec_config_uio_job_ring(sec_job_ring_t *job_ring)
 
     // Find UIO device created by SEC kernel driver for this job ring.
     memset(uio_device_file_name,  0, sizeof(uio_device_file_name));
-    uio_device_found = uio_find_device_file(job_ring->jr_id, 
+    uio_device_found = uio_find_device_file(job_ring->jr_id,
             uio_device_file_name,
             &uio_device_id);
 
@@ -451,15 +466,15 @@ sec_return_code_t sec_config_uio_job_ring(sec_job_ring_t *job_ring)
 
     // Open device file
     job_ring->uio_fd = open(uio_device_file_name, O_RDWR);
-    SEC_ASSERT(job_ring->uio_fd > 0, 
-            SEC_INVALID_INPUT_PARAM, 
-            "Failed to open UIO device file for job ring %d", 
+    SEC_ASSERT(job_ring->uio_fd > 0,
+            SEC_INVALID_INPUT_PARAM,
+            "Failed to open UIO device file for job ring %d",
             job_ring->jr_id);
 
     SEC_INFO("Opened device file for job ring %d , fd = %d", job_ring->jr_id, job_ring->uio_fd);
 
     // Map register range for this job ring.
-    // On SEC 4.x each job ring has its specific registers 
+    // On SEC 4.x each job ring has its specific registers
     // in a separate 4K map-able memory area.
     // On SEC 3.1 we cannot separate register address ranges for each channel.
     // We will map only once the entire register address range for SEC device.
@@ -472,7 +487,7 @@ sec_return_code_t sec_config_uio_job_ring(sec_job_ring_t *job_ring)
                SEC_INVALID_INPUT_PARAM,
                "Failed to map SEC registers");
 
-    return SEC_SUCCESS; 
+    return SEC_SUCCESS;
 }
 
 int sec_uio_send_command(sec_job_ring_t *job_ring, int32_t uio_command)

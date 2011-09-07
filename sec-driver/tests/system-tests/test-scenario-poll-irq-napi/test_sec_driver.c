@@ -67,7 +67,7 @@ extern "C" {
 
 // The size of a PDCP input buffer.
 // Consider the size of the input and output buffers provided to SEC driver for processing identical.
-#define PDCP_BUFFER_SIZE   1000
+#define PDCP_BUFFER_SIZE   100
 
 #ifdef SEC_HW_VERSION_4_4
 #define IRQ_COALESCING_COUNT    10
@@ -77,27 +77,27 @@ extern "C" {
 #define JOB_RING_POLL_UNLIMITED -1
 #define JOB_RING_POLL_LIMIT      10
 
-// Alignment for input/output packets allocated from DMA-memory zone
+// Alignment in bytes for input/output packets allocated from DMA-memory zone
 #define BUFFER_ALIGNEMENT 32
-#define BUFFER_SIZE       128
 // Max length in bytes for a confidentiality /integrity key.
 #define MAX_KEY_LENGTH    32
 
-
+#ifdef SEC_HW_VERSION_3_1
 // Size in bytes required to be available for driver's use in input packet,
 // BEFORE PDCP header start, when using PDCP control-plane with
 // AES CMAC integrity check algorithm.
 // I.e: packet offset should be at least 8. SEC driver will use the last 8 bytes
 // before PDCP header starts, to calculate initialization data required for AES CMAC algorithm.
 #define AES_CMAC_SCTRATCHPAD_PACKET_AREA_LENGHT 8
+#endif
 
 // Offset in input and output packet, where PDCP header starts
 #define PACKET_OFFSET   3
-//#define PACKET_OFFSET   0
-
+#ifdef SEC_HW_VERSION_3_1
 // Length in bytes requried for MAC-I code generation,
 // in case of PDCP control-plane.
 #define MAC_I_LENGTH    4
+#endif
 
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
@@ -527,20 +527,24 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
            sizeof(test_data_in));
 
     (*in_packet)->length = sizeof(test_data_in) + PDCP_HEADER_LENGTH + (*in_packet)->offset;
+#ifdef SEC_HW_VERSION_3_1
 #ifdef TEST_PDCP_CONTROL_PLANE_DOUBLE_PASS_ENC
     // Need extra 4 bytes at end of input/output packet for MAC-I code, in case of PDCP control-plane packets
     (*in_packet)->length += MAC_I_LENGTH;
-#endif
+#endif // TEST_PDCP_CONTROL_PLANE_DOUBLE_PASS_ENC
+#endif // SEC_HW_VERSION_3_1
     // Need extra 4 bytes at end of input/output packet for MAC-I code, in case of PDCP control-plane packets
     // Need  extra 8 bytes at start of input packet  for Initialization Vector (IV) when testing
     // PDCP control-plane with AES CMAC algorithm, which is captured in 'offset' field.
     assert((*in_packet)->length <= PDCP_BUFFER_SIZE);
 
     (*out_packet)->length = sizeof(test_data_out) + PDCP_HEADER_LENGTH + (*out_packet)->offset;
+#ifdef SEC_HW_VERSION_3_1
 #ifdef TEST_PDCP_CONTROL_PLANE_DOUBLE_PASS_ENC
     // Need extra 4 bytes at end of input/output packet for MAC-I code, in case of PDCP control-plane packets
     (*out_packet)->length += MAC_I_LENGTH;
-#endif
+#endif // TEST_PDCP_CONTROL_PLANE_DOUBLE_PASS_ENC
+#endif // SEC_HW_VERSION_3_1
     assert((*out_packet)->length <= PDCP_BUFFER_SIZE);
 
     pdcp_context->no_of_used_buffers++;
@@ -728,7 +732,7 @@ static int delete_context(pdcp_context_t * pdcp_context, int *no_of_used_pdcp_co
 
     // Try to delete the context from SEC driver and also
     // release the UA's context
-
+    test_printf("trying to delete ctx id: %d",pdcp_context->id);
     // context is in use and it was not yet removed from SEC driver
     if (pdcp_context->usage == PDCP_CONTEXT_USED)
     {
@@ -1046,7 +1050,7 @@ static void* pdcp_thread_routine(void* config)
                    test_auth_key_len);
             pdcp_context->pdcp_ctx_cfg_data.integrity_key_len = test_auth_key_len;
         }
-
+#if 0
         if(is_last_context)
         {
             if(pdcp_context->pdcp_ctx_cfg_data.user_plane == PDCP_CONTROL_PLANE)
@@ -1058,7 +1062,7 @@ static void* pdcp_thread_routine(void* config)
                 pdcp_context->pdcp_ctx_cfg_data.integrity_key_len = 0;
             }
         }
-
+#endif
         pdcp_context->thread_id = th_config_local->tid;
 
         // create a SEC context in SEC driver
@@ -1107,6 +1111,7 @@ static void* pdcp_thread_routine(void* config)
 
         while (get_free_pdcp_buffer(pdcp_context, &in_packet, &out_packet) == 0)
         {
+#ifdef SEC_HW_VERSION_3_1
             // When testing PDCP c-plane, the last context tested MUST be
             // PDCP data plane. This will guarantee that the last c-plane packets stored
             // into driver's internal FIFO will be sent to SEC, without buffering any other
@@ -1117,7 +1122,8 @@ static void* pdcp_thread_routine(void* config)
                 in_packet->length -= MAC_I_LENGTH;
                 out_packet->length -= MAC_I_LENGTH;
             }
-#endif
+#endif // TEST_PDCP_CONTROL_PLANE_DOUBLE_PASS_ENC
+#endif // SEC_HW_VERSION_3_1
             // if SEC process packet returns that the producer JR is full, do some polling
             // on the consumer JR until the producer JR has free entries.
             do
@@ -1178,8 +1184,8 @@ static void* pdcp_thread_routine(void* config)
     {
         // poll the consumer JR
         ret = get_results(th_config_local->consumer_job_ring_id,
-        		          JOB_RING_POLL_UNLIMITED,
-        		          &packets_received);
+                          JOB_RING_POLL_UNLIMITED,
+                          &packets_received);
         assert(ret == 0);
         total_packets_received += packets_received;
 
@@ -1203,8 +1209,8 @@ static void* pdcp_thread_routine(void* config)
     while(th_config_local->should_exit == 0)
     {
         ret = get_results(th_config_local->consumer_job_ring_id,
-        		          JOB_RING_POLL_UNLIMITED,
-        		          &packets_received);
+                          JOB_RING_POLL_UNLIMITED,
+                          &packets_received);
         assert(ret == 0);
         total_packets_received += packets_received;
     }
@@ -1279,7 +1285,7 @@ static int setup_sec_environment(void)
         pdcp_ul_contexts[i].input_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT,
                                                              sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
         // validate that the address of the freshly allocated buffer falls in the second memory are.
-        pdcp_ul_contexts[i].output_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT, 
+        pdcp_ul_contexts[i].output_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT,
                                                               sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
 
         pdcp_ul_contexts[i].pdcp_ctx_cfg_data.cipher_key = dma_mem_memalign(BUFFER_ALIGNEMENT,
@@ -1349,14 +1355,14 @@ static int cleanup_sec_environment(void)
 
     for (i = 0; i < MAX_PDCP_CONTEXT_NUMBER; i++)
     {
-        dma_mem_free(pdcp_dl_contexts[i].input_buffers,  BUFFER_SIZE * MAX_PACKET_NUMBER_PER_CTX);
-        dma_mem_free(pdcp_dl_contexts[i].output_buffers,  BUFFER_SIZE * MAX_PACKET_NUMBER_PER_CTX);
+        dma_mem_free(pdcp_dl_contexts[i].input_buffers, sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
+        dma_mem_free(pdcp_dl_contexts[i].output_buffers, sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
 
         dma_mem_free(pdcp_dl_contexts[i].pdcp_ctx_cfg_data.cipher_key, MAX_KEY_LENGTH);
         dma_mem_free(pdcp_dl_contexts[i].pdcp_ctx_cfg_data.integrity_key, MAX_KEY_LENGTH);
 
-        dma_mem_free(pdcp_ul_contexts[i].input_buffers,  BUFFER_SIZE * MAX_PACKET_NUMBER_PER_CTX);
-        dma_mem_free(pdcp_ul_contexts[i].output_buffers,  BUFFER_SIZE * MAX_PACKET_NUMBER_PER_CTX);
+        dma_mem_free(pdcp_ul_contexts[i].input_buffers, sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
+        dma_mem_free(pdcp_ul_contexts[i].output_buffers, sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
 
         dma_mem_free(pdcp_ul_contexts[i].pdcp_ctx_cfg_data.cipher_key, MAX_KEY_LENGTH);
         dma_mem_free(pdcp_ul_contexts[i].pdcp_ctx_cfg_data.integrity_key, MAX_KEY_LENGTH);

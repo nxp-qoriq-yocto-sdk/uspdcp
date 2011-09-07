@@ -45,6 +45,27 @@
                               DEFINES AND MACROS
 ==============================================================================*/
 
+/** Command that is used by SEC user space driver and SEC kernel driver
+ *  to signal a request from the former to the later to disable job DONE
+ *  and error IRQs on a certain job ring.
+ *  The configuration is done at SEC Controller's level.
+ *  @note   Need to be kept in synch with #SEC_UIO_DISABLE_IRQ_CMD from
+ *          linux-2.6/drivers/crypto/talitos.c ! */
+#define SEC_UIO_DISABLE_IRQ_CMD     0
+
+/** Command that is used by SEC user space driver and SEC kernel driver
+ *  to signal a request from the former to the later to enable job DONE
+ *  and error IRQs on a certain job ring.
+ *  The configuration is done at SEC Controller's level.
+ *  @note   Need to be kept in synch with #SEC_UIO_ENABLE_IRQ_CMD from
+ *          linux-2.6/drivers/crypto/talitos.c ! */
+#define SEC_UIO_ENABLE_IRQ_CMD      1
+
+/** Command that is used by SEC user space driver and SEC kernel driver
+ *  to signal a request from the former to the later to do a SEC engine reset.
+ *  @note   Need to be kept in synch with #SEC_UIO_RESET_SEC_ENGINE_CMD from
+ *          linux-2.6/drivers/crypto/talitos.c ! */
+#define SEC_UIO_RESET_SEC_ENGINE_CMD    3
 
 /** Update circular counter when maximum value of counter is a power of 2.
  * Use bitwise operations to roll over. */
@@ -92,17 +113,15 @@ struct sec_job_t
     sec_status_t job_status;            /*< Processing status for the packet indicated by this job.
                                             Is required for indication that HFN reached threshold.
                                             TODO: remove this field when migrating on 9132!*/
-#endif
+
     volatile uint8_t is_integrity_algo; /*< Is set to value #TRUE for jobs with integrity algorithm configured.
                                             Set to #FALSE for crypto algorithm. */
-#if SEC_HW_VERSION_4_4
-    //uint32_t    *out_status;
-#endif // SEC_HW_VERSION_4_4
+#endif // SEC_HW_VERSION_3_1
 }__CACHELINE_ALIGNED;
 
 #if SEC_HW_VERSION_4_4
 struct sec_outring_entry {
-    dma_addr_t  desc;     /*< Pointer to completed descriptor */
+    dma_addr_t  desc;                   /*< Pointer to completed descriptor */
     uint32_t    status;                 /*< Status for completed descriptor */
 } PACKED;
 #endif // SEC_HW_VERSION_4_4
@@ -116,22 +135,23 @@ typedef enum sec_job_ring_state_e
 /** SEC Job Ring */
 struct sec_job_ring_t
 {
+    // TODO: Add wrapper macro to make it obvious this is the consumer index on the output ring
     volatile uint32_t cidx;                    /*< Consumer index for job ring (jobs array).
                                                    @note: cidx and pidx are accessed from different threads.
                                                    Place the cidx and pidx inside the structure so that
-                                                   they lay on different cachelines, to avoid false 
+                                                   they lay on different cachelines, to avoid false
                                                    sharing between threads when the threads run on different cores! */
     struct sec_job_t jobs[SEC_JOB_RING_SIZE];  /*< Ring of jobs. The same ring is used for
-                                                   input jobs and output jobs for SEC 3.1 because SEC engine writes
+                                                   input jobs and output jobs because SEC engine writes
                                                    back output indication in input job.
                                                    Size of array is power of 2 to allow fast update of
-                                                   producer/consumer indexes with bitwise operations.
-                                                   For SEC 4.1, it represents the input jobs */
+                                                   producer/consumer indexes with bitwise operations. */
     struct sec_descriptor_t *descriptors;      /*< Ring of descriptors sent to SEC engine for processing */
 #ifdef SEC_HW_VERSION_3_1
     struct fifo_t pdcp_c_plane_fifo;           /*< Ring of PDCP control plane packets that must be sent
                                                    a second time to SEC for processing */
 #endif
+    // TODO: Add wrapper macro to make it obvious this is the producer index on the input ring
     volatile uint32_t pidx;                    /*< Producer index for job ring (jobs array) */
 #ifdef SEC_HW_VERSION_4_4
     dma_addr_t *input_ring;                        /*< Ring of output descriptors received from SEC.
@@ -141,13 +161,14 @@ struct sec_job_ring_t
     struct sec_outring_entry *output_ring;       /*< Ring of output descriptors received from SEC.
                                                    Size of array is power of 2 to allow fast update of
                                                    producer/consumer indexes with bitwise operations. */
-    volatile uint32_t   hw_idx;
+    volatile uint32_t   hw_cidx;
+    volatile uint32_t   hw_pidx;
 #endif // SEC_HW_VERSION_4_4
     uint32_t uio_fd;                        /*< The file descriptor used for polling from user space
                                                 for interrupts notifications */
     uint32_t jr_id;                         /*< Job ring id */
 #ifdef SEC_HW_VERSION_3_1
-    uint32_t alternate_register_range;      /*< Can be #TRUE or #FALSE. Indicates if the registers for 
+    uint32_t alternate_register_range;      /*< Can be #TRUE or #FALSE. Indicates if the registers for
                                                 this job ring are mapped to an alternate 4k page.*/
 #endif // SEC_HW_VERSION_3_1
     volatile void *register_base_addr;      /*< Base address for SEC's register memory for this job ring.
@@ -211,6 +232,14 @@ void uio_reset_sec_engine(sec_job_ring_t *job_ring);
  * @param [in]  job_ring     Job ring
  */
 void uio_job_ring_enable_irqs(sec_job_ring_t *job_ring);
+
+#ifdef SEC_HW_VERSION_4_4
+/**
+ * TODO: Write something meaningful here
+ */
+void uio_job_ring_disable_irqs(sec_job_ring_t *job_ring);
+
+#endif
 /*============================================================================*/
 
 

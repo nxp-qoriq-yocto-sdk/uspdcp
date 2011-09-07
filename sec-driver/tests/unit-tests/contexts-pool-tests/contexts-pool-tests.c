@@ -85,204 +85,204 @@ void* global_dma_mem_free_original = NULL;
 
 static void test_contexts_pool_init_destroy(void)
 {
-	sec_contexts_pool_t pool;
-	int ret = 0;
+    sec_contexts_pool_t pool;
+    int ret = 0;
 
 #define NO_OF_CONTEXTS 10
 
-	ret = init_contexts_pool(&pool, &global_dma_mem_free, NO_OF_CONTEXTS, THREAD_UNSAFE_POOL);
+    ret = init_contexts_pool(&pool, NO_OF_CONTEXTS, THREAD_UNSAFE_POOL);
 
-	assert_equal_with_message(ret, 0,
-			  "ERROR on init_contexts_pool: ret = %d!", ret);
+    assert_equal_with_message(ret, 0,
+            "ERROR on init_contexts_pool: ret = %d!", ret);
 
-	destroy_contexts_pool(&pool);
+    destroy_contexts_pool(&pool);
 }
 
 static void test_contexts_pool_get_free_contexts(void)
 {
-	sec_contexts_pool_t pool;
-	int ret = 0, i = 0;
+    sec_contexts_pool_t pool;
+    int ret = 0, i = 0;
 #define NO_OF_CONTEXTS 10
-	sec_context_t* sec_ctxs[NO_OF_CONTEXTS];
+    sec_context_t* sec_ctxs[NO_OF_CONTEXTS];
 
-	ret = init_contexts_pool(&pool, &global_dma_mem_free, NO_OF_CONTEXTS, THREAD_UNSAFE_POOL);
+    ret = init_contexts_pool(&pool, NO_OF_CONTEXTS, THREAD_UNSAFE_POOL);
 
-	assert_equal_with_message(ret, 0,
-			  "ERROR on init_contexts_pool: ret = %d!", ret);
+    assert_equal_with_message(ret, 0,
+            "ERROR on init_contexts_pool: ret = %d!", ret);
 
-	// get all the contexts in the pool
-	for (i = 0; i < NO_OF_CONTEXTS; i++)
-	{
-		sec_ctxs[i] = get_free_context(&pool);
-		assert_not_equal_with_message(sec_ctxs[i], 0,
-				  "ERROR on get_free_context: no more contexts available and there should be (%d)", i);
-		assert_equal_with_message(sec_ctxs[i]->state, SEC_CONTEXT_USED,
-				  "ERROR on get_free_context: invalid state of context!");
-		assert_equal_with_message(sec_ctxs[i]->pool, &pool,
-				  "ERROR on get_free_context: invalid pool pointer in context!");
-		assert_equal_with_message(CONTEXT_GET_PACKETS_NO(sec_ctxs[i]), 0,
-				  "ERROR on get_free_context: invalid packets_no in context!");
-	}
-	// try and get another context -> we should receive none
-	assert_equal_with_message(get_free_context(&pool), 0,
-			  "ERROR on get_free_context: free contexts available and there should be node!");
+    // get all the contexts in the pool
+    for (i = 0; i < NO_OF_CONTEXTS; i++)
+    {
+        sec_ctxs[i] = get_free_context(&pool);
+        assert_not_equal_with_message(sec_ctxs[i], 0,
+                "ERROR on get_free_context: no more contexts available and there should be (%d)", i);
+        assert_equal_with_message(sec_ctxs[i]->state, SEC_CONTEXT_USED,
+                "ERROR on get_free_context: invalid state of context!");
+        assert_equal_with_message(sec_ctxs[i]->pool, &pool,
+                "ERROR on get_free_context: invalid pool pointer in context!");
+        assert_equal_with_message(CONTEXT_GET_PACKETS_NO(sec_ctxs[i]), 0,
+                "ERROR on get_free_context: invalid packets_no in context!");
+    }
+    // try and get another context -> we should receive none
+    assert_equal_with_message(get_free_context(&pool), 0,
+            "ERROR on get_free_context: free contexts available and there should be node!");
 
-	destroy_contexts_pool(&pool);
+    destroy_contexts_pool(&pool);
 }
 
 static void test_contexts_pool_free_contexts_with_no_packets_in_flight(void)
 {
-	sec_contexts_pool_t pool;
-	int ret = 0, i = 0;
+    sec_contexts_pool_t pool;
+    int ret = 0, i = 0;
 #define NO_OF_CONTEXTS 10
-	sec_context_t* sec_ctxs[NO_OF_CONTEXTS];
+    sec_context_t* sec_ctxs[NO_OF_CONTEXTS];
 
-	ret = init_contexts_pool(&pool, &global_dma_mem_free, NO_OF_CONTEXTS, THREAD_UNSAFE_POOL);
+    ret = init_contexts_pool(&pool, NO_OF_CONTEXTS, THREAD_UNSAFE_POOL);
 
-	assert_equal_with_message(ret, 0,
-			  "ERROR on init_contexts_pool: ret = %d!", ret);
+    assert_equal_with_message(ret, 0,
+            "ERROR on init_contexts_pool: ret = %d!", ret);
 
-	// get all the contexts in the pool
-	for (i = 0; i < NO_OF_CONTEXTS; i++)
-	{
-		sec_ctxs[i] = get_free_context(&pool);
-		assert_not_equal_with_message(sec_ctxs[i], 0,
-				  "ERROR on get_free_context: no more contexts available and there should be (%d)", i);
-		assert_equal_with_message(sec_ctxs[i]->state, SEC_CONTEXT_USED,
-				  "ERROR on get_free_context: invalid state of context!");
-		assert_equal_with_message(sec_ctxs[i]->pool, &pool,
-				  "ERROR on get_free_context: invalid pool pointer in context!");
-		assert_equal_with_message(CONTEXT_GET_PACKETS_NO(sec_ctxs[i]), 0,
-				  "ERROR on get_free_context: invalid packets_no in context!");
-	}
-	// try and get another context -> we should receive none
-	assert_equal_with_message(get_free_context(&pool), 0,
-			  "ERROR on get_free_context: free contexts available and there should be node!");
+    // get all the contexts in the pool
+    for (i = 0; i < NO_OF_CONTEXTS; i++)
+    {
+        sec_ctxs[i] = get_free_context(&pool);
+    assert_not_equal_with_message(sec_ctxs[i], 0,
+            "ERROR on get_free_context: no more contexts available and there should be (%d)", i);
+    assert_equal_with_message(sec_ctxs[i]->state, SEC_CONTEXT_USED,
+            "ERROR on get_free_context: invalid state of context!");
+    assert_equal_with_message(sec_ctxs[i]->pool, &pool,
+            "ERROR on get_free_context: invalid pool pointer in context!");
+    assert_equal_with_message(CONTEXT_GET_PACKETS_NO(sec_ctxs[i]), 0,
+            "ERROR on get_free_context: invalid packets_no in context!");
+    }
+    // try and get another context -> we should receive none
+    assert_equal_with_message(get_free_context(&pool), 0,
+            "ERROR on get_free_context: free contexts available and there should be node!");
 
-	// free all the contexts -> the contexts have no packets in flight
-	for (i = 0; i < NO_OF_CONTEXTS; i++)
-	{
-		ret = free_or_retire_context(&pool, sec_ctxs[i]);
-		assert_equal_with_message(ret, SEC_SUCCESS,
-				  "ERROR on free_or_retire_context: ret = (%d)", ret);
-		assert_equal_with_message(sec_ctxs[i]->state, SEC_CONTEXT_UNUSED,
-				  "ERROR on free_or_retire_context: invalid state of context!");
-		assert_equal_with_message(sec_ctxs[i]->pool, &pool,
-				  "ERROR on free_or_retire_context: invalid pool pointer in context!");
-		assert_equal_with_message(CONTEXT_GET_PACKETS_NO(sec_ctxs[i]), 0,
-				  "ERROR on free_or_retire_context: invalid packets_no in context!");
-	}
+    // free all the contexts -> the contexts have no packets in flight
+    for (i = 0; i < NO_OF_CONTEXTS; i++)
+    {
+        ret = free_or_retire_context(&pool, sec_ctxs[i]);
+        assert_equal_with_message(ret, SEC_SUCCESS,
+                "ERROR on free_or_retire_context: ret = (%d)", ret);
+        assert_equal_with_message(sec_ctxs[i]->state, SEC_CONTEXT_UNUSED,
+                "ERROR on free_or_retire_context: invalid state of context!");
+        assert_equal_with_message(sec_ctxs[i]->pool, &pool,
+                "ERROR on free_or_retire_context: invalid pool pointer in context!");
+        assert_equal_with_message(CONTEXT_GET_PACKETS_NO(sec_ctxs[i]), 0,
+                "ERROR on free_or_retire_context: invalid packets_no in context!");
+    }
 
-	// try and get one context -> it should work ok because we just freed some
-	sec_ctxs[0] = get_free_context(&pool);
-	assert_not_equal_with_message(sec_ctxs[0], 0,
-		  "ERROR on get_free_context: free contexts not available and there should be!");
+    // try and get one context -> it should work ok because we just freed some
+    sec_ctxs[0] = get_free_context(&pool);
+    assert_not_equal_with_message(sec_ctxs[0], 0,
+            "ERROR on get_free_context: free contexts not available and there should be!");
 
-	destroy_contexts_pool(&pool);
+    destroy_contexts_pool(&pool);
 }
 
 static void test_contexts_pool_free_contexts_with_packets_in_flight(void)
 {
-	sec_contexts_pool_t pool;
-	int ret = 0, i = 0;
+    sec_contexts_pool_t pool;
+    int ret = 0, i = 0;
 #define NO_OF_CONTEXTS 10
-	sec_context_t* sec_ctxs[NO_OF_CONTEXTS];
-	sec_context_t* sec_ctx = NULL;
+    sec_context_t* sec_ctxs[NO_OF_CONTEXTS];
+    sec_context_t* sec_ctx = NULL;
 
-	ret = init_contexts_pool(&pool, &global_dma_mem_free, NO_OF_CONTEXTS, THREAD_UNSAFE_POOL);
+    ret = init_contexts_pool(&pool, NO_OF_CONTEXTS, THREAD_UNSAFE_POOL);
 
-	assert_equal_with_message(ret, 0,
-			  "ERROR on init_contexts_pool: ret = %d!", ret);
+    assert_equal_with_message(ret, 0,
+            "ERROR on init_contexts_pool: ret = %d!", ret);
 
-	// get all the contexts in the pool
-	for (i = 0; i < NO_OF_CONTEXTS; i++)
-	{
-		sec_ctxs[i] = get_free_context(&pool);
-		assert_not_equal_with_message(sec_ctxs[i], 0,
-				  "ERROR on get_free_context: no more contexts available and there should be (%d)", i);
-		assert_equal_with_message(sec_ctxs[i]->state, SEC_CONTEXT_USED,
-				  "ERROR on get_free_context: invalid state of context!");
-		assert_equal_with_message(sec_ctxs[i]->pool, &pool,
-				  "ERROR on get_free_context: invalid pool pointer in context!");
-		assert_equal_with_message(CONTEXT_GET_PACKETS_NO(sec_ctxs[i]), 0,
-				  "ERROR on get_free_context: invalid packets_no in context!");
-	}
-	// try and get another context -> we should receive none
-	assert_equal_with_message(get_free_context(&pool), 0,
-			  "ERROR on get_free_context: free contexts available and there should be node!");
+    // get all the contexts in the pool
+    for (i = 0; i < NO_OF_CONTEXTS; i++)
+    {
+        sec_ctxs[i] = get_free_context(&pool);
+        assert_not_equal_with_message(sec_ctxs[i], 0,
+                "ERROR on get_free_context: no more contexts available and there should be (%d)", i);
+        assert_equal_with_message(sec_ctxs[i]->state, SEC_CONTEXT_USED,
+                "ERROR on get_free_context: invalid state of context!");
+        assert_equal_with_message(sec_ctxs[i]->pool, &pool,
+                "ERROR on get_free_context: invalid pool pointer in context!");
+        assert_equal_with_message(CONTEXT_GET_PACKETS_NO(sec_ctxs[i]), 0,
+                "ERROR on get_free_context: invalid packets_no in context!");
+    }
+    // try and get another context -> we should receive none
+    assert_equal_with_message(get_free_context(&pool), 0,
+            "ERROR on get_free_context: free contexts available and there should be node!");
 
-	// add packets in flight for all the contexts with an even number
-	for (i = 0; i < NO_OF_CONTEXTS; i+=2)
-	{
+    // add packets in flight for all the contexts with an even number
+    for (i = 0; i < NO_OF_CONTEXTS; i+=2)
+    {
         sec_ctxs[i]->pi = i+1;
-	}
+    }
 
-	// free all the contexts -> half of them have packets in flight and the other half no
-	// packets in flight
-	for (i = 0; i < NO_OF_CONTEXTS; i++)
-	{
-		ret = free_or_retire_context(&pool, sec_ctxs[i]);
+    // free all the contexts -> half of them have packets in flight and the other half no
+    // packets in flight
+    for (i = 0; i < NO_OF_CONTEXTS; i++)
+    {
+        ret = free_or_retire_context(&pool, sec_ctxs[i]);
         if(i == 0)
         {
-			assert_equal_with_message(ret, SEC_LAST_PACKET_IN_FLIGHT,
-					"ERROR on free_or_retire_context: should have returned SEC_LAST_PACKET_IN_FLIGHT ret = (%d)", ret);
-			assert_equal_with_message(sec_ctxs[i]->state, SEC_CONTEXT_RETIRING,
-					"ERROR on free_or_retire_context: invalid state of context!");
-			assert_equal_with_message(CONTEXT_GET_PACKETS_NO(sec_ctxs[i]), i+1,
-					"ERROR on free_or_retire_context: invalid packets_no in context (%d)!", 
+            assert_equal_with_message(ret, SEC_LAST_PACKET_IN_FLIGHT,
+                    "ERROR on free_or_retire_context: should have returned SEC_LAST_PACKET_IN_FLIGHT ret = (%d)", ret);
+            assert_equal_with_message(sec_ctxs[i]->state, SEC_CONTEXT_RETIRING,
+                    "ERROR on free_or_retire_context: invalid state of context!");
+            assert_equal_with_message(CONTEXT_GET_PACKETS_NO(sec_ctxs[i]), i+1,
+                    "ERROR on free_or_retire_context: invalid packets_no in context (%d)!",
                     CONTEXT_GET_PACKETS_NO(sec_ctxs[i]));
         }
-		else if (i%2 == 0)
-		{
-			assert_equal_with_message(ret, SEC_PACKETS_IN_FLIGHT,
-					"ERROR on free_or_retire_context: should have returned SEC_PACKETS_IN_FLIGHT ret = (%d)", ret);
-			assert_equal_with_message(sec_ctxs[i]->state, SEC_CONTEXT_RETIRING,
-					"ERROR on free_or_retire_context: invalid state of context!");
-			assert_equal_with_message(CONTEXT_GET_PACKETS_NO(sec_ctxs[i]), i+1,
-					"ERROR on free_or_retire_context: invalid packets_no in context (%d)!", 
+        else if (i%2 == 0)
+        {
+            assert_equal_with_message(ret, SEC_PACKETS_IN_FLIGHT,
+                    "ERROR on free_or_retire_context: should have returned SEC_PACKETS_IN_FLIGHT ret = (%d)", ret);
+            assert_equal_with_message(sec_ctxs[i]->state, SEC_CONTEXT_RETIRING,
+                    "ERROR on free_or_retire_context: invalid state of context!");
+            assert_equal_with_message(CONTEXT_GET_PACKETS_NO(sec_ctxs[i]), i+1,
+                    "ERROR on free_or_retire_context: invalid packets_no in context (%d)!",
                     CONTEXT_GET_PACKETS_NO(sec_ctxs[i]));
-		}
-		else
-		{
-			assert_equal_with_message(ret, SEC_SUCCESS,
-					"ERROR on free_or_retire_context: should have returned SEC_SUCCESS ret = (%d)", ret);
-			assert_equal_with_message(sec_ctxs[i]->state, SEC_CONTEXT_UNUSED,
-					"ERROR on free_or_retire_context: invalid state of context!");
-			assert_equal_with_message(CONTEXT_GET_PACKETS_NO(sec_ctxs[i]), 0,
-					"ERROR on free_or_retire_context: invalid packets_no in context (%d)!", 
+        }
+        else
+        {
+            assert_equal_with_message(ret, SEC_SUCCESS,
+                    "ERROR on free_or_retire_context: should have returned SEC_SUCCESS ret = (%d)", ret);
+            assert_equal_with_message(sec_ctxs[i]->state, SEC_CONTEXT_UNUSED,
+                    "ERROR on free_or_retire_context: invalid state of context!");
+            assert_equal_with_message(CONTEXT_GET_PACKETS_NO(sec_ctxs[i]), 0,
+                    "ERROR on free_or_retire_context: invalid packets_no in context (%d)!",
                     CONTEXT_GET_PACKETS_NO(sec_ctxs[i]));
-		}
+        }
 
-		assert_equal_with_message(sec_ctxs[i]->pool, &pool,
-				  "ERROR on free_or_retire_context: invalid pool pointer in context!");
+        assert_equal_with_message(sec_ctxs[i]->pool, &pool,
+                    "ERROR on free_or_retire_context: invalid pool pointer in context!");
 
-	}
+    }
 
-	// now remove the packets in flight for all the contexts with an even number
-	for (i = 0; i < NO_OF_CONTEXTS; i+=2)
-	{
+    // now remove the packets in flight for all the contexts with an even number
+    for (i = 0; i < NO_OF_CONTEXTS; i+=2)
+    {
         sec_ctxs[i]->ci = sec_ctxs[i]->pi;
-	}
+    }
 
-	// the contexts should be freed at the next call of get_free_context() or free_or_retire_context()
-	// try and get one context -> it should work ok because we just freed some
-	sec_ctx = get_free_context(&pool);
-	assert_not_equal_with_message(sec_ctx, 0,
-		  "ERROR on get_free_context: free contexts not available and there should be!");
+    // the contexts should be freed at the next call of get_free_context() or free_or_retire_context()
+    // try and get one context -> it should work ok because we just freed some
+    sec_ctx = get_free_context(&pool);
+    assert_not_equal_with_message(sec_ctx, 0,
+            "ERROR on get_free_context: free contexts not available and there should be!");
 
-	ret = free_or_retire_context(&pool, sec_ctx);
-	assert_equal_with_message(ret, SEC_SUCCESS,
-			  "ERROR on free_or_retire_context: should have returned SEC_SUCCESS ret = (%d)", ret);
+    ret = free_or_retire_context(&pool, sec_ctx);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+            "ERROR on free_or_retire_context: should have returned SEC_SUCCESS ret = (%d)", ret);
 
-	// now check that all the contexts are unused
-	for (i = 0; i < NO_OF_CONTEXTS; i++)
-	{
-		assert_equal_with_message(sec_ctxs[i]->state, SEC_CONTEXT_UNUSED,
-						"ERROR on free_or_retire_context: invalid state of context %d: %d!", i, 
-                        sec_ctxs[i]->state);
-	}
+    // now check that all the contexts are unused
+    for (i = 0; i < NO_OF_CONTEXTS; i++)
+    {
+        assert_equal_with_message(sec_ctxs[i]->state, SEC_CONTEXT_UNUSED,
+                "ERROR on free_or_retire_context: invalid state of context %d: %d!", i,
+                sec_ctxs[i]->state);
+    }
 
-	destroy_contexts_pool(&pool);
+    destroy_contexts_pool(&pool);
 }
 
 static TestSuite * contexts_pool_tests()
@@ -320,7 +320,7 @@ int main(int argc, char *argv[])
      * it is recommended to run_single_test() for each test case.
      */
     //run_test_suite(host_api_tests(), create_text_reporter());
-    
+
     // Allocate 'DMA-capable' memory for a context pool per each job ring,
     // plus one more for a global pool.
 

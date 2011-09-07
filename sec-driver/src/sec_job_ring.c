@@ -48,27 +48,6 @@ extern "C" {
 /*==================================================================================================
                                      LOCAL DEFINES
 ==================================================================================================*/
-/** Command that is used by SEC user space driver and SEC kernel driver
- *  to signal a request from the former to the later to disable job DONE
- *  and error IRQs on a certain job ring.
- *  The configuration is done at SEC Controller's level.
- *  @note   Need to be kept in synch with #SEC_UIO_DISABLE_IRQ_CMD from
- *          linux-2.6/drivers/crypto/talitos.c ! */
-#define SEC_UIO_DISABLE_IRQ_CMD     0
-
-/** Command that is used by SEC user space driver and SEC kernel driver
- *  to signal a request from the former to the later to enable job DONE
- *  and error IRQs on a certain job ring.
- *  The configuration is done at SEC Controller's level.
- *  @note   Need to be kept in synch with #SEC_UIO_ENABLE_IRQ_CMD from
- *          linux-2.6/drivers/crypto/talitos.c ! */
-#define SEC_UIO_ENABLE_IRQ_CMD      1
-
-/** Command that is used by SEC user space driver and SEC kernel driver
- *  to signal a request from the former to the later to do a SEC engine reset.
- *  @note   Need to be kept in synch with #SEC_UIO_RESET_SEC_ENGINE_CMD from
- *          linux-2.6/drivers/crypto/talitos.c ! */
-#define SEC_UIO_RESET_SEC_ENGINE_CMD    3
 
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
@@ -113,6 +92,36 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
 
     SEC_INFO("Job ring %d UIO fd = %d", job_ring->jr_id, job_ring->uio_fd);
 
+#ifdef SEC_HW_VERSION_4_4
+    // Memory area must start from cacheline-aligned boundary.
+    // Each job entry is itself aligned to cacheline.
+    SEC_ASSERT ((dma_addr_t)*dma_mem % CACHE_LINE_SIZE == 0,
+            SEC_INVALID_INPUT_PARAM,
+            "Current memory position is not cacheline aligned."
+            "Job ring id = %d", job_ring->jr_id);
+
+    // Allocate mem for input and output ring
+    ASSERT(job_ring->input_ring == NULL);
+
+    // Allocate memory for input ring
+    /** TODO: It would make sense to have this cacheline-aligned
+     *
+     */
+    job_ring->input_ring = *dma_mem;
+    memset(job_ring->input_ring, 0, SEC_DMA_MEM_INPUT_RING_SIZE);
+    *dma_mem += SEC_DMA_MEM_INPUT_RING_SIZE;
+
+    // Allocate memory for output ring
+    ASSERT(job_ring->output_ring == NULL);
+
+    /** TODO: It would make sense to have this cacheline-aligned
+     *
+     */
+    job_ring->output_ring = *dma_mem;
+    memset(job_ring->output_ring, 0, SEC_DMA_MEM_OUTPUT_RING_SIZE);
+    *dma_mem += SEC_DMA_MEM_OUTPUT_RING_SIZE;
+
+#endif
     // Reset job ring in SEC hw and configure job ring registers
     ret = hw_reset_job_ring(job_ring);
     SEC_ASSERT(ret == 0, ret, "Failed to reset hardware job ring with id %d", job_ring->jr_id);
@@ -133,60 +142,23 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
     uio_job_ring_enable_irqs(job_ring);
 #endif
 
+#ifdef SEC_HW_VERSION_3_1
     // Memory area must start from cacheline-aligned boundary.
     // Each job entry is itself aligned to cacheline.
-    SEC_ASSERT ((dma_addr_t)*dma_mem % CACHE_LINE_SIZE == 0, 
+    SEC_ASSERT ((dma_addr_t)*dma_mem % CACHE_LINE_SIZE == 0,
             SEC_INVALID_INPUT_PARAM,
             "Current memory position is not cacheline aligned."
             "Job ring id = %d", job_ring->jr_id);
-
+#endif
     // Allocate job items from the DMA-capable memory area provided by UA
     ASSERT(job_ring->descriptors == NULL);
 
     job_ring->descriptors = *dma_mem;
-
-    memset(job_ring->descriptors, 0, SEC_JOB_RING_SIZE * sizeof(struct sec_descriptor_t));
-    *dma_mem += SEC_JOB_RING_SIZE * sizeof(struct sec_descriptor_t);
-
-#ifdef SEC_HW_VERSION_4_4
-    // Got to allocate some mem for input & output ring
-    ASSERT(job_ring->input_ring == NULL);
-
-    job_ring->input_ring = *dma_mem;
-    memset(job_ring->input_ring, 0, SEC_JOB_RING_SIZE * sizeof(dma_addr_t));
-    *dma_mem += SEC_JOB_RING_SIZE * sizeof(dma_addr_t);
-
-    ASSERT(job_ring->output_ring == NULL);
-
-    job_ring->output_ring = *dma_mem;
-    memset(job_ring->output_ring, 0, SEC_JOB_RING_SIZE * sizeof(struct sec_outring_entry));
-    *dma_mem += SEC_JOB_RING_SIZE * sizeof(struct sec_outring_entry);
-
-    // Got to write the actual jobring size to the hw registers
-    hw_set_input_ring_size(job_ring,SEC_JOB_RING_SIZE - 1);
-    hw_set_output_ring_size(job_ring,SEC_JOB_RING_SIZE - 1);
-
-    // Now write the ptrs to the input and output ring
-    hw_set_input_ring_start_addr(job_ring, sec_vtop(job_ring->input_ring));
-    hw_set_output_ring_start_addr(job_ring, sec_vtop(job_ring->output_ring));
-
-    SEC_DEBUG(" Set input ring base address to: Virtual: 0x%x, Physical: 0x%x, Read from HW: 0x%08x",
-            (dma_addr_t)job_ring->input_ring,
-            sec_vtop(job_ring->input_ring),
-            hw_get_inp_queue_base(job_ring));
-
-    hw_set_output_ring_start_addr(job_ring, sec_vtop(job_ring->output_ring));
-    SEC_DEBUG(" Set output ring base address to: Virtual: 0x%x, Physical: 0x%x, Read from HW: 0x%08x",
-            (dma_addr_t)job_ring->output_ring,
-            sec_vtop(job_ring->output_ring),
-            hw_get_out_queue_base(job_ring));
-
-    // Set HW index to 0
-    job_ring->hw_idx = 0;
-#endif
+    memset(job_ring->descriptors, 0, SEC_JOB_RING_SIZE * SEC_CRYPTO_DESCRIPTOR_SIZE);
+    *dma_mem += SEC_JOB_RING_SIZE * SEC_CRYPTO_DESCRIPTOR_SIZE;
 
     // TODO: check that we do not use more DMA mem than actually allocated/reserved for us by User App.
-    // Options: 
+    // Options:
     // - check if used more than #SEC_DMA_MEMORY_SIZE and/or
     // - implement wrapper functions that access dma_mem and maintain/increment size of dma mem used -> central point of
     // accessing dma mem -> central point of check for boundary issues!
@@ -195,19 +167,14 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
     {
         // Remember virtual address for a job descriptor
         job_ring->jobs[i].descr = &job_ring->descriptors[i];
-        
-        // Obtain and store the physical address for a job descriptor        
-        job_ring->jobs[i].descr_phys_addr = sec_vtop(&job_ring->descriptors[i]);
 
+        // Obtain and store the physical address for a job descriptor
+        job_ring->jobs[i].descr_phys_addr = sec_vtop(&job_ring->descriptors[i]);
+#ifdef SEC_HW_VERSION_3_1
         SEC_ASSERT ((dma_addr_t)*dma_mem % CACHE_LINE_SIZE == 0,
                 SEC_INVALID_INPUT_PARAM,
                 "Current jobs[i]->mac_i [i=%d] position is not cacheline aligned.", i);
-#if SEC_HW_VERSION_4_4
-        // Set pointers to descriptors in input ring
-        //job_ring->input_ring[i] = (dma_addr_t)&job_ring->descriptors[i];
-        // Need to store pointer to output ring status
-        //job_ring->jobs[i].out_status = &job_ring->output_ring[i].status;
-#else
+
         // Allocate DMA-capable memory where SEC 3.1 will generate MAC-I for
         // SNOW F9 and AES CMAC integrity check algorithms (PDCP control-plane).
         job_ring->jobs[i].mac_i = *dma_mem;
@@ -246,7 +213,11 @@ int shutdown_job_ring(sec_job_ring_t * job_ring)
     int i;
     for(i = 0; i < FIFO_CAPACITY; i++)
     {
-        free(job_ring->pdcp_c_plane_fifo.items[i]);
+        if(job_ring->pdcp_c_plane_fifo.items[i] != NULL)
+        {
+            free(job_ring->pdcp_c_plane_fifo.items[i]);
+            job_ring->pdcp_c_plane_fifo.items[i] = NULL;
+        }
     }
 #endif
     return SEC_SUCCESS;
@@ -280,6 +251,25 @@ void uio_job_ring_enable_irqs(sec_job_ring_t *job_ring)
                         "error IRQs through UIO control. Job ring id %d. Reset SEC driver!",
                         job_ring->jr_id);
 }
+
+#ifdef SEC_HW_VERSION_4_4
+void uio_job_ring_disable_irqs(sec_job_ring_t *job_ring)
+{
+    int ret;
+
+    // Use UIO file descriptor we have for this job ring.
+    // Writing a command code to this file descriptor will make the
+    // SEC kernel driver disable IRQs for this job ring,
+    // at Controller level.
+    ret = sec_uio_send_command(job_ring, SEC_UIO_DISABLE_IRQ_CMD);
+    SEC_DEBUG("Jr[%p]. Disabled IRQs on jr id %d\n", job_ring, job_ring->jr_id);
+    SEC_ASSERT_RET_VOID(ret == sizeof(int),
+                        "Failed to request SEC engine to disable job done and "
+                        "IRQs through UIO control. Job ring id %d. Reset SEC driver!",
+                        job_ring->jr_id);
+}
+
+#endif
 /*================================================================================================*/
 
 #ifdef __cplusplus

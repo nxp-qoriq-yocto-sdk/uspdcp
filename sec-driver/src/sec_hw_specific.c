@@ -40,6 +40,9 @@ extern "C" {
 #include "sec_hw_specific.h"
 #include "sec_job_ring.h"
 #include "sec_utils.h"
+#ifdef SEC_HW_VERSION_4_4
+#include "external_mem_management.h"
+#endif
 
 /*==================================================================================================
                                      LOCAL DEFINES
@@ -105,7 +108,7 @@ static inline void hw_handle_deco_err(union hw_error_code error_code)
             SEC_DEBUG(" Warning: Descriptor completed normally, but 3GPP HFN matches or exceeds the Threshold ");
             break;
         default:
-            SEC_DEBUG("Not implemented");
+            SEC_DEBUG("Error 0x%04x not implemented",error_code.error_desc.deco_src.desc_err);
             break;
     }
 }
@@ -187,17 +190,17 @@ static void hw_handle_eu_error(sec_job_ring_t *job_ring)
 }
 #else
 
-static void hw_handle_jmp_halt_user_err(union hw_error_code error_code)
+static inline void hw_handle_jmp_halt_user_err(union hw_error_code error_code)
 {
     SEC_DEBUG(" Not implemented");
 }
 
-static void hw_handle_ccb_err(union hw_error_code hw_error_code)
+static inline void hw_handle_ccb_err(union hw_error_code hw_error_code)
 {
     SEC_DEBUG(" Not implemented");
 }
 
-static void hw_handle_jr_err(union hw_error_code hw_error_code)
+static inline void hw_handle_jr_err(union hw_error_code hw_error_code)
 {
     SEC_DEBUG(" Not implemented");
 }
@@ -223,14 +226,15 @@ int hw_reset_job_ring(sec_job_ring_t *job_ring)
 
 #if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
     // Set 36-bit addressing if enabled
-    reg_val |= SEC_REG_VAL_CCCR_LO_EAE; 
+    reg_val |= SEC_REG_VAL_CCCR_LO_EAE;
 #endif
 
 #if SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE_POLL
-    // Enable interrupt generation at job ring level 
+    // Enable interrupt generation at job ring level
     // ONLY if NOT in polling mode.
     reg_val |= SEC_REG_VAL_CCCR_LO_CDIE;
 #endif
+
     // Enable integrity check if configured in descriptors.
     // Required for PDCP control plane processing.
     reg_val |= SEC_REG_VAL_CCCR_LO_IWSE;
@@ -240,7 +244,7 @@ int hw_reset_job_ring(sec_job_ring_t *job_ring)
     // Disable Integrity check error interrupt in STEU, the execution
     // unit that performs SNOW F9.
     // The driver will poll for descriptor status and read ICV failure if any.
-    reg_val = SEC_REG_STEU_IMR_DISABLE_ICE; 
+    reg_val = SEC_REG_STEU_IMR_DISABLE_ICE;
     setbits32(job_ring->register_base_addr + SEC_REG_STEU_IMR_LO, reg_val);
 
     // Disable Integrity check error interrupt in AESU, the execution
@@ -249,15 +253,62 @@ int hw_reset_job_ring(sec_job_ring_t *job_ring)
     reg_val = SEC_REG_AESU_IMR_DISABLE_ICE;
     setbits32(job_ring->register_base_addr + SEC_REG_AESU_IMR_LO, reg_val);
 #else // SEC_HW_VERSION_3_1
-#warning "I'm sure something has to be done here..."
 #if SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE_POLL
-    // Enable interrupt generation at job ring level
-    // ONLY if NOT in polling mode.
-    reg_val |= JR_REG_JRCR_IMSK;
-#endif
+#if (SEC_INT_COALESCING_ENABLE == ON)
 
-    setbits32(JR_REG(JRCR,job_ring), reg_val);
-#endif
+    /* Get the current value of the register */
+    reg_val = GET_JR_REG_LO(JRCR);
+
+    // Enable coalescing
+    reg_val |= JRCR_LO_ICEN_EN;
+
+    // Set descriptor count coalescing
+    reg_val |= (SEC_INTERRUPT_COALESCING_DESCRIPTOR_COUNT_THRESH << JRCR_LO_ICDT_SHIFT);
+
+    // Set coalescing timer value
+    reg_val |=  (SEC_INTERRUPT_COALESCING_TIMER_THRESH << JRCR_LO_ICTT_SHIFT);
+
+    // Write register value
+    SET_JR_REG_LO(JRCR,reg_val)
+#endif // SEC_INT_COALESCING_ENABLE == ON
+#endif // SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE_POLL
+
+
+    /* In order to have the HW JR in a workable state
+     * after a reset, I need to re-write the input
+     * queue size, input start address, output queue
+     * size and output start address
+     */
+
+    // Write the JR input queue size to the HW register
+    hw_set_input_ring_size(job_ring,SEC_JOB_RING_SIZE);
+
+    // Write the JR output queue size to the HW register
+    hw_set_output_ring_size(job_ring,SEC_JOB_RING_SIZE);
+
+    // Write the JR input queue start address
+    hw_set_input_ring_start_addr(job_ring, sec_vtop(job_ring->input_ring));
+
+    // Write the JR output queue start address
+    hw_set_output_ring_start_addr(job_ring, sec_vtop(job_ring->output_ring));
+
+    SEC_DEBUG(" Set input ring base address to: Virtual: 0x%x, Physical: 0x%x, Read from HW: 0x%08x",
+            (dma_addr_t)job_ring->input_ring,
+            sec_vtop(job_ring->input_ring),
+            hw_get_inp_queue_base(job_ring));
+
+    hw_set_output_ring_start_addr(job_ring, sec_vtop(job_ring->output_ring));
+    SEC_DEBUG(" Set output ring base address to: Virtual: 0x%x, Physical: 0x%x, Read from HW: 0x%08x",
+            (dma_addr_t)job_ring->output_ring,
+            sec_vtop(job_ring->output_ring),
+            hw_get_out_queue_base(job_ring));
+
+    // Set HW read index to 0
+    job_ring->hw_cidx = 0;
+
+    // Set HW write index to 0
+    job_ring->hw_pidx = 0;
+#endif // SEC_HW_VERSION_3_1
     return 0;
 }
 
@@ -268,7 +319,13 @@ int hw_shutdown_job_ring(sec_job_ring_t *job_ring)
     int usleep_interval = 10;
     int i = 0;
 
-    ASSERT(job_ring->register_base_addr != NULL);
+    if(job_ring->register_base_addr == NULL)
+    {
+        SEC_ERROR("Jr[%p] Jr id %d has register base address NULL."
+                  "Probably driver not properly initialized",
+                  job_ring, job_ring->jr_id);
+        return 0;
+    }
 
     // Reset job ring by setting the Reset(R) bit.
     // Values set for job ring registers will NOT be kept.
@@ -298,18 +355,25 @@ int hw_shutdown_job_ring(sec_job_ring_t *job_ring)
 {
     unsigned int timeout = SEC_TIMEOUT;
     uint32_t    tmp;
-    int usleep_interval = 10;
+    int usleep_interval = 100;
 
-    ASSERT(job_ring->register_base_addr != NULL);
+    if(job_ring->register_base_addr == NULL)
+    {
+        SEC_ERROR("Jr[%p] Jr id %d has register base address NULL."
+                  "Probably driver not properly initialized",
+                  job_ring, job_ring->jr_id);
+            return 0;
+    }
 
     SEC_INFO("Resetting Job ring %d", job_ring->jr_id);
 
+#if SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE
     /*
      * mask interrupts since we are going to poll
      * for reset completion status
      */
-    setbits32(JR_REG_LO(JRCFG,job_ring), JR_REG_JRCFG_LO_IMSK);
-
+    uio_job_ring_disable_irqs(job_ring);
+#endif
     /* initiate flush (required prior to reset) */
     SET_JR_REG(JRCR,job_ring, JR_REG_JRCR_VAL_RESET);
 
@@ -320,14 +384,15 @@ int hw_shutdown_job_ring(sec_job_ring_t *job_ring)
     }while ( ((tmp  & JRINT_ERR_HALT_MASK) == JRINT_ERR_HALT_INPROGRESS) && \
                --timeout);
 
-
-    tmp = GET_JR_REG(JRINT,job_ring);
     if( (tmp & JRINT_ERR_HALT_MASK) != JRINT_ERR_HALT_COMPLETE || \
-         timeout == 0)
+            timeout == 0)
      {
-         SEC_ERROR("Failed to flush hw job ring with id  %d\n", job_ring->jr_id);
-         SEC_DEBUG("%x",tmp);
-         return -1;
+        SEC_ERROR("Failed to flush hw job ring with id %d", job_ring->jr_id);
+#if SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE_POLL
+        /* unmask interrupts */
+        uio_job_ring_enable_irqs(job_ring);
+#endif
+        return -1;
      }
 
     /* Initiate reset */
@@ -337,17 +402,23 @@ int hw_shutdown_job_ring(sec_job_ring_t *job_ring)
      do
      {
         tmp = GET_JR_REG(JRCR,job_ring);
+        usleep(usleep_interval);
      }while ( (tmp & JR_REG_JRCR_VAL_RESET) && --timeout);
 
      if( timeout ==  0)
      {
          SEC_ERROR("Failed to reset hw job ring with id  %d\n", job_ring->jr_id);
+#if SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE_POLL
+     /* unmask interrupts */
+         uio_job_ring_enable_irqs(job_ring);
+#endif
          return -1;
      }
 
+#if SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE_POLL
      /* unmask interrupts */
-     clrbits32(JR_REG(JRCFG,job_ring), JR_REG_JRCFG_LO_IMSK);
-
+     uio_job_ring_enable_irqs(job_ring);
+#endif
     return 0;
 
 }
@@ -385,10 +456,50 @@ int hw_reset_and_continue_job_ring(sec_job_ring_t *job_ring)
     return 0;
 }
 #else
-#warning "Write something here"
 int hw_reset_and_continue_job_ring(sec_job_ring_t *job_ring)
 {
-    SEC_DEBUG("Function does nothing");
+    unsigned int timeout = SEC_TIMEOUT;
+    int usleep_interval = 10;
+    uint32_t tmp = 0;
+
+    ASSERT(job_ring->register_base_addr != NULL);
+
+#if SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE_POLL
+    /*
+     * mask interrupts since we are going to poll
+     * for reset completion status
+     */
+    uio_job_ring_disable_irqs(job_ring);
+#endif
+    /* initiate flush (required prior to reset) */
+    SET_JR_REG(JRCR,job_ring, JR_REG_JRCR_VAL_RESET);
+
+    do
+    {
+        tmp = GET_JR_REG(JRINT,job_ring);
+        usleep(usleep_interval);
+    }while ( ((tmp  & JRINT_ERR_HALT_MASK) == JRINT_ERR_HALT_INPROGRESS) && \
+               --timeout);
+
+    if( (tmp & JRINT_ERR_HALT_MASK) != JRINT_ERR_HALT_COMPLETE || \
+            timeout == 0)
+     {
+        SEC_ERROR("Failed to flush hw job ring with id %d", job_ring->jr_id);
+#if SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE_POLL
+    /* unmask interrupts */
+    uio_job_ring_enable_irqs(job_ring);
+#endif
+        return -1;
+     }
+
+    /* Resume processing of jobs on this JR*/
+    SET_JR_REG(JRINT,job_ring,JRINT_ERR_HALT_COMPLETE);
+
+#if SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE_POLL
+    /* unmask interrupts */
+    uio_job_ring_enable_irqs(job_ring);
+#endif
+
     return 0;
 }
 #endif
@@ -483,7 +594,7 @@ void hw_handle_job_ring_error(sec_job_ring_t *job_ring,
         case SEC_HW_ERR_SSRC_NO_SRC:
             ASSERT(hw_err_code.error_desc.no_status_src.res == 0);
             *reset_required = FALSE;
-            SEC_DEBUG("No Status Source ");
+            SEC_ERROR("No Status Source ");
             break;
         case SEC_HW_ERR_SSRC_CCB_ERR:
             SEC_DEBUG("CCB Status Source");
@@ -491,31 +602,105 @@ void hw_handle_job_ring_error(sec_job_ring_t *job_ring,
             hw_handle_ccb_err(hw_err_code);
             break;
         case SEC_HW_ERR_SSRC_JMP_HALT_U:
-            SEC_DEBUG("Jump Halt User Status Source");
+            SEC_ERROR("Jump Halt User Status Source");
             *reset_required = FALSE;
             hw_handle_jmp_halt_user_err(hw_err_code);
             break;
         case SEC_HW_ERR_SSRC_DECO:
-            SEC_DEBUG("DECO Status Source");
+            SEC_ERROR("DECO Status Source");
             *reset_required = FALSE;
             hw_handle_deco_err(hw_err_code);
             break;
         case SEC_HW_ERR_SSRC_JR:
-            SEC_DEBUG("Job Ring Status Source");
-            *reset_required = TRUE;
+            SEC_ERROR("Job Ring Status Source");
+            *reset_required = FALSE;
             hw_handle_jr_err(hw_err_code);
             break;
         case SEC_HW_ERR_SSRC_JMP_HALT_COND:
             *reset_required = FALSE;
-            SEC_DEBUG("Jump Halt Condition Codes");
+            SEC_ERROR("Jump Halt Condition Codes");
             hw_handle_jmp_halt_cond_err(hw_err_code);
             break;
         default:
             ASSERT(0);
-            SEC_DEBUG("Unknown SSRC");
+            SEC_ERROR("Unknown SSRC");
             break;
     }
 }
+
+int hw_job_ring_error(sec_job_ring_t* job_ring)
+{
+    uint32_t    jrint_error_code;
+
+    ASSERT(job_ring != NULL);
+
+    if( JR_REG_JRINT_JRE_EXTRACT(GET_JR_REG(JRINT,job_ring)) == 0)
+    {
+        return 0;
+    }
+
+    jrint_error_code = JR_REG_JRINT_ERR_TYPE_EXTRACT(GET_JR_REG(JRINT,job_ring));
+    switch( jrint_error_code )
+    {
+        case JRINT_ERR_WRITE_STATUS:
+            SEC_ERROR("Error writing status to Output Ring "
+                    "on job ring %d [%p], index %d",
+                    job_ring->jr_id,
+                    job_ring,
+                    (GET_JR_REG(JRINT,job_ring) & 0x3FFF0000) >> 16);
+            break;
+        case JRINT_ERR_BAD_INPUT_BASE:
+            SEC_ERROR("Bad Input Ring Base (%p) (not on a 4-byte boundary) "
+                    "on job ring %d [%p]",
+                    job_ring->input_ring,
+                    job_ring->jr_id,
+                    job_ring);
+            break;
+        case JRINT_ERR_BAD_OUTPUT_BASE:
+            SEC_ERROR("Bad Output Ring Base (%p) (not on a 4-byte boundary) "
+                    "on job ring %d [%p]",
+                      job_ring->output_ring,
+                      job_ring->jr_id,
+                      job_ring);
+            break;
+        case JRINT_ERR_WRITE_2_IRBA:
+            SEC_ERROR("Invalid write to Input Ring Base Address Register "
+                    "on job ring %d [%p]",
+                    job_ring->jr_id,
+                    job_ring);
+            break;
+        case JRINT_ERR_WRITE_2_ORBA:
+            SEC_ERROR("Invalid write to Output Ring Base Address Register "
+                    "on job ring %d [%p]",
+                    job_ring->jr_id,
+                    job_ring);
+            break;
+        case JRINT_ERR_RES_B4_HALT:
+            SEC_ERROR("Job Ring %d [%p] released before Job Ring is halted",
+                    job_ring->jr_id,
+                    job_ring);
+            break;
+        case JRINT_ERR_REM_TOO_MANY:
+            SEC_ERROR("Removed too many jobs from job ring %d [%p]",
+                    job_ring->jr_id,
+                    job_ring);
+            break;
+        case JRINT_ERR_ADD_TOO_MANY:
+            SEC_ERROR("Added too many jobs on job ring %d [%p]",
+                    job_ring->jr_id,
+                    job_ring);
+            break;
+        default:
+            SEC_ERROR(" Unknown SEC JR Error :%d", jrint_error_code);
+            ASSERT(0);
+            break;
+    }
+    /* Acknowledge the error by writing one to JRE bit */
+    setbits32(JR_REG(JRINT,job_ring),JRINT_JRE);
+
+    return jrint_error_code;
+}
+
 #endif
 /*================================================================================================*/
 

@@ -9,6 +9,10 @@ extern "C"{
 /* *INDENT-ON* */
 #endif
 
+/**
+    @addtogroup SecUserSpaceDriverExternalMemoryManagement
+    @{
+ */
 /*==================================================================================================
                                          INCLUDE FILES
 ==================================================================================================*/
@@ -20,25 +24,25 @@ extern "C"{
                                        DEFINES AND MACROS
 ==================================================================================================*/
 /** @brief      Translates the virtual address to physical address.
+ * @note \todo replace with external memory management mechanism !!!!!
  *
- * @param [in] address  The virtual address which has to be mapped.
+ * @param [in] virt_address     The virtual address which has to be mapped.
  *
  * @retval      Physical address which the passed virtual address maps to
  *              A value of -1 is returned if the passed virtual address
  *              doesn't map to any physical address.
  */
-// TODO: replace with external memory management mechanism !!!!!
 #define sec_vtop(virt_address) dma_mem_vtop(virt_address)
 
 
 /** @brief      Translates the physical address to virtual address.
+ * @note \todo replace with external memory management mechanism !!!!!
  *
- * @param [in]  address The physical address which has to be mapped.
+ * @param [in]  phys_address    The physical address which has to be mapped.
  *
  * @retval      Virtual address to which the passed physical address maps onto.
  *              NULL is returned if the passed physical address doesn't map to any virtual address.
  */
-// TODO: replace with external memory management mechanism !!!!!
 #define sec_ptov(phys_address) dma_mem_ptov(phys_address)
 
 /*==================================================================================================
@@ -65,6 +69,9 @@ extern "C"{
 
 /*================================================================================================*/
 
+/**
+    @} // end SecUserSpaceDriverExternalMemoryManagement
+ */
 #ifdef __cplusplus
 /* *INDENT-OFF* */
 }

@@ -40,6 +40,56 @@ extern "C"{
 /* *INDENT-ON* */
 #endif
 
+
+/**
+    @defgroup SecUserSpaceDriverAPI SEC user space driver API
+    Contains all the information that defines SEC user space driver API.
+
+    @defgroup SecUserSpaceDriverConfigurationSection SEC Driver Configuration
+    @ingroup SecUserSpaceDriverAPI
+    This sub-moudule documents how SEC user space driver can be configured.
+
+    @defgroup SecUserSpaceDriverFunctions SEC Driver Programming
+    @ingroup SecUserSpaceDriverAPI
+    This sub-moudule documents how SEC user space driver can be programmed.
+
+    @defgroup SecUserSpaceDriverExternal SEC Driver External Dependencies
+    @ingroup SecUserSpaceDriverAPI
+    This sub-moudule documents SEC user space driver external dependencies.
+
+    @defgroup SecUserSpaceDriverExternalMemoryManagement SEC Driver External Memory Management Mechanism
+    @ingroup SecUserSpaceDriverExternal
+    This sub-moudule documents SEC user space driver external memory management mechanism.
+
+    @defgroup SecUserSpaceDriverManagementFunctions SEC Driver Management Functions
+    @ingroup SecUserSpaceDriverFunctions
+    This sub-moudule documents SEC user space driver management functions.
+
+    @defgroup SecUserSpaceDriverContextFunctions SEC Driver Context Handling Functions
+    @ingroup SecUserSpaceDriverFunctions
+    This sub-moudule documents SEC user space driver functions that allow handling of cryptographic contexts.
+    Currently only PDCP contexts are supported.
+
+    @defgroup SecUserSpaceDriverPacketFunctions SEC Driver Packet Processing Functions
+    @ingroup SecUserSpaceDriverFunctions
+    This sub-moudule documents SEC user space driver functions that allow packet processing operations.
+
+    @defgroup SecUserSpaceDriverErrorFunctions SEC Driver Error Handling Functions
+    @ingroup SecUserSpaceDriverFunctions
+    This sub-moudule documents SEC user space driver error handling functions.
+ */
+
+ /** @mainpage SEC User Space Driver API Main Page
+     This is a generated Doxygen documentation that describes SEC user space driver API.
+     <br><br>See @ref SecUserSpaceDriverAPI "SEC user space driver API"
+  */
+
+
+/**
+    @addtogroup SecUserSpaceDriverConfigurationSection
+    @{
+ */
+
 /*==================================================================================================
                                          INCLUDE FILES
 ==================================================================================================*/
@@ -64,14 +114,16 @@ extern "C"{
 /*       Helper defines                */
 /***************************************/
 
+/** Define used for setting a flag on */
 #define  ON  1
+/** Define used for setting a flag off */
 #define  OFF 0
 
 /** Maximum length for #SEC_UIO_DEVICE_NAME. */
 #define SEC_UIO_MAX_DEVICE_NAME_LENGTH  30
 
 
-/** SEC is configured to start work in polling mode, 
+/** SEC is configured to start work in polling mode,
  *  when configured for NAPI notification style. */
 #define SEC_STARTUP_POLLING_MODE     0
 /** SEC is configured to start work in interrupt mode,
@@ -87,7 +139,7 @@ extern "C"{
 #define SEC_DRIVER_LOG_DEBUG    2
 
 /** SEC driver will use NAPI model to receive notifications
- * for processed packets from SEC engine hardware: 
+ * for processed packets from SEC engine hardware:
  * - IRQ for low traffic
  * - polling for high traffic. */
 #define SEC_NOTIFICATION_TYPE_NAPI  0
@@ -162,16 +214,39 @@ extern "C"{
 #define SEC_CRYPTO_DESCRIPTOR_SIZE  256
 
 /** Size of job descriptor submitted to SEC device for each packet to be processed.
- *  Contains 3 DMA address pointers: to shared descriptor, to input buffer and to output buffer.
- *  The job descriptor contains other SEC specific commands as well. */
-// TODO: keep count of cacheline alignment, size may be bigger
-#define SEC_JOB_DESCRIPTOR_SIZE     sizeof(dma_addr_t) * 3 + 20
+ *  Job descriptor contains 3 DMA address pointers:
+ *      - to shared descriptor, to input buffer and to output buffer.
+ *  The job descriptor contains other SEC specific commands as well:
+ *      - HEADER command, SEQ IN PTR command SEQ OUT PTR command and opaque data,
+ *        each measuring 4 bytes.
+ *  Job descriptor size, depending on physical address representation:
+ *      - 32 bit - size is 28 bytes - cacheline-aligned size is 64 bytes
+ *      - 36 bit - size is 40 bytes - cacheline-aligned size is 64 bytes
+ *  @note: Job descriptor must be cacheline-aligned to ensure efficient memory access.
+ *  @note: If other format is used for job descriptor, then the size must be revised.
+ */
+#define SEC_JOB_DESCRIPTOR_SIZE     64
+
+/** Size of one entry in the input ring of a job ring.
+ *  Input ring contains pointers to job descriptors.
+ *  The memory used for an input ring and output ring must be physically contiguous.
+ */
+#define SEC_JOB_INPUT_RING_ENTRY_SIZE  sizeof(dma_addr_t)
+
+/** Size of one entry in the output ring of a job ring.
+ *  Output ring entry is a pointer to a job descriptor followed by a 4 byte status word.
+ *  The memory used for an input ring and output ring must be physically contiguous.
+ *  @note If desired to use also the optional SEQ OUT indication in output ring entries,
+ *  then 4 more bytes must be added to the size.
+*/
+#define SEC_JOB_OUTPUT_RING_ENTRY_SIZE  SEC_DMA_MEM_INPUT_RING_SIZE + 4
 
 /** DMA memory required for an input ring of a job ring. */
-#define SEC_DMA_MEM_INPUT_RING_SIZE     (SEC_JOB_DESCRIPTOR_SIZE) * (SEC_JOB_RING_SIZE)
-/** DMA memory required for an output ring of a job ring.  
+#define SEC_DMA_MEM_INPUT_RING_SIZE     (SEC_JOB_DESCRIPTOR_SIZE + SEC_JOB_INPUT_RING_ENTRY_SIZE) * (SEC_JOB_RING_SIZE)
+
+/** DMA memory required for an output ring of a job ring.
  *  Required extra 4 byte for status word per each entry. */
-#define SEC_DMA_MEM_OUTPUT_RING_SIZE    (SEC_JOB_DESCRIPTOR_SIZE + 4) * (SEC_JOB_RING_SIZE)
+#define SEC_DMA_MEM_OUTPUT_RING_SIZE    (SEC_JOB_DESCRIPTOR_SIZE + SEC_JOB_OUTPUT_RING_ENTRY_SIZE) * (SEC_JOB_RING_SIZE)
 /** DMA memory required for a job ring, including both input and output rings. */
 #define SEC_DMA_MEM_JOB_RING_SIZE       (SEC_DMA_MEM_INPUT_RING_SIZE) + (SEC_DMA_MEM_OUTPUT_RING_SIZE)
 
@@ -187,13 +262,17 @@ extern "C"{
  */
 #define SEC_CRYPTO_DESCRIPTOR_SIZE  0
 /** Size of cryptographic context that is used directly in communicating with SEC device.
- *  SEC device works only with physical addresses. This is the maximum size for a SEC
- *  descriptor on SEC 3.1 device, 8 double words. */
-// TODO: keep count of cacheline alignment, size may be bigger
-#define SEC_JOB_DESCRIPTOR_SIZE     64
+ *  SEC device works only with physical addresses.
+ *  SEC 3.1 has a fixed format for a descriptor consisting of 8 double words.
+ *  However, some other internal data is used for a job descriptor, for which
+ *  SEC requires physical address:
+ *  - Initialization Vector (IV):  48 bytes required size -- 64 bytes cacheline-aligned size
+ *  - MAC-I code: 8 bytes required size -- 32 bytes cacheline-aligned size
+ */
+#define SEC_JOB_DESCRIPTOR_SIZE     (64 + 64 + 32)
 /** DMA memory required for a channel (similar with job ring in SEC 4.4). */
 #define SEC_DMA_MEM_INPUT_RING_SIZE     (SEC_JOB_DESCRIPTOR_SIZE) * (SEC_JOB_RING_SIZE)
-/** DMA memory required for a channel (similar with job ring in SEC 4.4). 
+/** DMA memory required for a channel (similar with job ring in SEC 4.4).
  * On SEC 3.1 there is not output ring, instead SEC directly updates jobs from channel (input ring) */
 #define SEC_DMA_MEM_JOB_RING_SIZE       (SEC_DMA_MEM_INPUT_RING_SIZE)
 
@@ -203,8 +282,8 @@ extern "C"{
 
 /** When calling sec_init() UA will provide an area of virtual memory
  *  of size #SEC_DMA_MEMORY_SIZE to be  used internally by the driver
- *  to allocate data (like SEC descriptors) that needs to be passed to 
- *  SEC device in physical addressing and later on retrieved from SEC device. 
+ *  to allocate data (like SEC descriptors) that needs to be passed to
+ *  SEC device in physical addressing and later on retrieved from SEC device.
  *  At initialization the UA provides specialized ptov/vtop functions/macros to
  *  translate addresses allocated from this memory area. */
 #define SEC_DMA_MEMORY_SIZE     (SEC_CRYPTO_DESCRIPTOR_SIZE) * (SEC_MAX_PDCP_CONTEXTS)  + \
@@ -263,8 +342,8 @@ extern "C"{
 /** Configure the size of the JOB RING.
  * For SEC 4.4 the maximum size of the RING is hardware limited to 1024.
  * However the number of packets in flight in a time interval of 1ms can be calculated
- * from the traffic rate (Mbps) and packet size. 
- * Here it was considered a packet size of 40 bytes. 
+ * from the traffic rate (Mbps) and packet size.
+ * Here it was considered a packet size of 40 bytes.
  *
  * @note Round up to nearest power of 2 for optimized update
  * of producer/consumer indexes of each job ring
@@ -283,7 +362,7 @@ extern "C"{
  *  on SEC 4.4) is hardware fixed to 24. */
 #define SEC_JOB_RING_HW_SIZE  24
 /** The size of the job ring rounded up to nearest power of 2.
- *  This is an optimization for updating producer/consumer indexes 
+ *  This is an optimization for updating producer/consumer indexes
  *  of a job ring with bitwise operations. */
 #define SEC_JOB_RING_SIZE  32
 #endif
@@ -313,7 +392,9 @@ extern "C"{
 /***************************************************/
 
 #ifdef SEC_HW_VERSION_4_4
+#if SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE_POLL
 
+#define SEC_INT_COALESCING_ENABLE   ON
 /** Interrupt Coalescing Descriptor Count Threshold.
  * While interrupt coalescing is enabled (ICEN=1), this value determines
  * how many Descriptors are completed before raising an interrupt.
@@ -335,6 +416,7 @@ extern "C"{
  * A value of 0 results in behavior identical to that when interrupt
  * coalescing is disabled.*/
 #define SEC_INTERRUPT_COALESCING_TIMER_THRESH  100
+#endif // SEC_NOTIFICATION_TYPE_POLL
 #endif
 
 /*==================================================================================================
@@ -348,6 +430,10 @@ extern "C"{
 /*================================================================================================*/
 
 /*================================================================================================*/
+
+/**
+    @}  //end SecUserSpaceDriverConfigurationSection
+ */
 
 #ifdef __cplusplus
 /* *INDENT-OFF* */

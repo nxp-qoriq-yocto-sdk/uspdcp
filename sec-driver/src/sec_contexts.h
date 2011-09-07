@@ -71,9 +71,10 @@ extern "C"{
 /** Validation bit pattern. A valid sec_context_t item would contain
  * this pattern at predefined position/s in the item itself. */
 #define CONTEXT_VALIDATION_PATTERN  0xF0A955CD
-
+#ifdef SEC_HW_VERSION_3_3
  /** Length of MAC-I code, as required by SEC 3.1. */
 #define SEC_3_1_MAC_I_REQUIRED_LEN  8
+#endif
 /*==================================================================================================
                                              ENUMS
 ==================================================================================================*/
@@ -81,7 +82,7 @@ extern "C"{
 /*==================================================================================================
                                  STRUCTURES AND OTHER TYPEDEFS
 ==================================================================================================*/
-/** Function type used to update a SEC descriptor according to 
+/** Function type used to update a SEC descriptor according to
  * the processing operations that must be done on a packet. */
 typedef int (*sec_update_descriptor)(sec_job_t *job, sec_descriptor_t *descriptor);
 
@@ -104,7 +105,10 @@ typedef struct sec_contexts_pool_s
     list_t in_use_list;
 
     /* Total number of contexts available in all three lists. */
-    uint32_t no_of_contexts;
+    uint16_t no_of_contexts;
+    /* Flag indicating if this pool was initialized. Can be #TRUE or #FALSE. */
+    uint16_t is_initialized;
+    /* SEC contexts in this pool */
     struct sec_context_t *sec_contexts;
 
 }sec_contexts_pool_t;
@@ -127,7 +131,7 @@ struct sec_context_t
      * To optimize this, the node is placed right at the beginning of the sec_context_t
      * structure thus having the same address with the context itself. So no need for
      * subtraction.
-     * @note: The macro #GET_CONTEXT_FROM_LIST_NODE is implemented with this optimization!!!! 
+     * @note: The macro #GET_CONTEXT_FROM_LIST_NODE is implemented with this optimization!!!!
      */
     list_node_t node;
     /** Producer index for packets submited on this context */
@@ -159,8 +163,10 @@ struct sec_context_t
     /** Crypto info received from UA.
      * TODO: replace with union when other protocols besides PDCP will be supported!*/
     const sec_pdcp_context_info_t *pdcp_crypto_info;
+#ifdef SEC_HW_VERSION_3_3
     /** Cryptographic information that defines this SEC context. */
     sec_crypto_pdb_t crypto_desc_pdb;
+#endif
     /** Function used to update a crypto descriptor for a packet
      * belonging to this context. Does not apply to authentication descriptor! */
     sec_update_descriptor update_crypto_descriptor;
@@ -179,7 +185,6 @@ struct sec_context_t
 #ifdef SEC_HW_VERSION_4_4
     /** Shared descriptor used for this context */
     struct sec_pdcp_sd_t  *sh_desc;
-    sec_update_descriptor update_descriptor;
 #endif
     /** Validation pattern at end of structure. */
     uint32_t end_pattern;
@@ -203,14 +208,11 @@ struct sec_context_t
  *  A thread safe pool will use thread safe lists for storing the contexts.
  *
  * @param [in] pool                Pointer to a sec context pool structure.
- * @param [in,out] dma_mem         Pointer to a DMA-capable memory zone, to be used 
- *                                 for allocating SEC crypto info.
  * @param [in] number_of_contexts  The number of contexts to allocated for this pool.
  * @param [in] thread_safe         Configure the thread safeness.
  *                                 Valid values: #THREAD_SAFE_POOL, #THREAD_UNSAFE_POOL
  */
 sec_return_code_t init_contexts_pool(sec_contexts_pool_t *pool,
-                                     void **dma_mem,
                                      uint32_t number_of_contexts,
                                      uint8_t thread_safe);
 

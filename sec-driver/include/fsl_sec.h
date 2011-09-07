@@ -39,6 +39,10 @@
 extern "C"{
 /* *INDENT-ON* */
 #endif
+/**
+    @addtogroup SecUserSpaceDriverFunctions
+    @{
+ */
 
 /*==================================================================================================
                                          INCLUDE FILES
@@ -73,93 +77,92 @@ extern "C"{
 /** Return codes for SEC user space driver APIs */
 typedef enum sec_return_code_e
 {
-    SEC_SUCCESS = 0,                 /*< Operation executed successfully.*/
-    SEC_INVALID_INPUT_PARAM,         /*< API received an invalid input parameter. */
-    SEC_CONTEXT_MARKED_FOR_DELETION, /*< The SEC context is scheduled for deletion and no more packets
-                                         are allowed to be processed for the respective context. */
-    SEC_OUT_OF_MEMORY,               /*< Memory allocation failed. */
-    SEC_PACKETS_IN_FLIGHT,           /*< API function indicates there are packets in flight
-                                         for SEC to process that belong to a certain PDCP context.
-                                         Can be returned by sec_delete_pdcp_context().*/
-    SEC_LAST_PACKET_IN_FLIGHT,       /*< API function indicates there is one last packet in flight
-                                         for SEC to process that belongs to a certain PDCP context.
-                                         When processed, the last packet in flight willl be notified to
-                                         User Application with a status of #SEC_STATUS_SUCCESS or
-                                         #SEC_STATUS_LAST_OVERDUE.
-                                         Can be returned by sec_delete_pdcp_context().*/
-    SEC_PROCESSING_ERROR,            /*< Indicates a SEC processing error occurred on a Job Ring which requires a 
-                                         SEC user space driver shutdown. Can be returned from sec_poll() or sec_poll_job_ring().
-                                         Call sec_get_last_error() to obtain specific error code, as reported by SEC device.
-                                         Then the only other API that can be called after this error is sec_release(). */
-    SEC_PACKET_PROCESSING_ERROR,     /*< Indicates a SEC packet processing error occurred on a Job Ring.
-                                         Can be returned from sec_poll() or sec_poll_job_ring().
-                                         Call sec_get_last_error() to obtain specific error code, as reported by SEC device.
-                                         The driver was able to reset job ring and job ring can be used like in a normal case. */
-    SEC_JR_RESET_FAILED,             /*< Job Ring reset failed. */
-    SEC_JR_IS_FULL,                  /*< Job Ring is full. There is no more room in the JR for new packets.
-                                         This can happen if the packet RX rate is higher than SEC's capacity. */
-    SEC_DRIVER_RELEASE_IN_PROGRESS,  /*< SEC driver shutdown is in progress and no more context
-                                         creation/deletion, packets processing or polling is allowed.*/
-    SEC_DRIVER_ALREADY_INITALIZED,   /*< SEC driver is already initialized. */
-    SEC_DRIVER_NOT_INITALIZED,       /*< SEC driver is NOT initialized. */
-    SEC_JOB_RING_RESET_IN_PROGRESS,  /*< Job ring is resetting due to a per-packet SEC processing error #SEC_PACKET_PROCESSING_ERROR.
-                                         Reset is finished when sec_poll() or sec_poll_job_ring() return.
-                                         Then the job ring can be used again. */
-    SEC_DRIVER_NO_FREE_CONTEXTS,     /*< There are no more free contexts. Considering increasing the
-                                         maximum number of contexts: #SEC_MAX_PDCP_CONTEXTS.*/
+    SEC_SUCCESS = 0,                 /**< Operation executed successfully.*/
+    SEC_INVALID_INPUT_PARAM,         /**< API received an invalid input parameter. */
+    SEC_CONTEXT_MARKED_FOR_DELETION, /**< The SEC context is scheduled for deletion and no more packets
+                                          are allowed to be processed for the respective context. */
+    SEC_OUT_OF_MEMORY,               /**< Memory allocation failed. */
+    SEC_PACKETS_IN_FLIGHT,           /**< API function indicates there are packets in flight
+                                          for SEC to process that belong to a certain PDCP context.
+                                          Can be returned by sec_delete_pdcp_context().*/
+    SEC_LAST_PACKET_IN_FLIGHT,       /**< API function indicates there is one last packet in flight
+                                          for SEC to process that belongs to a certain PDCP context.
+                                          When processed, the last packet in flight willl be notified to
+                                          User Application with a status of ::SEC_STATUS_SUCCESS or
+                                          ::SEC_STATUS_LAST_OVERDUE.
+                                          Can be returned by sec_delete_pdcp_context().*/
+    SEC_PROCESSING_ERROR,            /**< Indicates a SEC processing error occurred on a Job Ring which requires a
+                                          SEC user space driver shutdown. Can be returned from sec_poll() or sec_poll_job_ring().
+                                          Call sec_get_last_error() to obtain specific error code, as reported by SEC device.
+                                          Then the only other API that can be called after this error is sec_release(). */
+    SEC_PACKET_PROCESSING_ERROR,     /**< Indicates a SEC packet processing error occurred on a Job Ring.
+                                          Can be returned from sec_poll() or sec_poll_job_ring().
+                                          Call sec_get_last_error() to obtain specific error code, as reported by SEC device.
+                                          The driver was able to reset job ring and job ring can be used like in a normal case. */
+    SEC_JR_IS_FULL,                  /**< Job Ring is full. There is no more room in the JR for new packets.
+                                          This can happen if the packet RX rate is higher than SEC's capacity. */
+    SEC_DRIVER_RELEASE_IN_PROGRESS,  /**< SEC driver shutdown is in progress and no more context
+                                          creation/deletion, packets processing or polling is allowed.*/
+    SEC_DRIVER_ALREADY_INITIALIZED,  /**< SEC driver is already initialized. */
+    SEC_DRIVER_NOT_INITIALIZED,      /**< SEC driver is NOT initialized. */
+    SEC_JOB_RING_RESET_IN_PROGRESS,  /**< Job ring is resetting due to a per-packet SEC processing error ::SEC_PACKET_PROCESSING_ERROR.
+                                          Reset is finished when sec_poll() or sec_poll_job_ring() return.
+                                          Then the job ring can be used again. */
+    SEC_DRIVER_NO_FREE_CONTEXTS,     /**< There are no more free contexts. Considering increasing the
+                                          maximum number of contexts: #SEC_MAX_PDCP_CONTEXTS.*/
     /* END OF VALID VALUES */
 
-    SEC_RETURN_CODE_MAX_VALUE,       /*< Invalid value for return code. It is used to mark the end of the return code values.
-                                         @note ALL new return code values MUST be added before #SEC_RETURN_CODE_MAX_VALUE! */
+    SEC_RETURN_CODE_MAX_VALUE,       /**< Invalid value for return code. It is used to mark the end of the return code values.
+                                          @note ALL new return code values MUST be added before ::SEC_RETURN_CODE_MAX_VALUE! */
 }sec_return_code_t;
 
-/** Status codes indicating SEC processing result for each packet, 
+/** Status codes indicating SEC processing result for each packet,
  *  when SEC user space driver invokes User Application provided callback.
- *  TODO: Detail SEC specific error codes per source? DECO/Job ring/CCB ?
  */
 typedef enum sec_status_e
 {
-    SEC_STATUS_SUCCESS = 0,             /*< SEC processed packet without error.*/
-    SEC_STATUS_ERROR,                   /*< SEC packet processing returned with error. */
-    SEC_STATUS_OVERDUE,                 /*< Indicates a packet processed by SEC for a PDCP context that was requested
-                                        to be removed by the User Application.*/
-    SEC_STATUS_LAST_OVERDUE,            /*< Indicates the last packet processed by SEC for a PDCP context that was requested
-                                            to be removed by the User Application. After the last overdue packet is notified 
-                                            to UA, it is safe for UA to reuse PDCP context related data. */
+    SEC_STATUS_SUCCESS = 0,             /**< SEC processed packet without error.*/
+    SEC_STATUS_ERROR,                   /**< SEC packet processing returned with error. */
+    SEC_STATUS_OVERDUE,                 /**< Indicates a packet processed by SEC for a PDCP context that was requested
+                                             to be removed by the User Application.*/
+    SEC_STATUS_LAST_OVERDUE,            /**< Indicates the last packet processed by SEC for a PDCP context that was requested
+                                             to be removed by the User Application. After the last overdue packet is notified
+                                             to UA, it is safe for UA to reuse PDCP context related data. */
 
-    SEC_STATUS_HFN_THRESHOLD_REACHED,   /*< Indicates HFN reached the threshold configured for the SEC context. Keys must be
-                                            renegotiated at earliest convenience. */
-    SEC_STATUS_MAC_I_CHECK_FAILED,      /*< Integrity check failed for this packet. */
+    SEC_STATUS_HFN_THRESHOLD_REACHED,   /**< Indicates HFN reached the threshold configured for the SEC context. Keys must be
+                                             renegotiated at earliest convenience. */
+    SEC_STATUS_MAC_I_CHECK_FAILED,      /**< Integrity check failed for this packet. */
 
     /* END OF VALID VALUES */
 
-    SEC_STATUS_MAX_VALUE,               /*< Invalid value for status. It is used to mark the end of the status values.
-                                            @note ALL new status values MUST be added before #SEC_STATUS_MAX_VALUE! */
+    SEC_STATUS_MAX_VALUE,               /**< Invalid value for status. It is used to mark the end of the status values.
+                                             @note ALL new status values MUST be added before ::SEC_STATUS_MAX_VALUE! */
 }sec_status_t;
 
-/** Return codes for User Application registered callback sec_out_cbk. 
+/** Return codes for User Application registered callback sec_out_cbk.
  */
 typedef enum sec_ua_return_e
 {
-    SEC_RETURN_SUCCESS = 0,     /*< User Application processed response notification with success. */
-    SEC_RETURN_STOP,            /*< User Application wants to return from the polling API without
-                                    processing any other SEC responses. */
+    SEC_RETURN_SUCCESS = 0,     /**< User Application processed response notification with success. */
+    SEC_RETURN_STOP,            /**< User Application wants to return from the polling API without
+                                     processing any other SEC responses. */
 }sec_ua_return_t;
 
 
+/** Possible types for a packet format */
 typedef enum packet_type_e
 {
-    SEC_CONTIGUOUS_BUFFER = 0,
-    SEC_SCATTER_GATHER_BUFFER
+    SEC_CONTIGUOUS_BUFFER = 0,  /**< Packet is a contiguous buffer */
+    SEC_SCATTER_GATHER_BUFFER   /**< Packet is a scatter/gather buffer */
 }packet_type_t;
 
 /** Cryptographic/Integrity check algorithms */
 typedef enum sec_crypto_alg_e
 {
-    SEC_ALG_SNOW = 0,       /*< Use SNOW algorithm for confidentiality(EEA1) or integrity protection(EIA1) */
-    SEC_ALG_AES,            /*< Use AES algorithm for confidentiality(EEA2) or integrity protection(EIA2)) */
-    SEC_ALG_NULL,           /*< Use EEA0 for confidentiality or EIA0 for integrity protection
-                                (no confidentiality and no integrity).*/
+    SEC_ALG_SNOW = 0,       /**< Use SNOW algorithm for confidentiality(EEA1) or integrity protection(EIA1) */
+    SEC_ALG_AES,            /**< Use AES algorithm for confidentiality(EEA2) or integrity protection(EIA2)) */
+    SEC_ALG_NULL,           /**< Use EEA0 for confidentiality or EIA0 for integrity protection
+                                 (no confidentiality and no integrity).*/
 
 }sec_crypto_alg_t;
 /*==================================================================================================
@@ -198,28 +201,35 @@ typedef const void* ua_context_handle_t;
 /** Structure used to describe an input or output packet accessed by SEC. */
 typedef struct sec_packet_s
 {
-    uint8_t         *address;       /*< The virtual address of the buffer. */
-    uint32_t        offset;         /*< Offset within packet from where SEC will access (read or write) data. */
-    uint32_t        length;         /*< Packet length. */
-    packet_type_t   scatter_gather; /*< A value of #SEC_SCATTER_GATHER_BUFFER indicates the packet is
-                                        passed as a scatter/gather table.
-                                        A value of #SEC_CONTIGUOUS_BUFFER means the packet is contiguous
-                                        in memory and is accessible at the given address.
-                                        TODO: export format for link table.
-                                        TODO: how is offset interpreted when packet is s/g ? */
+    uint8_t         *address;       /**< The virtual address of the buffer. */
+    uint32_t        offset;         /**< Offset within packet from where SEC will access (read or write) data. */
+    uint32_t        length;         /**< Packet length. */
+    packet_type_t   scatter_gather; /**< A value of #SEC_SCATTER_GATHER_BUFFER indicates the packet is
+                                         passed as a scatter/gather table.
+                                         A value of #SEC_CONTIGUOUS_BUFFER means the packet is contiguous
+                                         in memory and is accessible at the given address.
+                                         @todo export format for link table.*/
 }sec_packet_t;
 
 
 /** Contains Job Ring descriptor info returned to the caller when sec_init() is invoked. */
 typedef struct sec_job_ring_descriptor_s
 {
-    sec_job_ring_handle_t job_ring_handle;     /*< The job ring handle is provided by the library for UA usage.
-                                                   The handle is opaque from UA point of view.
-                                                   The handle can be used by UA to poll for events per JR. */
-    int job_ring_irq_fd;                       /*< File descriptor that can be used by UA with epoll() to wait for
-                                                   interrupts generated by SEC for this Job Ring. */
+    sec_job_ring_handle_t job_ring_handle;     /**< The job ring handle is provided by the library for UA usage.
+                                                    The handle is opaque from UA point of view.
+                                                    The handle can be used by UA to poll for events per JR. */
+    int job_ring_irq_fd;                       /**< File descriptor that can be used by UA with epoll() to wait for
+                                                    interrupts generated by SEC for this Job Ring. */
 }sec_job_ring_descriptor_t;
 
+/**
+    @}  //end SecUserSpaceDriverFunctions
+ */
+
+/**
+    @addtogroup SecUserSpaceDriverPacketFunctions
+    @{
+ */
 
 /** @brief Function called by SEC user space driver to notify every processed packet.
  *
@@ -234,12 +244,12 @@ typedef struct sec_job_ring_descriptor_s
  * @param [in] status             Status word indicating processing result for this packet.
  *                                See ::sec_status_t type for possible values.
  * @param [in] error_info         Detailed error code, as reported by SEC device. Is set to value 0 for success processing.
- *                                In case of per packet error (when status is #SEC_STATUS_ERROR),
+ *                                In case of per packet error (when status is ::SEC_STATUS_ERROR),
  *                                this field contains the status word as generated by SEC device.
  *
  * @retval Returns values from ::sec_ua_return_t enum.
- * @retval #SEC_RETURN_SUCCESS          for successful execution
- * @retval #SEC_RETURN_STOP             The User Application must return this code when it desires to stop the polling process.
+ * @retval ::SEC_RETURN_SUCCESS          for successful execution
+ * @retval ::SEC_RETURN_STOP             The User Application must return this code when it desires to stop the polling process.
  */
 typedef int (*sec_out_cbk)(const sec_packet_t  *in_packet,
                            const sec_packet_t  *out_packet,
@@ -247,69 +257,81 @@ typedef int (*sec_out_cbk)(const sec_packet_t  *in_packet,
                            sec_status_t        status,
                            uint32_t            error_info);
 
+/**
+    @} // end SecUserSpaceDriverPacketFunctions
+ */
+
+/**
+    @addtogroup SecUserSpaceDriverFunctions
+    @{
+ */
+
 
 /** PDCP context structure provided by User Application when a PDCP context is created.
  *  User Application fills this structure with data that is used by SEC user space driver
  *  to create a SEC descriptor. This descriptor is used by SEC to process all packets
  *  belonging to this PDCP context. */
-typedef struct sec_pdcp_context_info_s 
+typedef struct sec_pdcp_context_info_s
 {
-    uint8_t     sn_size;                /*< Sequence number can be represented on 5, 7 or 12 bits.
-                                            Select one from: #SEC_PDCP_SN_SIZE_5, #SEC_PDCP_SN_SIZE_7, #SEC_PDCP_SN_SIZE_12.
-                                            The value #SEC_PDCP_SN_SIZE_5 is valid only for control plane contexts! */
-    uint8_t     bearer:5;               /*< Radio bearer id. */
-    uint8_t     user_plane:1;           /*< Control plane versus Data plane indication.
-                                            Possible values: #PDCP_DATA_PLANE, #PDCP_CONTROL_PLANE. */
-    uint8_t     packet_direction:1;     /*< Direction can be uplink(#PDCP_UPLINK) or downlink(#PDCP_DOWNLINK). */
-    uint8_t     protocol_direction:1;   /*< Can be encapsulation(#PDCP_ENCAPSULATION) or decapsulation(#PDCP_DECAPSULATION)*/
-    uint8_t     cipher_algorithm;       /*< Cryptographic algorithm used: SNOW(F8)/AES(CTR).
-                                            Can have values from ::sec_crypto_alg_t enum. */
-    uint8_t     integrity_algorithm;    /*< Integrity algorithm used: SNOW(F9)/AES(CMAC).
-                                            Can have values from ::sec_crypto_alg_t enum. */
-    uint32_t    hfn;                    /*< HFN for this radio bearer. Represents the most significant bits from sequence number. */
-    uint32_t    hfn_threshold;          /*< HFN threshold for this radio bearer. If HFN matches or exceeds threshold,
-                                            sec_out_cbk will  be called with status #SEC_STATUS_HFN_THRESHOLD_REACHED. */
-    // TODO: eliminate a memcpy in driver if crypto/auth keys are provided by UA as DMA-capable memory!
-    uint8_t    *cipher_key;             /*< Ciphering key. */
-    uint8_t    cipher_key_len;          /*< Ciphering key length. */
-    // TODO: eliminate a memcpy in driver if crypto/auth keys are provided by UA as DMA-capable memory!
-    uint8_t    *integrity_key;          /*< Integrity key. */
-    uint8_t    integrity_key_len;       /*< Integrity key length. */
-    void        *custom;                /*< User Application custom data for this PDCP context. Usage to be defined. */
-    sec_out_cbk notify_packet;          /*< Callback function to be called for all packets processed on this context. */
+    uint8_t     sn_size;                /**< Sequence number can be represented on 5, 7 or 12 bits.
+                                             Select one from: #SEC_PDCP_SN_SIZE_5, #SEC_PDCP_SN_SIZE_7, #SEC_PDCP_SN_SIZE_12.
+                                             The value #SEC_PDCP_SN_SIZE_5 is valid only for control plane contexts! */
+    uint8_t     bearer:5;               /**< Radio bearer id. */
+    uint8_t     user_plane:1;           /**< Control plane versus Data plane indication.
+                                             Possible values: #PDCP_DATA_PLANE, #PDCP_CONTROL_PLANE. */
+    uint8_t     packet_direction:1;     /**< Direction can be uplink(#PDCP_UPLINK) or downlink(#PDCP_DOWNLINK). */
+    uint8_t     protocol_direction:1;   /**< Can be encapsulation(#PDCP_ENCAPSULATION) or decapsulation(#PDCP_DECAPSULATION)*/
+    uint8_t     cipher_algorithm;       /**< Cryptographic algorithm used: SNOW(F8)/AES(CTR).
+                                             Can have values from ::sec_crypto_alg_t enum. */
+    uint8_t     integrity_algorithm;    /**< Integrity algorithm used: SNOW(F9)/AES(CMAC).
+                                             Can have values from ::sec_crypto_alg_t enum. */
+    uint32_t    hfn;                    /**< HFN for this radio bearer. Represents the most significant bits from sequence number. */
+    uint32_t    hfn_threshold;          /**< HFN threshold for this radio bearer. If HFN matches or exceeds threshold,
+                                             sec_out_cbk will  be called with status ::SEC_STATUS_HFN_THRESHOLD_REACHED. */
+    uint8_t    *cipher_key;             /**< Ciphering key. Must be provided by User Application as DMA-capable memory,
+                                             just as it's done for packets.*/
+    uint8_t    cipher_key_len;          /**< Ciphering key length. */
+    uint8_t    *integrity_key;          /**< Integrity key. Must be provided by User Application as DMA-capable memory,
+                                             just as it's done for packets.*/
+    uint8_t    integrity_key_len;       /**< Integrity key length. */
+    void        *custom;                /**< User Application custom data for this PDCP context. Usage to be defined. */
+    sec_out_cbk notify_packet;          /**< Callback function to be called for all packets processed on this context. */
 } sec_pdcp_context_info_t;
 
 
 /** Configuration data structure that must be provided by UA when SEC user space driver is initialized */
 typedef struct sec_config_s
 {
-    void            *memory_area;           /*< UA provided- virtual memory of size #SEC_DMA_MEMORY_SIZE to be used internally 
-                                                by the driver to allocate data (like SEC descriptors) that needs to be passed to
-                                                SEC device in physical addressing. */
-    uint32_t        irq_coalescing_timer;   /*< Interrupt Coalescing Timer Threshold.
-                                                @note Applicable to SEC 4.4 only!
+    void            *memory_area;           /**< UA provided- virtual memory of size #SEC_DMA_MEMORY_SIZE to be used internally
+                                                 by the driver to allocate data (like SEC descriptors) that needs to be passed to
+                                                 SEC device in physical addressing. */
+    uint32_t        irq_coalescing_timer;   /**< Interrupt Coalescing Timer Threshold.
+                                                 @note Applicable to SEC 4.4 only!
 
-                                                While interrupt coalescing is enabled (ICEN=1), this value determines the
-                                                maximum amount of time after processing a Descriptor before raising an interrupt.
-                                                The threshold value is represented in units equal to 64 CAAM interface
-                                                clocks. Valid values for this field are from 1 to 65535.
-                                                A value of 0 results in behavior identical to that when interrupt
-                                                coalescing is disabled.*/
+                                                 While interrupt coalescing is enabled (ICEN=1), this value determines the
+                                                 maximum amount of time after processing a Descriptor before raising an interrupt.
+                                                 The threshold value is represented in units equal to 64 CAAM interface
+                                                 clocks. Valid values for this field are from 1 to 65535.
+                                                 A value of 0 results in behavior identical to that when interrupt
+                                                 coalescing is disabled.*/
 
-    uint8_t         irq_coalescing_count;   /*< Interrupt Coalescing Descriptor Count Threshold.
-                                                @note Applicable to SEC 4.4 only!
+    uint8_t         irq_coalescing_count;   /**< Interrupt Coalescing Descriptor Count Threshold.
+                                                 @note Applicable to SEC 4.4 only!
 
-                                                While interrupt coalescing is enabled (ICEN=1), this value determines
-                                                how many Descriptors are completed before raising an interrupt.
-                                                Valid values for this field are from 0 to 255.
-                                                Note that a value of 1 functionally defeats the advantages of interrupt
-                                                coalescing since the threshold value is reached each time that a
-                                                Job Descriptor is completed. A value of 0 is treated in the same
-                                                manner as a value of 1.*/
-    uint8_t         work_mode;              /*< Choose between hardware poll vs interrupt notification when driver is initialized. 
-                                                Valid values are #SEC_STARTUP_POLLING_MODE and #SEC_STARTUP_INTERRUPT_MODE.*/
+                                                 While interrupt coalescing is enabled (ICEN=1), this value determines
+                                                 how many Descriptors are completed before raising an interrupt.
+                                                 Valid values for this field are from 0 to 255.
+                                                 Note that a value of 1 functionally defeats the advantages of interrupt
+                                                 coalescing since the threshold value is reached each time that a
+                                                 Job Descriptor is completed. A value of 0 is treated in the same
+                                                 manner as a value of 1.*/
+    uint8_t         work_mode;              /**< Choose between hardware poll vs interrupt notification when driver is initialized.
+                                                 Valid values are #SEC_STARTUP_POLLING_MODE and #SEC_STARTUP_INTERRUPT_MODE.*/
 }sec_config_t;
 
+/**
+    @}  //end SecUserSpaceDriverFunctions
+ */
 
 /*==================================================================================================
                                            CONSTANTS
@@ -324,18 +346,24 @@ typedef struct sec_config_s
 ==================================================================================================*/
 
 /**
+    @addtogroup SecUserSpaceDriverManagementFunctions
+    @{
+ */
+
+
+/**
  * @brief Initialize the SEC user space driver.
  *
- * This function will handle local data initialization,
- * mapping and initialization of requested SEC's Job Rings.
+ * This function will handle configuration and initialization for
+ * requested number of JRs, as well as local data initialization.
  * Call once during application startup.
  *
  * @note Global SEC initialization is done in SEC kernel driver.
  *
  * @note The hardware IDs of the initialized Job Rings are opaque to the UA.
  * The exact Job Rings used by this library are decided between SEC user
- * space driver and SEC kernel driver. A static partitioning of Job Rings is assumed.
- * See define #SEC_ASSIGNED_JOB_RINGS.
+ * space driver and SEC kernel driver. A static partitioning of Job Rings is assumed,
+ * configured in DTS(device tree specification) file.
  *
  * @param [in]  sec_config_data         Configuration data required to initialize SEC user space driver.
  * @param [in]  job_rings_no            The number of job rings to acquire and initialize.
@@ -343,11 +371,10 @@ typedef struct sec_config_s
  *                                      ring descriptors are provided by the library for UA usage.
  *                                      The storage for the array is allocated by the library.
  *
- * @retval #SEC_SUCCESS                     for successful execution
- * @retval #SEC_OUT_OF_MEMORY is returned   if internal memory allocation fails
- * @retval #SEC_PROCESSING_ERROR            indicates a fatal execution error that requires a SEC user space driver shutdown.
- *                                          Call sec_get_last_error() to obtain specific error code, as reported by SEC device.
- * @retval >0 in case of error
+ * @retval ::SEC_SUCCESS                     for successful execution
+ * @retval ::SEC_DRIVER_ALREADY_INITIALIZED  when driver is already initialized
+ * @retval ::SEC_OUT_OF_MEMORY               is returned if internal memory allocation fails
+ * @retval ::SEC_INVALID_INPUT_PARAM         when at least one invalid parameter was provided
  */
 sec_return_code_t sec_init(const sec_config_t *sec_config_data,
                            uint8_t job_rings_no,
@@ -364,14 +391,25 @@ sec_return_code_t sec_init(const sec_config_t *sec_config_data,
  * for processing and for which no response was yet provided to UA), the packets
  * are discarded without any notifications to User Application.
  *
- * @retval #SEC_SUCCESS         is returned for a successful execution
- * @retval #SEC_JR_RESET_FAILED is returned in case the job ring reset fails
- * @retval >0 in case of error
+ * @retval ::SEC_SUCCESS                     is returned for a successful execution
+ * @retval ::SEC_DRIVER_RELEASE_IN_PROGRESS  is returned if SEC driver release is in progress
  */
 sec_return_code_t sec_release();
 
+
+/**
+    @}  //end SecUserSpaceDriverManagementFunctions
+ */
+
+
+/**
+    @addtogroup SecUserSpaceDriverContextFunctions
+    @{
+ */
+
+
 /** @brief Initializes a SEC PDCP context with the data provided.
- * 
+ *
  * Creates a SEC descriptor that will be used by SEC to process packets
  * submitted for this PDCP context. Context also registers a callback handler
  * that is activated when packets are received from SEC.
@@ -393,11 +431,12 @@ sec_return_code_t sec_release();
  * @param [in]  sec_ctx_info       PDCP context info filled by the caller. User application will not touch
  *                                 this data until the SEC context is deleted with sec_delete_pdcp_context().
  * @param [out] sec_ctx_handle     PDCP context handle returned by SEC user space driver.
- * 
- * @retval #SEC_SUCCESS for successful execution
- * @retval #SEC_DRIVER_NO_FREE_CONTEXTS when there are no more free contexts
- * @retval #SEC_DRIVER_RELEASE_IN_PROGRESS is returned if SEC driver release is in progress
- * @retval >0 in case of error
+ *
+ * @retval ::SEC_SUCCESS for successful execution
+ * @retval ::SEC_INVALID_INPUT_PARAM         when at least one invalid parameter was provided
+ * @retval ::SEC_DRIVER_NO_FREE_CONTEXTS     when there are no more free contexts
+ * @retval ::SEC_DRIVER_RELEASE_IN_PROGRESS  is returned if SEC driver release is in progress
+ * @retval ::SEC_DRIVER_NOT_INITIALIZED      is returned if SEC driver is not yet initialized.
  */
 sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
                                            const sec_pdcp_context_info_t *sec_ctx_info,
@@ -410,21 +449,32 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
  * Call once for each PDCP context.
  * If called when there are still some packets awaiting to be processed by SEC for this context,
  * the API will return #SEC_PACKETS_IN_FLIGHT. All per-context packets processed by SEC after
- * this API is invoked will be raised to the User Application having status field set to #SEC_STATUS_OVERDUE.
- * The last overdue packet will have status set to #SEC_STATUS_LAST_OVERDUE.
+ * this API is invoked will be raised to the User Application having status field set to ::SEC_STATUS_OVERDUE.
+ * The last overdue packet will have status set to ::SEC_STATUS_LAST_OVERDUE.
  * Only after the last overdue packet is notified, the User Application can be sure the PDCP context
  * was removed from SEC user space driver.
- * 
+ *
  * @param [in] sec_ctx_handle     PDCP context handle.
- * 
- * @retval #SEC_SUCCESS                     for successful execution
- * @retval #SEC_PACKETS_IN_FLIGHT           in case there are some already submitted packets
- *                                          for this context awaiting to be processed by SEC.
- * @retval #SEC_DRIVER_RELEASE_IN_PROGRESS  is returned if SEC driver release is in progress
- * @retval #SEC_INVALID_CONTEXT_HANDLE      is returned in case the SEC context handle is invalid
- * @retval >0 in case of error
+ *
+ * @retval ::SEC_SUCCESS                     for successful execution
+ * @retval ::SEC_PACKETS_IN_FLIGHT           in case there are some already submitted packets
+ *                                           for this context awaiting to be processed by SEC.
+ * @retval ::SEC_LAST_PACKET_IN_FLIGHT       in case there is only one already submitted packet.
+ * @retval ::SEC_DRIVER_RELEASE_IN_PROGRESS  is returned if SEC driver release is in progress.
+ * @retval ::SEC_INVALID_INPUT_PARAM         is returned in case the SEC context handle is invalid.
+ * @retval ::SEC_DRIVER_NOT_INITIALIZED      is returned if SEC driver is not yet initialized.
  */
 sec_return_code_t sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle);
+
+
+/**
+    @}  //end SecUserSpaceDriverContextFunctions
+ */
+
+/**
+    @addtogroup SecUserSpaceDriverPacketFunctions
+    @{
+ */
 
 /** @brief Polls for available packets processed by SEC on all Job Rings initialized by the User Application.
  *
@@ -433,19 +483,21 @@ sec_return_code_t sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle);
  * This sec_out_cbk is invoked for each processed packet belonging to that PDCP context.
  *
  * The Job Rings are polled in a weighted round robin fashion using a fixed weight for each Job Ring.
- * The polling is stopped when <limit> packets are notified or when there are no more packets to notify.
- * User Application has an additional mechanism to stop the polling, that is by returning #SEC_RETURN_STOP
+ * The polling is stopped when "limit" packets are notified or when there are no more packets to notify.
+ * User Application has an additional mechanism to stop the polling, that is by returning ::SEC_RETURN_STOP
  * from sec_out_cbk.
  *
  * @note In case the "limit" is negative and the rate of packet processing is high the function could poll
  * the JRs indefinitely.
  *
  * The SEC user space driver assumes a Linux NAPI style to deliver SEC ready packets to UA.
- * What this means is: if all ready packets are delivered to UA and no more ready packets 
+ * What this means is: if all ready packets are delivered to UA and no more ready packets
  * are awaiting to be retrieved from SEC device then this function will enable SEC interrupt generation
  * on all job rings before it returns. In other words, IRQs are enabled if:
  * -> (packets_no < limit) OR (limit < 0)
  * SEC interrupts for user space dedicated Job Rings are ALWAYS disabled in interrupt handler from SEC kernel driver.
+ * SEC interrupts per job ring are enabled in SEC kernel driver. User-space drive requests this operation
+ * using UIO control.
  *
  * @note The sec_poll() API cannot be called from within a sec_out_cbk function!
  *
@@ -462,14 +514,15 @@ sec_return_code_t sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle);
  * @param [out] packets_no  Number of packets notified to the User Application during this function call.
  *                          Can be NULL if User Application does not need this information.
  *
- * @retval #SEC_SUCCESS                     for successful execution.
- * @retval #SEC_PROCESSING_ERROR            indicates a fatal execution error that requires a SEC user space driver shutdown.
- *                                          Call sec_get_last_error() to obtain specific error code, as reported by SEC device.
- * @retval #SEC_PACKET_PROCESSING_ERROR     indicates a SEC packet processing error occurred on a Job Ring.
- *                                          The driver was able to reset job ring and job ring can be used like in a normal case.
- * @retval #SEC_DRIVER_RELEASE_IN_PROGRESS  is returned if SEC driver release is in progress
- * @retval #SEC_INVALID_INPUT_PARAM         is returned if limit == 0 or weight == 0 or
- *                                          limit <= weight or weight > #SEC_JOB_RING_SIZE
+ * @retval ::SEC_SUCCESS                     for successful execution.
+ * @retval ::SEC_DRIVER_NOT_INITIALIZED      is returned if SEC driver is not yet initialized.
+ * @retval ::SEC_PROCESSING_ERROR            indicates a fatal execution error that requires a SEC user space driver shutdown.
+ *                                           Call sec_get_last_error() to obtain specific error code, as reported by SEC device.
+ * @retval ::SEC_PACKET_PROCESSING_ERROR     indicates a SEC packet processing error occurred on a Job Ring.
+ *                                           The driver was able to reset job ring and job ring can be used like in a normal case.
+ * @retval ::SEC_DRIVER_RELEASE_IN_PROGRESS  is returned if SEC driver release is in progress
+ * @retval ::SEC_INVALID_INPUT_PARAM         is returned if limit == 0 or weight == 0 or
+ *                                           limit <= weight or weight > #SEC_JOB_RING_HW_SIZE
  */
 sec_return_code_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no);
 
@@ -479,8 +532,8 @@ sec_return_code_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
  * Each processed packet belongs to a PDCP context and each PDCP context has a sec_out_cbk registered.
  * This sec_out_cbk is invoked for each processed packet belonging to that PDCP context.
  *
- * The polling is stopped when <limit> packets are notified or when there are no more packets to notify.
- * User Application has an additional mechanism to stop the polling, that is by returning #SEC_RETURN_STOP from
+ * The polling is stopped when "limit" packets are notified or when there are no more packets to notify.
+ * User Application has an additional mechanism to stop the polling, that is by returning ::SEC_RETURN_STOP from
  * sec_out_cbk.
  *
  * The SEC user space driver assumes a Linux NAPI style to deliver SEC ready packets to UA.
@@ -488,8 +541,10 @@ sec_return_code_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
  * are awaiting to be retrieved from this SEC's job ring then this function will enable SEC interrupt generation
  * on this job ring before it returns. In other words, IRQs are enabled if:
  * -> (packets_no < limit) OR (limit < 0)
- * SEC interrupts per job ring are disabled in interrupt handler from SEC kernel driver.
- * 
+ * SEC interrupts per job ring are ALWAYS disabled in interrupt handler from SEC kernel driver.
+ * SEC interrupts per job ring are enabled in SEC kernel driver. User-space drive requests this operation
+ * using UIO control.
+ *
  * @note The sec_poll_job_ring() API cannot be called from within a sec_out_cbk function!
  *
  * @param [in]  job_ring_handle     The Job Ring handle.
@@ -500,12 +555,15 @@ sec_return_code_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
  * @param [out] packets_no          Number of packets notified to the User Application during this function call.
  *                                  Can be NULL if User Application does not need this information.
  *
- * @retval #SEC_SUCCESS                    for successful execution.
- * @retval #SEC_PROCESSING_ERROR           indicates a fatal execution error that requires a SEC user space driver shutdown.
- *                                         Call sec_get_last_error() to obtain specific error code, as reported by SEC device.
- * @retval #SEC_PACKET_PROCESSING_ERROR    indicates a SEC packet processing error occurred on a Job Ring.
- *                                         The driver was able to reset job ring and job ring can be used like in a normal case.
- * @retval #SEC_DRIVER_RELEASE_IN_PROGRESS is returned if SEC driver release is in progress
+ * @retval ::SEC_SUCCESS                    for successful execution.
+ * @retval ::SEC_DRIVER_NOT_INITIALIZED     is returned if SEC driver is not yet initialized.
+ * @retval ::SEC_PROCESSING_ERROR           indicates a fatal execution error that requires a SEC user space driver shutdown.
+ *                                          Call sec_get_last_error() to obtain specific error code, as reported by SEC device.
+ * @retval ::SEC_PACKET_PROCESSING_ERROR    indicates a SEC packet processing error occurred on a Job Ring.
+ *                                          The driver was able to reset job ring and job ring can be used like in a normal case.
+ * @retval ::SEC_DRIVER_RELEASE_IN_PROGRESS is returned if SEC driver release is in progress
+ * @retval ::SEC_INVALID_INPUT_PARAM        is returned if limit == 0 or weight == 0 or
+ *                                          limit > #SEC_JOB_RING_HW_SIZE or job ring handle is NULL.
  */
 sec_return_code_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle,
                                     int32_t limit,
@@ -530,7 +588,7 @@ sec_return_code_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle,
  *
  * @note For packets submitted for PDCP control-plane context it is possible to
  *       be sent to SEC twice for processing: once to do integrity check, second to do
- *       encryption/decryption. This will happen when the algorithm for integrity is 
+ *       encryption/decryption. This will happen when the algorithm for integrity is
  *       different than the algorithm for confidentiality.
  *       When both algorithms are the same, the packet will be sent only once, on P9132 (SEC 4.4).
  *       On P2020 (SEC 3.1) the control-plane packets will ALWAYS be sent to SEC twice.
@@ -548,44 +606,53 @@ sec_return_code_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle,
  *                                 will be provided by SEC driver in the response callback.
  *
  *
- * @retval #SEC_SUCCESS is returned for successful execution
- * @retval #SEC_INVALID_INPUT_PARAM is returned in case the SEC context handle is invalid (e.g. corrupt handle)
- *                                  or offset for input/output buffer is invalid (e.g offset > length)
- *                                  or length of the input/output buffer is invalid (e.q. zero)
- *                                  or input/output buffer address is invalid (e.g. NULL)
+ * @retval ::SEC_SUCCESS is returned for successful execution
+ * @retval ::SEC_INVALID_INPUT_PARAM when at least one invalid parameter was provided. Example:
+ *                                   - the SEC context handle is invalid (e.g. corrupt handle)
+ *                                   - input/output buffer address is invalid (e.g. NULL)
+ *                                   - etc
  *
- * @retval #SEC_JR_IS_FULL                  is returned if the JR is full
- * @retval #SEC_DRIVER_RELEASE_IN_PROGRESS  is returned if SEC driver release is in progress
- * @retval #SEC_CONTEXT_MARKED_FOR_DELETION is returned if the SEC context was marked for deletion.
- * @retval #SEC_PROCESSING_ERROR            indicates a fatal execution error that requires a SEC user space driver shutdown.
- *                                          Call sec_get_last_error() to obtain specific error code, as reported by SEC device.
- * @retval #SEC_JOB_RING_RESET_IN_PROGRESS  indicates job ring is resetting due to a per-packet SEC processing error #SEC_PACKET_PROCESSING_ERROR.
- *                                          Reset is finished when sec_poll() or sec_poll_job_ring() return.
- *                                          Then, sec_process_packet() can be called again.
- * @retval >0 in case of error
+ * @retval ::SEC_JR_IS_FULL                  is returned if the JR is full
+ * @retval ::SEC_DRIVER_RELEASE_IN_PROGRESS  is returned if SEC driver release is in progress
+ * @retval ::SEC_DRIVER_NOT_INITIALIZED      is returned if SEC driver is not yet initialized.
+ * @retval ::SEC_CONTEXT_MARKED_FOR_DELETION is returned if the SEC context was marked for deletion.
+ *                                           This can happen if sec_delete_pdcp_context() was called on the context.
+ * @retval ::SEC_JOB_RING_RESET_IN_PROGRESS  indicates job ring is resetting due to a per-packet SEC processing error ::SEC_PACKET_PROCESSING_ERROR.
+ *                                           Reset is finished when sec_poll() or sec_poll_job_ring() return.
+ *                                           Then, sec_process_packet() can be called again.
  */
 sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
                                      const sec_packet_t *in_packet,
                                      const sec_packet_t *out_packet,
                                      ua_context_handle_t ua_ctx_handle);
 
+/**
+    @}  //end SecUserSpaceDriverPacketFunctions
+ */
+
+/**
+    @addtogroup SecUserSpaceDriverErrorFunctions
+    @{
+ */
+
 
 /** @brief Returns the last SEC user space driver error, if any.
  *
  * Use this function to query SEC user space driver status after an
- * API function returned a #SEC_PROCESSING_ERROR error code.
+ * API function returned a ::SEC_PROCESSING_ERROR error code.
  * The last error is a thread specific value. Call this function on the same
- * thread that received #SEC_PROCESSING_ERROR error.
+ * thread that received ::SEC_PROCESSING_ERROR error.
  *
- * @note After an API returns #SEC_PROCESSING_ERROR code, besides calling sec_get_last_error()
+ * @note After an API returns ::SEC_PROCESSING_ERROR code, besides calling sec_get_last_error()
  * the only other valid API to call is sec_release().
  *
- * @retval 0 if local-per-thread error variable is not initialized.
+ * @retval -1 if local-per-thread error variable is not initialized.
+ * @retval 0 if no error code is reported by SEC device.
  * @retval Returns specific error code, as reported by SEC device.
  *         On SEC 3.1, the error is extracted from Channel Status Register (CSR), bits [32:63].
  *         On SEC 4.4, the error is extracted from Job Ring Interrupt Status Register (JRINT), bits [0:32].
  */
-uint32_t sec_get_last_error(void);
+int32_t sec_get_last_error(void);
 
 
 /** @brief Return string representation for a status code.
@@ -601,6 +668,10 @@ const char* sec_get_status_message(sec_status_t status);
  * @retval string representation
  */
 const char* sec_get_error_message(sec_return_code_t return_code);
+
+/**
+    @}  //end SecUserSpaceDriverErrorFunctions
+ */
 
 /*================================================================================================*/
 

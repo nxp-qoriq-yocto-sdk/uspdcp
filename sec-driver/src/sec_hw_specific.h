@@ -42,10 +42,8 @@
 /*==============================================================================
                               DEFINES AND MACROS
 ==============================================================================*/
-
+#ifdef SEC_HW_VERSION_3_1
 /** Maximum length in words (4 bytes)  for IV(Initialization Vector) */
-// TODO: Modify back to be 6 bytes...cannot do MAC-I checking with AES anyway....
-// will do memcmp in software.
 #define SEC_IV_MAX_LENGTH          12
 
 /** Maximum length in words (4 bytes)  for IV (Initialization Vector) template.
@@ -57,12 +55,11 @@
  *****************************************************************/
 
 /** Memory range assigned for registers of a job ring */
-#ifdef SEC_HW_VERSION_3_1
 #define SEC_CH_REG_RANGE                    0x100
 
 /** Offset to the registers of a job ring, as mapped by default by SEC engine */
 #define SEC_CH_REG_RANGE_START_NORMAL       0x1000
-/** Offset to the registers of a job ring, mapped in an alternate 4k page 
+/** Offset to the registers of a job ring, mapped in an alternate 4k page
  * by SEC engine  if configured to do so with MCR (Master Control Register)*/
 #define SEC_CH_REG_RANGE_START_ALTERNATE    0x0000
 /** Offset to the registers of a job ring.
@@ -70,11 +67,7 @@
 #define CHAN_BASE(job_ring) ((    (job_ring->alternate_register_range == TRUE) ? \
                     SEC_CH_REG_RANGE_START_ALTERNATE : SEC_CH_REG_RANGE_START_NORMAL) \
                     + (job_ring->jr_id * SEC_CH_REG_RANGE))
-#else // SEC_HW_VERSION_4_4
 
-#define CHAN_BASE(jr)   ((jr)->register_base_addr)
-
-#endif // SEC_HW_VERSION_4_4
 /*****************************************************************
  * ISR(Interrupt Status Register) offset
  *****************************************************************/
@@ -136,49 +129,11 @@
 /** Offset to lower 32 bits of CCR, Channel Configuration Register */
 #define SEC_REG_CCCR_OFFSET_LO  0x010C
 
-#ifdef SEC_HW_VERSION_4_4
-
-#define JR_REG_IRBA_OFFSET              0x0000
-#define JR_REG_IRBA_OFFSET_LO           0x0004
-
-#define JR_REG_IRSR_OFFSET              0x000C
-#define JR_REG_IRSA_OFFSET              0x0014
-#define JR_REG_IRJA_OFFSET              0x001C
-
-#define JR_REG_ORBA_OFFSET              0x0020
-#define JR_REG_ORBA_OFFSET_LO           0x0024
-
-#define JR_REG_ORSR_OFFSET              0x002C
-#define JR_REG_ORJR_OFFSET              0x0034
-#define JR_REG_ORSFR_OFFSET             0x003C
-#define JR_REG_JROSR_OFFSET             0x0044
-#define JR_REG_JRINT_OFFSET             0x004C
-
-#define JR_REG_JRCFG_OFFSET             0x0050
-#define JR_REG_JRCFG_OFFSET_LO          0x0054
-
-#define JR_REG_IRRI_OFFSET              0x005C
-#define JR_REG_ORWI_OFFSET              0x0064
-#define JR_REG_JRCR_OFFSET              0x006C
-
-#define JR_REG(name,jr)                    (CHAN_BASE(jr) + JR_REG_##name##_OFFSET)
-#define JR_REG_LO(name,jr)                 (CHAN_BASE(jr) + JR_REG_##name##_OFFSET_LO)
-
-#define GET_JR_REG(name,jr)                 ( in_be32( JR_REG( name,(jr) ) ) )
-#define GET_JR_REG_LO(name,jr)              ( in_be32( JR_REG_LO( name,(jr) ) ) )
-
-#define SET_JR_REG(name,jr,value)           ( out_be32( JR_REG( name,(jr) ),value  ) )
-#define SET_JR_REG_LO(name,jr,value)        ( out_be32( JR_REG_LO( name,(jr) ),value ) )
-
-#endif // SEC_HW_VERSION_4_4
-
-
 /*****************************************************************
  * CCR(Channel Configuration Register) values
  *****************************************************************/
 
 /* Job ring reset */
-#ifdef SEC_HW_VERSION_3_1
 #define SEC_REG_CCCR_VAL_RESET      0x1
 
 /* Job ring continue. Do same operations as for reset
@@ -192,19 +147,6 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 #define SEC_REG_VAL_CCCR_LO_CDIE    0x2
 /* Enable ICV writeback if descriptor configured for ICV */
 #define SEC_REG_VAL_CCCR_LO_IWSE    0x80
-#else
-#define JR_REG_JRCR_VAL_RESET       0x00000001
-
-#define JR_REG_JRCFG_LO_IMSK        0x00000001
-
-#define JRINT_ERR_HALT_MASK         0x0C
-
-#define JRINT_ERR_HALT_INPROGRESS   0x04
-
-#define JRINT_ERR_HALT_COMPLETE     0x08
-
-#define JR_REG_JRCR_IMSK            0x00000001
-#endif
 
 /*****************************************************************
  * FFER(Fetch Fifo Enqueue Register) offset
@@ -269,74 +211,6 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 #define SEC_REG_CSR_LO_SGML   0x0040 /* scatter/gather length mismatch error */
 #define SEC_REG_CSR_LO_RSI    0x0020 /* RAID size incorrect error */
 #define SEC_REG_CSR_LO_RSG    0x0010 /* RAID scatter/gather error */
-
-#ifdef SEC_HW_VERSION_4_4
-
-union hw_error_code{
-    uint32_t    error;
-    union{
-        struct{
-            uint32_t    ssrc:4;
-            uint32_t    ssed_val:28;
-        }PACKED value;
-        struct {
-            uint32_t    ssrc:4;
-            uint32_t     res:28;
-        }PACKED no_status_src;
-        struct {
-            uint32_t    ssrc:4;
-            uint32_t    jmp:1;
-            uint32_t    res:11;
-            uint32_t    desc_idx:8;
-            uint32_t    cha_id:4;
-            uint32_t    err_id:4;
-        }PACKED ccb_status_src;
-        struct {
-            uint32_t    ssrc:4;
-            uint32_t    jmp:1;
-            uint32_t    res:11;
-            uint32_t    desc_idx:8;
-            uint32_t    offset:8;
-        }PACKED jmp_halt_user_src;
-        struct {
-            uint32_t    ssrc:4;
-            uint32_t    jmp:1;
-            uint32_t    res:11;
-            uint32_t    desc_idx:8;
-            uint32_t    desc_err:8;
-        }PACKED deco_src;
-        struct {
-            uint32_t    ssrc:4;
-            uint32_t    res:17;
-            uint32_t    naddr:3;
-            uint32_t    desc_err:8;
-        }PACKED jr_src;
-        struct {
-            uint32_t    ssrc:4;
-            uint32_t    jmp:1;
-            uint32_t    res:11;
-            uint32_t    desc_idx:8;
-            uint32_t    cond:8;
-        }PACKED jmp_halt_cond_src;
-    }PACKED error_desc;
-}PACKED;
-
-#define HFN_THRESHOLD_MATCH(error)                                            \
-    ( ( ((union hw_error_code)(error)).error_desc.deco_src.ssrc ==            \
-            SEC_HW_ERR_SSRC_DECO) &&                                          \
-        (((union hw_error_code)(error)).error_desc.deco_src.desc_err ==      \
-            SEC_HW_ERR_DECO_HFN_THRESHOLD) )
-
-#define SEC_HW_ERR_SSRC_NO_SRC          0x00
-#define SEC_HW_ERR_SSRC_CCB_ERR         0x02
-#define SEC_HW_ERR_SSRC_JMP_HALT_U      0x03
-#define SEC_HW_ERR_SSRC_DECO            0x04
-#define SEC_HW_ERR_SSRC_JR              0x06
-#define SEC_HW_ERR_SSRC_JMP_HALT_COND   0x07
-
-#define SEC_HW_ERR_DECO_HFN_THRESHOLD       0xF1
-
-#endif
 
 /*****************************************************************
  * STEU IMR (Interrupt Mask Register) offset.
@@ -474,42 +348,34 @@ union hw_error_code{
 /** Select AES descriptor type = common_nonsnoop */
 #define SEC_DESC_HDR_DESC_TYPE_AESU         0x00000010
 
+
 /*****************************************************************
  * Macros manipulating descriptor header
  *****************************************************************/
 
 /** Check if a descriptor has the DONE bits set.
- * If yes, it means the packet tied to the descriptor 
+ * If yes, it means the packet tied to the descriptor
  * is processed by SEC engine already.*/
-#if SEC_HW_VERSION_4_4
-#define hw_job_is_done(job)          (((*((job)->out_status)) & JR_JOB_STATUS_MASK) == JR_DESC_STATUS_NO_ERR)
-#else
 #define hw_job_is_done(descriptor)          ((descriptor->hdr & SEC_DESC_HDR_DONE) == SEC_DESC_HDR_DONE)
-#endif
 
 /** Check if integrity check performed by primary execution unit failed */
 #define hw_icv_check_failed(descriptor)     ((descriptor->hdr_lo & SEC_DESC_HDR_ICCR0_MASK) == SEC_DESC_HDR_ICCR0_FAIL)
 
 /** Check if integrity check performed by primary execution unit passed */
 #define hw_icv_check_passed(descriptor)     ((descriptor->hdr_lo & SEC_DESC_HDR_ICCR0_MASK) == SEC_DESC_HDR_ICCR0_PASS)
-#ifdef SEC_HW_VERSION_3_1
+
 /** Enable done writeback in descriptor header dword after packet is processed by SEC engine */
 #define hw_job_enable_writeback(descriptor_hdr) ((descriptor_hdr) |= SEC_DESC_HDR_DONE_NOTIFY)
-#endif //# SEC_HW_VERSION_3_1
+
 /** Return 0 if no error generated on this job ring.
  * Return non-zero if error. */
-#if SEC_HW_VERSION_3_1
 #define hw_job_ring_error(jr) (in_be32((jr)->register_base_addr + SEC_REG_CSR_LO(jr)) & SEC_REG_CSR_ERROR_MASK)
-#else // SEC_HW_VERSION_3_1
-#define hw_job_error(jr)      (*((jr)->out_status))
-#endif
 
  /** Some error types require that the same error bit is set to 1 to clear the error source.
   * Use this macro for this purpose.
   */
 #define hw_job_ring_clear_error(jr, value) (setbits32((jr)->register_base_addr + SEC_REG_CSR_LO(jr), (value)))
 
-#ifdef SEC_HW_VERSION_3_1
 /** Read pointer to current descriptor that is beeing processed on a job ring. */
 #if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
 #define hw_get_current_descriptor(jr) ((dma_addr_t)((in_be32((jr)->register_base_addr + SEC_REG_CDPR(jr)) << 32)  |  \
@@ -568,72 +434,137 @@ union hw_error_code{
 #endif
 #else // SEC_HW_VERSION_3_1
 
-#define hw_get_current_inp_index(jr)        (( dma_addr_t)(in_be32((jr)->register_base_addr + JR_REG_IRRI(jr))) )
+/** Offset to the registers of a job ring.
+ * Is different for each job ring. */
+#define CHAN_BASE(jr)   ((jr)->register_base_addr)
 
-#define hw_get_current_out_index(jr)        (( dma_addr_t)(in_be32((jr)->register_base_addr + JR_REG_ORWI(jr))) )
+/******************************************************************
+ * Constants representing various job ring registers
+ *****************************************************************/
 
-#define hw_get_no_out_entries(jr)           ((uint32_t)(in_be32(jr)->register_base_addr + JR_REG_ORSF(jr)))
+#define JR_REG_IRBA_OFFSET              0x0000
+#define JR_REG_IRBA_OFFSET_LO           0x0004
 
-#define hw_get_jr_status(jr)                ((uint32_t)(in_be32((jr)->register_base_addr + JR_REG_JROSR(jr))))
+#define JR_REG_IRSR_OFFSET              0x000C
+#define JR_REG_IRSA_OFFSET              0x0014
+#define JR_REG_IRJA_OFFSET              0x001C
 
-/** Read pointer to current descriptor that is being processed on a job ring. */
+#define JR_REG_ORBA_OFFSET              0x0020
+#define JR_REG_ORBA_OFFSET_LO           0x0024
+
+#define JR_REG_ORSR_OFFSET              0x002C
+#define JR_REG_ORJR_OFFSET              0x0034
+#define JR_REG_ORSFR_OFFSET             0x003C
+#define JR_REG_JROSR_OFFSET             0x0044
+#define JR_REG_JRINT_OFFSET             0x004C
+
+#define JR_REG_JRCFG_OFFSET             0x0050
+#define JR_REG_JRCFG_OFFSET_LO          0x0054
+
+#define JR_REG_IRRI_OFFSET              0x005C
+#define JR_REG_ORWI_OFFSET              0x0064
+#define JR_REG_JRCR_OFFSET              0x006C
+
+/******************************************************************
+ * Constants for error handling on job ring
+ *****************************************************************/
+#define JR_REG_JRINT_ERR_TYPE_SHIFT         8
+#define JR_REG_JRINT_ERR_ORWI_SHIFT         16
+#define JR_REG_JRINIT_JRE_SHIFT             1
+
+#define JRINT_JRE                           (1 << JR_REG_JRINIT_JRE_SHIFT)
+#define JRINT_ERR_WRITE_STATUS              (1 << JR_REG_JRINT_ERR_TYPE_SHIFT)
+#define JRINT_ERR_BAD_INPUT_BASE            (3 << JR_REG_JRINT_ERR_TYPE_SHIFT)
+#define JRINT_ERR_BAD_OUTPUT_BASE           (4 << JR_REG_JRINT_ERR_TYPE_SHIFT)
+#define JRINT_ERR_WRITE_2_IRBA              (5 << JR_REG_JRINT_ERR_TYPE_SHIFT)
+#define JRINT_ERR_WRITE_2_ORBA              (6 << JR_REG_JRINT_ERR_TYPE_SHIFT)
+#define JRINT_ERR_RES_B4_HALT               (7 << JR_REG_JRINT_ERR_TYPE_SHIFT)
+#define JRINT_ERR_REM_TOO_MANY              (8 << JR_REG_JRINT_ERR_TYPE_SHIFT)
+#define JRINT_ERR_ADD_TOO_MANY              (9 << JR_REG_JRINT_ERR_TYPE_SHIFT)
+#define JRINT_ERR_HALT_MASK                 0x0C
+#define JRINT_ERR_HALT_INPROGRESS           0x04
+#define JRINT_ERR_HALT_COMPLETE             0x08
+
+#define JR_REG_JRCR_VAL_RESET               0x00000001
+
+
+/******************************************************************
+ * Constants for Packet Processing errors
+ *****************************************************************/
+#define SEC_HW_ERR_SSRC_NO_SRC              0x00
+#define SEC_HW_ERR_SSRC_CCB_ERR             0x02
+#define SEC_HW_ERR_SSRC_JMP_HALT_U          0x03
+#define SEC_HW_ERR_SSRC_DECO                0x04
+#define SEC_HW_ERR_SSRC_JR                  0x06
+#define SEC_HW_ERR_SSRC_JMP_HALT_COND       0x07
+
+#define SEC_HW_ERR_DECO_HFN_THRESHOLD       0xF1
+
+
+/******************************************************************
+ * Constants for descriptors
+ *****************************************************************/
+
+#define CMD_HDR_CTYPE_SD                        0x16
+#define CMD_HDR_CTYPE_JD                        0x17
+
+#define CMD_PROTO_SNOW_ALG                      0x01
+#define CMD_PROTO_AES_ALG                       0x02
+
+#define CMD_PROTO_DECAP                         0x06
+#define CMD_PROTO_ENCAP                         0x07
+
+#define PDCP_SD_KEY_LEN     0x4
+
+
+/******************************************************************
+ * Macros for extracting error codes for the job ring
+ *****************************************************************/
+
+#define JR_REG_JRINT_ERR_TYPE_EXTRACT(value)      ((value) & 0x00000F00)
+#define JR_REG_JRINT_ERR_ORWI_EXTRACT(value)      (((value) & 0x3FFF0000) >> JR_REG_JRINT_ERR_ORWI_SHIFT)
+#define JR_REG_JRINT_JRE_EXTRACT(value)           ((value) & JRINT_JRE)
+
+
+/******************************************************************
+ * Macros for managing the job ring
+ *****************************************************************/
+
+/** Read pointer to job ring input ring start address */
 #if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
-#define hw_get_inp_queue_base(jr)   ( (dma_addr_t)((in_be32((jr)->register_base_addr + JR_REG_IRBA(jr)) << 32) | \
-                                       (in_be32((jr)->register_base_addr + JR_REG_IRBA_LO(jr)))))
-#define hw_get_out_queue_base(jr)   ( (dma_addr_t)((in_be32((jr)->register_base_addr + JR_REG_ORBA(jr)) << 32) | \
-                                       (in_be32((jr)->register_base_addr + JR_REG_ORBA_LO(jr)))))
-#else
-#define hw_get_inp_queue_base(jr)       ( (dma_addr_t)(GET_JR_REG_LO(IRBA,(jr)) ) )
+#define hw_get_inp_queue_base(jr)   ( (dma_addr_t)(GET_JR_REG(IRBA,(jr)) << 32) | \
+                                       (GET_JR_REG_LO(IRBA,(jr))) )
 
-#define hw_get_out_queue_base(jr)       ( (dma_addr_t)(GET_JR_REG_LO(ORBA,(jr)) ) )
+/** Read pointer to job ring output ring start address */
+#define hw_get_out_queue_base(jr)   ( (dma_addr_t)(GET_JR_REG(ORBA,(jr)) << 32) | \
+                                       (GET_JR_REG_LO(ORBA,(jr))) )
+#else
+#define hw_get_inp_queue_base(jr)   ( (dma_addr_t)(GET_JR_REG_LO(IRBA,(jr)) ) )
+
+#define hw_get_out_queue_base(jr)   ( (dma_addr_t)(GET_JR_REG_LO(ORBA,(jr)) ) )
 #endif
 
-#define hw_get_current_inp_descriptor(jr) ( (dma_addr_t)(hw_get_inp_queue_base(jr) + \
-                                         hw_get_current_inp_index(jr)))
-
-#define hw_get_current_out_descriptor(jr) ( (dma_addr_t)(hw_get_out_queue_base(jr) + \
-                                         hw_get_current_out_index(jr)))
-
-#if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
-#define hw_enqueue_packet_on_job_ring(job_ring, descriptor) \
-{ \
-    out_be32( (job_ring)->register_base_addr + JR_REG_IRBA(jr),PHYS_ADDR_HI(descriptor) ); \
-    out_be32( (job_ring)->register_base_addr + JR_REG_IRBA_LO(jr),PHYS_ADDR_LO(descriptor) ); \
-    out_be32(job_ring->register_base_addr + JR_REG_IRJA(job_ring),1);\
-}
-#else
-
-#define hw_enqueue_packet_on_job_ring(job_ring, descriptor) \
-{ \
-    out_be32( (GET_JR_REG_LO(IRBA,(job_ring)) + GET_JR_REG(IRRI,(job_ring))),           \
-              (descriptor) );                                                           \
-    SET_JR_REG(IRJA, (job_ring), 1);                                                    \
-    (job_ring)->hw_idx = ((job_ring)->hw_idx + 1 ) & SEC_JOB_RING_SIZE;                 \
-}
-#endif
-#endif //SEC_HW_VERSION_3_1
-
-#ifdef SEC_HW_VERSION_4_4
+/**
+ * TODO: Add an explanation why this register is written
+ */
+#define hw_enqueue_packet_on_job_ring(job_ring) \
+    SET_JR_REG(IRJA, (job_ring), 1);
 
 #define hw_set_input_ring_size(job_ring,size)   SET_JR_REG(IRSR,job_ring,(size))
 
 #define hw_set_output_ring_size(job_ring,size)  SET_JR_REG(ORSR,job_ring,(size))
 
 #if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
-#define hw_set_input_ring_start_addr(job_ring, descriptor) \
-{   \
-    out_be32(job_ring->register_base_addr + JR_REG_IRBA(job_ring),\
-             PHYS_ADDR_HI(descriptor));\
-    out_be32(job_ring->register_base_addr + JR_REG_IRBA_LO(job_ring),\
-             PHYS_ADDR_LO(descriptor));\
+#define hw_set_input_ring_start_addr(job_ring, start_addr)              \
+{                                                                       \
+    SET_JR_REG(IRBA,job_ring,start_addr,PHYS_ADDR_HI(start_addr));      \
+    SET_JR_REG_LO(IRBA,job_ring,start_addr,PHYS_ADDR_LO(start_addr));   \
 }
 
-#define hw_set_output_ring_start_addr(job_ring, descriptor) \
-{   \
-    out_be32(job_ring->  + JR_REG_ORBA(job_ring),\
-             PHYS_ADDR_HI(descriptor));\
-    out_be32(job_ring->register_base_addr + JR_REG_ORBA_LO(job_ring),\
-             PHYS_ADDR_LO(descriptor));\
+#define hw_set_output_ring_start_addr(job_ring, start_addr)             \
+{                                                                       \
+    SET_JR_REG(ORBA,job_ring,start_addr,PHYS_ADDR_HI(start_addr));      \
+    SET_JR_REG_LO(ORBA,job_ring,start_addr,PHYS_ADDR_LO(start_addr));   \
 }
 
 #else //#if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
@@ -645,28 +576,46 @@ union hw_error_code{
 
 #endif
 
-#define JR_HW_REMOVE_ONE_ENTRY(jr)              SET_JR_REG(ORJR,(jr),1)
+#define hw_remove_one_entry(jr)              hw_remove_entries(jr,1)
 
-#define JR_HW_REMOVE_ENTRIES(jr,no_entries)     SET_JR_REG(ORJR,(jr),(no_entries))
+#define hw_remove_entries(jr,no_entries)     SET_JR_REG(ORJR,(jr),(no_entries))
 
 #define hw_get_available_slots(jr)              GET_JR_REG(IRSA,jr)
 
 #define hw_get_no_finished_jobs(jr)             GET_JR_REG(ORSFR, jr)
 
 
+/******************************************************************
+ * Macro for determining if the threshold was exceeded for a
+ * context
+ *****************************************************************/
 
-#define CMD_HDR_CTYPE_SD                        0x16
-#define CMD_HDR_CTYPE_JD                        0x17
+#define HFN_THRESHOLD_MATCH(error)                                              \
+    ( ( ((union hw_error_code)(error)).error_desc.deco_src.ssrc ==              \
+            SEC_HW_ERR_SSRC_DECO) &&                                            \
+        (((union hw_error_code)(error)).error_desc.deco_src.desc_err ==         \
+            SEC_HW_ERR_DECO_HFN_THRESHOLD) )
 
-#define CMD_PROTO_SNOW_ALG                      0x01
-#define CMD_PROTO_AES_ALG                       0x02
 
-#define CMD_PROTO_DECAP                         0x06
-#define CMD_PROTO_ENCAP                         0x07
+/******************************************************************
+ * Macros for manipulating JR registers
+ *****************************************************************/
+#define JR_REG(name,jr)                    (CHAN_BASE(jr) + JR_REG_##name##_OFFSET)
+#define JR_REG_LO(name,jr)                 (CHAN_BASE(jr) + JR_REG_##name##_OFFSET_LO)
 
-#define PDCP_JD_SET_SD(descriptor,ptr,sd_len)           { \
-    (descriptor)->sd_ptr = (ptr);                         \
-    (descriptor)->deschdr.command.jd.shr_desc_len = (sd_len);\
+#define GET_JR_REG(name,jr)                 ( in_be32( JR_REG( name,(jr) ) ) )
+#define GET_JR_REG_LO(name,jr)              ( in_be32( JR_REG_LO( name,(jr) ) ) )
+
+#define SET_JR_REG(name,jr,value)           ( out_be32( JR_REG( name,(jr) ),value  ) )
+#define SET_JR_REG_LO(name,jr,value)        ( out_be32( JR_REG_LO( name,(jr) ),value ) )
+
+/******************************************************************
+ * Macros manipulating descriptors
+ *****************************************************************/
+#define PDCP_JD_SET_SD(descriptor,ptr)           {              \
+    (descriptor)->sd_ptr = (ptr);                               \
+    (descriptor)->deschdr.command.jd.shr_desc_len =             \
+        SEC_PDCP_GET_DESC_LEN(ptr);                             \
 }
 
 #define PDCP_INIT_JD(descriptor)              { \
@@ -742,10 +691,8 @@ union hw_error_code{
         }                                                                   \
 }
 
-#define PDCP_SD_LEN         0x10
-#define PDCP_SD_KEY_LEN     0x4
+#endif // SEC_HW_VERSION_3_1
 
-#endif
 /*==============================================================================
                                     ENUMS
 ==============================================================================*/
@@ -804,7 +751,61 @@ typedef struct sec_crypto_pdb_s
                                 and #FALSE for outbound data flows(performing encapsulation on packets). */
 
 }sec_crypto_pdb_t;
-#else
+
+#else // SEC_HW_VERSION_3_1
+
+/** TODO: Write something meaningful here
+ *
+ */
+union hw_error_code{
+    uint32_t    error;
+    union{
+        struct{
+            uint32_t    ssrc:4;
+            uint32_t    ssed_val:28;
+        }PACKED value;
+        struct {
+            uint32_t    ssrc:4;
+            uint32_t     res:28;
+        }PACKED no_status_src;
+        struct {
+            uint32_t    ssrc:4;
+            uint32_t    jmp:1;
+            uint32_t    res:11;
+            uint32_t    desc_idx:8;
+            uint32_t    cha_id:4;
+            uint32_t    err_id:4;
+        }PACKED ccb_status_src;
+        struct {
+            uint32_t    ssrc:4;
+            uint32_t    jmp:1;
+            uint32_t    res:11;
+            uint32_t    desc_idx:8;
+            uint32_t    offset:8;
+        }PACKED jmp_halt_user_src;
+        struct {
+            uint32_t    ssrc:4;
+            uint32_t    jmp:1;
+            uint32_t    res:11;
+            uint32_t    desc_idx:8;
+            uint32_t    desc_err:8;
+        }PACKED deco_src;
+        struct {
+            uint32_t    ssrc:4;
+            uint32_t    res:17;
+            uint32_t    naddr:3;
+            uint32_t    desc_err:8;
+        }PACKED jr_src;
+        struct {
+            uint32_t    ssrc:4;
+            uint32_t    jmp:1;
+            uint32_t    res:11;
+            uint32_t    desc_idx:8;
+            uint32_t    cond:8;
+        }PACKED jmp_halt_cond_src;
+    }PACKED error_desc;
+}PACKED;
+
 /**
  * TODO: Write something meaningful here
  */
@@ -1012,7 +1013,7 @@ struct sec_descriptor_t {
     uint32_t    in_ext_length;
 } PACKED;
 
-#endif
+#endif // SEC_HW_VERSION_3_1
 /*==============================================================================
                                  CONSTANTS
 ==============================================================================*/
@@ -1068,7 +1069,13 @@ int hw_reset_and_continue_job_ring(sec_job_ring_t *job_ring);
 void hw_handle_job_ring_error(sec_job_ring_t *job_ring,
                               uint32_t sec_error_code,
                               uint32_t *reset_required);
+#ifdef SEC_HW_VERSION_4_4
+/**
+ * TODO: Write something meaningful here
+ */
+int hw_job_ring_error(sec_job_ring_t *job_ring);
 
+#endif // SEC_HW_VERSION_4_4
 /*============================================================================*/
 
 

@@ -93,12 +93,12 @@ extern "C" {
 /** Length in bytes of IV(Initialization Vector) for SNOW F8.
  * Same length is used for IV(Initialization Vector actually representing ICV = Initial Counter Value)
  * in case of AES CTR(encrypt/decrypt).
- * 
- * For AES CTR, PDCP standard state an IV 128 bits long, having trailing 64 bits set to 0. 
+ *
+ * For AES CTR, PDCP standard state an IV 128 bits long, having trailing 64 bits set to 0.
  * First 64 bits constructed as for SNOW 3G F8 IV.
- * @note SEC 3.1 knows to append the trailing 64 bits of zero, 
+ * @note SEC 3.1 knows to append the trailing 64 bits of zero,
  *       so just create an IV like for SNOW F8.
- * @note SEC 4.4 implements PDCP c-plane /d-plane protocol and 
+ * @note SEC 4.4 implements PDCP c-plane /d-plane protocol and
  *       IV construction is not required in driver anymore!
  */
 #define PDCP_SNOW_F8_AES_CTR_IV_LENGTH  8
@@ -112,8 +112,8 @@ extern "C" {
 
 /** Length in bytes for AES CMAC IV.
  * Note that AES CMAC does not use an IV in the same sense as AES CTR or SNOW F8/F9.
- * The 'IV' is prepended to the input frame and is considered part of the frame when 
- * running AES CMAC. 
+ * The 'IV' is prepended to the input frame and is considered part of the frame when
+ * running AES CMAC.
  */
 #define PDCP_AES_CMAC_IV_LENGTH         8
 
@@ -157,9 +157,9 @@ extern "C" {
  * where most significant bits represent the bearer. */
 #define PDCP_IV_WORD_BEARER_MASK            0xF8000000
 
-/** Extract SN from PDCP header. For control plane packets and data plane packets 
+/** Extract SN from PDCP header. For control plane packets and data plane packets
  * with short SN, PDCP header length is 1 byte and sns field from PDB is set to 1.
- * For data plane packets with long SN, PDCP header length is 2 bytes and sns field 
+ * For data plane packets with long SN, PDCP header length is 2 bytes and sns field
  * from PDB is set to 0.
  * For all packet types will apply mask on first 2 bytes of packet and then shift right
  * 8 bits only when PDCP header length is 1 byte. */
@@ -168,7 +168,7 @@ extern "C" {
 /** Extract D/C bit from PDCP header.
  * @note Applies only to data plane packets!*/
 #define PDCP_HEADER_GET_D_C(hdr)((hdr)[0] >> 7)
-#else
+#else // SEC_HW_VERSION_3_1
 /** Write something meaningful here
  *
  */
@@ -180,7 +180,7 @@ extern "C" {
 
 #define NUM_INT_ALGS sizeof(sec_crypto_alg_t)
 
-#endif
+#endif // SEC_HW_VERSION_3_1
 
 /** Used only for testing! Simulates that the first 2 packets
  *  submitted to SEC have an invalid descriptor header.
@@ -227,7 +227,7 @@ static create_desc_fp u_plane_create_desc[];
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
 ==================================================================================================*/
-#ifdef SEC_HW_VERSION_3_3
+#ifdef SEC_HW_VERSION_3_1
 /** @brief Create a SNOW F8 (ciphering/deciphering) descriptor or
  * AES CTR (ciphering/deciphering).
  *
@@ -325,7 +325,7 @@ static int sec_pdcp_context_create_aes_auth_descriptor(sec_context_t *ctx);
 static int sec_pdcp_context_create_null_auth_descriptor(sec_context_t *ctx);
 
 /** @brief  Updates a SEC descriptor for processing a PDCP packet
- * with SNOW F8 or AES CTR. Both algorithms use an identical way 
+ * with SNOW F8 or AES CTR. Both algorithms use an identical way
  * of configuring the descriptor. Set in descriptor pointers to:
  * input data, output data, ciphering information, etc.
  *
@@ -415,7 +415,7 @@ static void sec_pdcp_update_iv_template(sec_crypto_pdb_t *sec_pdb,
                                         uint8_t *pdcp_header,
                                         sec_status_t *status,
                                         uint8_t iv_offset);
-#else
+#else // SEC_HW_VERSION_3_1
 /** TODO: Write something meaningful here
  *
  */
@@ -446,7 +446,7 @@ static int create_cipher_only_desc(sec_context_t *ctx);
  */
 static int create_copy_desc(sec_context_t *ctx);
 
-#endif
+#endif // SEC_HW_VERSION_3_1
 /** @brief Fill PDB with initial data for this context: HFN threshold, HFN mask, etc
  * @param [in,out] ctx          SEC context
  */
@@ -476,7 +476,7 @@ static int sec_pdcp_create_snow_f8_aes_ctr_descriptor(sec_context_t *ctx)
     // data plane, short SN:    HFN 25 bits, SN 7 bit
     // data plane, long SN:     HFN 20 bits, SN 12 bit
 
-    
+
     // Set HFN.
     // SN will be updated for each packet. When SN rolls over, HFN is incremented.
     sec_pdb->iv_template[PDCP_CONFIDENTIALITY_IV_POS] = ctx->pdcp_crypto_info->hfn << ctx->pdcp_crypto_info->sn_size;
@@ -485,7 +485,7 @@ static int sec_pdcp_create_snow_f8_aes_ctr_descriptor(sec_context_t *ctx)
     sec_pdb->iv_template[PDCP_CONFIDENTIALITY_IV_POS + 1] = ctx->pdcp_crypto_info->bearer << (32 - PDCP_BEARER_LENGTH);
 
     // Set DIRECTION bit: 0 for uplink, 1 for downlink
-    sec_pdb->iv_template[PDCP_CONFIDENTIALITY_IV_POS + 1] = sec_pdb->iv_template[PDCP_CONFIDENTIALITY_IV_POS + 1] | 
+    sec_pdb->iv_template[PDCP_CONFIDENTIALITY_IV_POS + 1] = sec_pdb->iv_template[PDCP_CONFIDENTIALITY_IV_POS + 1] |
         (ctx->pdcp_crypto_info->packet_direction << (32 - PDCP_BEARER_LENGTH - 1));
 
     return SEC_SUCCESS;
@@ -494,12 +494,12 @@ static int sec_pdcp_create_snow_f8_aes_ctr_descriptor(sec_context_t *ctx)
 static int sec_pdcp_create_snow_f9_descriptor(sec_context_t *ctx)
 {
     sec_crypto_pdb_t *sec_pdb = &ctx->crypto_desc_pdb;
-    
+
     // Copy crypto data into PDB.
     // Copy/update only data that was not already set by data-plane corresponding function!
 
     ASSERT(ctx->pdcp_crypto_info->integrity_key != NULL);
-    ASSERT(ctx->pdcp_crypto_info->sn_size == SEC_PDCP_SN_SIZE_5); 
+    ASSERT(ctx->pdcp_crypto_info->sn_size == SEC_PDCP_SN_SIZE_5);
 
     // IV Template format:
     // word 0 : F8 IV[0]
@@ -508,11 +508,11 @@ static int sec_pdcp_create_snow_f9_descriptor(sec_context_t *ctx)
     // word 3 : F9 IV[1]
     // word 4 : F9 IV[2]
 
-    // Construct (template) F9 IV (96 bits) =  
+    // Construct (template) F9 IV (96 bits) =
     //      HFN | SN | 5 bits of 0 | DIRECTION | 26 bits of 0 | Bearer | 27 bits of 0
     //
     // control plane:           HFN 27 bits, SN 5 bit
-    
+
 
     // First word of F9 IV is identical with first word of F8 IV : HFN | SN
     // SN will be updated for each packet. When SN rolls over, HFN is incremented.
@@ -544,11 +544,11 @@ static int sec_pdcp_create_aes_cmac_descriptor(sec_context_t *ctx)
     // word 3 : AES CMAC IV[1]
     // word 4 : AES CMAC IV[2]
 
-    // Construct (template) F9 IV (96 bits) =  
+    // Construct (template) F9 IV (96 bits) =
     //      HFN | SN | Bearer | DIRECTION | 26 bits of 0
     //
     // control plane:           HFN 27 bits, SN 5 bit
-    
+
 
     // AES CMAC 'IV' is identical with AES CTR IV
     // SN will be updated for each packet. When SN rolls over, HFN is incremented.
@@ -556,11 +556,11 @@ static int sec_pdcp_create_aes_cmac_descriptor(sec_context_t *ctx)
 
     // Set bearer
     sec_pdb->iv_template[PDCP_INTEGRITY_IV_POS + 1] = ctx->pdcp_crypto_info->bearer << (32 - PDCP_BEARER_LENGTH);
-    
+
     // Set DIRECTION bit: 0 for uplink, 1 for downlink
-    sec_pdb->iv_template[PDCP_INTEGRITY_IV_POS + 1] = sec_pdb->iv_template[PDCP_INTEGRITY_IV_POS + 1] | 
+    sec_pdb->iv_template[PDCP_INTEGRITY_IV_POS + 1] = sec_pdb->iv_template[PDCP_INTEGRITY_IV_POS + 1] |
         (ctx->pdcp_crypto_info->packet_direction << (32 - PDCP_BEARER_LENGTH - 1));
-    
+
     return SEC_SUCCESS;
 }
 
@@ -571,8 +571,8 @@ static int sec_pdcp_context_create_snow_cipher_descriptor(sec_context_t *ctx)
     // PDCP data-plane descriptor is always needed
     ret = sec_pdcp_create_snow_f8_aes_ctr_descriptor(ctx);
     SEC_ASSERT(ret == SEC_SUCCESS, ret, "Failed to create SNOW F8 descriptor");
-    
-    // Set pointer to the function that will be called to 
+
+    // Set pointer to the function that will be called to
     // update the SEC descriptor for each packet.
     // SNOW F8 is first processing step for PDCP data plane.
     // For control plane, SNOW F8 is second processing step after SNOW F9.
@@ -601,7 +601,7 @@ static int sec_pdcp_context_create_aes_cipher_descriptor(sec_context_t *ctx)
     ret = sec_pdcp_create_snow_f8_aes_ctr_descriptor(ctx);
     SEC_ASSERT(ret == SEC_SUCCESS, ret, "Failed to create AES CTR descriptor");
 
-    // Set pointer to the function that will be called to 
+    // Set pointer to the function that will be called to
     // update the SEC descriptor for each packet.
     // AES CTR is first processing step for PDCP data plane.
     // For control plane, AES CTR is second processing step after AES CMAC.
@@ -632,7 +632,6 @@ static int sec_pdcp_context_create_null_cipher_descriptor(sec_context_t *ctx)
 
     return SEC_SUCCESS;
 }
-
 static int sec_pdcp_context_create_snow_auth_descriptor(sec_context_t *ctx)
 {
     int ret = SEC_SUCCESS;
@@ -672,7 +671,7 @@ static int sec_pdcp_context_create_aes_auth_descriptor(sec_context_t *ctx)
     ret = sec_pdcp_create_aes_cmac_descriptor(ctx);
     SEC_ASSERT(ret == SEC_SUCCESS, ret, "Failed to create AES CMAC descriptor");
 
-    // Set pointer to the function that will be called to 
+    // Set pointer to the function that will be called to
     // update the SEC descriptor for each packet.
     ctx->update_auth_descriptor = sec_pdcp_context_update_aes_cmac_descriptor;
 
@@ -694,13 +693,12 @@ static int sec_pdcp_context_create_aes_auth_descriptor(sec_context_t *ctx)
 
 static int sec_pdcp_context_create_null_auth_descriptor(sec_context_t *ctx)
 {
-    // Set pointer to the function that will be called to 
+    // Set pointer to the function that will be called to
     // update the SEC descriptor for each packet.
-    ctx->update_crypto_descriptor = sec_pdcp_context_update_null_auth_descriptor;
+    ctx->update_auth_descriptor = sec_pdcp_context_update_null_auth_descriptor;
 
     return SEC_SUCCESS;
 }
-
 
 static int sec_pdcp_context_create_descriptor(sec_context_t *ctx)
 {
@@ -767,7 +765,6 @@ static int sec_pdcp_context_update_snow_f8_aes_ctr_descriptor(sec_job_t *job, se
     counter++;
 #endif
 
-
     //descriptor->hdr_lo = 0;
 
     // update the remaining 7 dwords
@@ -795,13 +792,13 @@ static int sec_pdcp_context_update_snow_f8_aes_ctr_descriptor(sec_job_t *job, se
                                 job->in_packet->address + job->in_packet->offset, // PDCP header pointer
                                 &job->job_status,
                                 PDCP_CONFIDENTIALITY_IV_POS);
-    
+
     descriptor->iv[0] = sec_pdb->iv_template[PDCP_CONFIDENTIALITY_IV_POS];
     descriptor->iv[1] = sec_pdb->iv_template[PDCP_CONFIDENTIALITY_IV_POS + 1];
 
     // set pointer to IV
     descriptor->ptr[1].ptr = PHYS_ADDR_LO(phys_addr);
-    
+
     SEC_DEBUG("IV[0] = 0x%x, IV[1] = 0x%x", descriptor->iv[0], descriptor->iv[1]);
 
     //////////////////////////////////////////////////////////////
@@ -819,7 +816,7 @@ static int sec_pdcp_context_update_snow_f8_aes_ctr_descriptor(sec_job_t *job, se
 #endif
     // pointer to cipher key
     descriptor->ptr[2].ptr = PHYS_ADDR_LO(phys_addr);
-    
+
     SEC_DEBUG("Cipher key (hex)= [%x %x %x %x]",
               *(uint32_t*)(ua_crypto_info->cipher_key),
               *((uint32_t*)(ua_crypto_info->cipher_key) + 1),
@@ -852,7 +849,7 @@ static int sec_pdcp_context_update_snow_f8_aes_ctr_descriptor(sec_job_t *job, se
     // copy PDCP header from input packet into output packet
     //////////////////////////////////////////////////////////////
 
-    memcpy(job->out_packet->address + job->out_packet->offset, 
+    memcpy(job->out_packet->address + job->out_packet->offset,
            job->in_packet->address + job->in_packet->offset,
            sec_pdb->pdcp_hdr_len);
 
@@ -871,7 +868,7 @@ static int sec_pdcp_context_update_snow_f8_aes_ctr_descriptor(sec_job_t *job, se
     // pointer to output buffer. Skip UA offset and PDCP header
     descriptor->ptr[4].ptr = PHYS_ADDR_LO(phys_addr);
 
-    
+
     //////////////////////////////////////////////////////////////
     // last 2 pointers unused
     //////////////////////////////////////////////////////////////
@@ -940,7 +937,7 @@ static int sec_pdcp_context_update_snow_f9_descriptor(sec_job_t *job, sec_descri
                                                             auth_packet->length -
                                                             PDCP_MAC_I_LENGTH))
                                             : 0;
-    descriptor->iv[4] = 0; 
+    descriptor->iv[4] = 0;
     descriptor->iv[5] = sec_pdb->iv_template[PDCP_INTEGRITY_IV_POS + 2];
 
 #if defined(PDCP_TEST_SNOW_F9_ONLY)
@@ -949,7 +946,7 @@ static int sec_pdcp_context_update_snow_f9_descriptor(sec_job_t *job, sec_descri
     // constructs the IV using bearer.
     // SNOW F9 spec constructs  IV using FRESH field, which is  configured below.
     // FRESH field in 3G, replaced in LTE to be BEARER | 27 bits of zero!
-    descriptor->iv[5] = 0x397E8FD; 
+    descriptor->iv[5] = 0x397E8FD;
 #endif
 
     SEC_DEBUG("\nIV[0] = 0x%x\n IV[1] = 0x%x\n IV[2] = 0x%x\n"
@@ -1011,7 +1008,7 @@ static int sec_pdcp_context_update_snow_f9_descriptor(sec_job_t *job, sec_descri
 #endif
     // pointer to input buffer. Skip UA offset and PDCP header
     descriptor->ptr[3].ptr = PHYS_ADDR_LO(phys_addr);
-    
+
     SEC_DEBUG("PDCP IN packet (len = %d bytes) (hex) = [%x %x %x %x]",
               descriptor->ptr[3].len,
               *((uint32_t*)(auth_packet->address + auth_packet->offset)),
@@ -1027,7 +1024,7 @@ static int sec_pdcp_context_update_snow_f9_descriptor(sec_job_t *job, sec_descri
     //////////////////////////////////////////////////////////////
     // set output buffer
     //////////////////////////////////////////////////////////////
-    
+
     // MAC-I needs be generated only for outbound packets.
     // For inbound packets generated MAC-I needs to be checked against
     // MAC-I from input packet. For SNOW F9, SEC 3.1 knows to do that automatically.
@@ -1050,7 +1047,7 @@ static int sec_pdcp_context_update_snow_f9_descriptor(sec_job_t *job, sec_descri
         // Generated MAC-I (4 byte).
         phys_addr = sec_vtop(job->mac_i);
         // first 4 bytes are filled with zero-s. last 4 bytes contain the MAC-I
-        descriptor->ptr[6].len = 2 * PDCP_MAC_I_LENGTH; 
+        descriptor->ptr[6].len = 2 * PDCP_MAC_I_LENGTH;
         // no s/g
         descriptor->ptr[6].j_extent = 0;
 #if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
@@ -1092,7 +1089,7 @@ static int sec_pdcp_context_update_aes_cmac_descriptor(sec_job_t *job, sec_descr
     //////////////////////////////////////////////////////////////
     // set IV(Initialization Vector)
     //////////////////////////////////////////////////////////////
-    
+
     memset(&(descriptor->ptr[1]), 0, sizeof(struct sec_ptr));
 
     // update IV based on SN
@@ -1103,7 +1100,7 @@ static int sec_pdcp_context_update_aes_cmac_descriptor(sec_job_t *job, sec_descr
 
     // No need to configure MAC-I received for inbound packets, because SEC 3.1
     // cannot do MAC-I automatic validation as it does not support MAC-I codes less than 8 bytes.
-    
+
     //////////////////////////////////////////////////////////////
     // set auth key
     //////////////////////////////////////////////////////////////
@@ -1167,7 +1164,7 @@ static int sec_pdcp_context_update_aes_cmac_descriptor(sec_job_t *job, sec_descr
 #endif
     // pointer to input buffer. Skip UA offset and PDCP header
     descriptor->ptr[3].ptr = PHYS_ADDR_LO(phys_addr);
-    
+
     // Print also 4 bytes of IV prepended to the PDCP packet (hdr + payload)
     SEC_DEBUG("PDCP IN packet + IV (len = %d bytes) (hex) = [%x %x %x %x]",
               descriptor->ptr[3].len,
@@ -1175,7 +1172,7 @@ static int sec_pdcp_context_update_aes_cmac_descriptor(sec_job_t *job, sec_descr
               *((uint32_t*)(auth_packet->address + auth_packet->offset) - 1),
               *((uint32_t*)(auth_packet->address + auth_packet->offset)),
               *((uint32_t*)(auth_packet->address + auth_packet->offset) + 1));
-    
+
     //////////////////////////////////////////////////////////////
     // next 2 pointers unused
     //////////////////////////////////////////////////////////////
@@ -1202,6 +1199,11 @@ static int sec_pdcp_context_update_aes_cmac_descriptor(sec_job_t *job, sec_descr
     descriptor->ptr[6].ptr = PHYS_ADDR_LO(phys_addr);
 
     return ret;
+}
+
+static int sec_pdcp_context_update_null_auth_descriptor(sec_job_t *job, sec_descriptor_t *descriptor)
+{
+    return SEC_SUCCESS;
 }
 
 static int sec_pdcp_context_update_null_cipher_descriptor(sec_job_t *job, sec_descriptor_t *descriptor)
@@ -1240,21 +1242,21 @@ static void sec_pdcp_update_iv_template(sec_crypto_pdb_t *sec_pdb,
     // first clear old SN
     sec_pdb->iv_template[iv_offset] = sec_pdb->iv_template[iv_offset] & sec_pdb->hfn_mask;
 
-    // set new SN in IV first word. 
+    // set new SN in IV first word.
     sec_pdb->iv_template[iv_offset] = sec_pdb->iv_template[iv_offset] | seq_no;
     SEC_DEBUG("Update IV template  with SN = 0x%x", seq_no);
 
     // check if SN rolled over
     if ((last_sn == max_sn) && (seq_no == 0))
     {
-        // increment HFN: 
+        // increment HFN:
         // max_sn + 1 = ALL SN bits set to 0 and IV[0] bit at position length(SN) + 1,
         // when counting from right to left, is set to 1. This is LSB bit of HFN.
         sec_pdb->iv_template[iv_offset] = sec_pdb->iv_template[iv_offset] + (1 + max_sn);
     }
 
     // check if HFN reached threshold
-    *status = ((sec_pdb->iv_template[iv_offset] & sec_pdb->hfn_mask) >= sec_pdb->hfn_threshold) ? 
+    *status = ((sec_pdb->iv_template[iv_offset] & sec_pdb->hfn_mask) >= sec_pdb->hfn_threshold) ?
                SEC_STATUS_HFN_THRESHOLD_REACHED : SEC_STATUS_SUCCESS;
 }
 
@@ -1286,10 +1288,9 @@ static void sec_pdcp_create_pdb(sec_context_t *ctx)
                              PDCP_HEADER_LENGTH_LONG : PDCP_HEADER_LENGTH_SHORT;
     sec_pdb->is_inbound = (ctx->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION) ? FALSE : TRUE;
 }
-#else
+#else // SEC_HW_VERSION_3_1
 static void sec_pdcp_create_pdb(sec_context_t *ctx)
 {
-    sec_pdcp_context_info_t *pdcp_crypto_info;
     sec_crypto_pdb_t *sec_pdb;
     struct cplane_pdb_s *cplane_pdb = NULL;
     struct uplane_pdb_s *uplane_pdb = NULL;
@@ -1299,7 +1300,6 @@ static void sec_pdcp_create_pdb(sec_context_t *ctx)
     ASSERT( ctx->sh_desc != NULL);
 
     sec_pdb = &ctx->sh_desc->pdb;
-    pdcp_crypto_info = ctx->pdcp_crypto_info;
 
     if (ctx->pdcp_crypto_info->user_plane == PDCP_CONTROL_PLANE)
     {
@@ -1308,27 +1308,28 @@ static void sec_pdcp_create_pdb(sec_context_t *ctx)
         ASSERT( ctx->pdcp_crypto_info->sn_size == SEC_PDCP_SN_SIZE_5 );
 #warning "This seems to be an issue in HW, bit 30 should be set to 0 for C-Plane"
         cplane_pdb->res1 = 0x00000002;
-        cplane_pdb->hfn = pdcp_crypto_info->hfn;
-        cplane_pdb->bearer = pdcp_crypto_info->bearer;
-        cplane_pdb->dir = pdcp_crypto_info->packet_direction;
-        cplane_pdb->threshold = pdcp_crypto_info->hfn_threshold;
+        cplane_pdb->hfn = ctx->pdcp_crypto_info->hfn;
+        cplane_pdb->bearer = ctx->pdcp_crypto_info->bearer;
+        cplane_pdb->dir = ctx->pdcp_crypto_info->packet_direction;
+        cplane_pdb->threshold = ctx->pdcp_crypto_info->hfn_threshold;
     }
     else
     {// data plane
         uplane_pdb = &sec_pdb->pdb_content.uplane_pdb;
-        uplane_pdb->bearer = pdcp_crypto_info->bearer;
-        uplane_pdb->dir = pdcp_crypto_info->packet_direction;
+        uplane_pdb->bearer = ctx->pdcp_crypto_info->bearer;
+        uplane_pdb->dir = ctx->pdcp_crypto_info->packet_direction;
 
-        if( pdcp_crypto_info->sn_size ==  SEC_PDCP_SN_SIZE_12 )
+        if( ctx->pdcp_crypto_info->sn_size ==  SEC_PDCP_SN_SIZE_12 )
         {
             uplane_pdb->sns = 0;
-            uplane_pdb->hfn.hfn_l.hfn = pdcp_crypto_info->hfn;
-            uplane_pdb->threshold.threshold_l.threshold = pdcp_crypto_info->hfn_threshold;
+            uplane_pdb->hfn.hfn_l.hfn = ctx->pdcp_crypto_info->hfn;
+            uplane_pdb->threshold.threshold_l.threshold = ctx->pdcp_crypto_info->hfn_threshold;
         }
         else
         {
-            uplane_pdb->hfn.hfn_s.hfn = pdcp_crypto_info->hfn;
-            uplane_pdb->threshold.threshold_s.threshold = pdcp_crypto_info->hfn_threshold;
+            uplane_pdb->sns = 1;
+            uplane_pdb->hfn.hfn_s.hfn = ctx->pdcp_crypto_info->hfn;
+            uplane_pdb->threshold.threshold_s.threshold = ctx->pdcp_crypto_info->hfn_threshold;
         }
     }
 }
@@ -1341,9 +1342,9 @@ static int sec_pdcp_context_create_descriptor(sec_context_t *ctx)
     ASSERT(ctx != NULL);
     ASSERT(ctx->pdcp_crypto_info != NULL);
 
-    ctx->sh_desc = (dma_addr_t)g_dma_mem_free;
-    memset(ctx->sh_desc, 0, sizeof(struct sec_pdcp_sd_t));
-    g_dma_mem_free += sizeof(struct sec_pdcp_sd_t);
+    ctx->sh_desc = (struct sec_pdcp_sd_t*)(dma_addr_t)g_dma_mem_free;
+    memset(ctx->sh_desc, 0, SEC_CRYPTO_DESCRIPTOR_SIZE);
+    g_dma_mem_free += SEC_CRYPTO_DESCRIPTOR_SIZE;
 
     SEC_DEBUG("Created shared descriptor @ 0x%04x",(uint32_t)ctx->sh_desc);
 
@@ -1433,15 +1434,53 @@ static int create_cipher_only_desc(sec_context_t *crypto_pdb)
     return SEC_OUT_OF_MEMORY;
 }
 
-static int create_copy_desc(sec_context_t *crypto_pdb)
+static int create_copy_desc(sec_context_t *ctx)
 {
-    SEC_INFO(" Called create_copy_desc");
-    return SEC_OUT_OF_MEMORY;
-}
+    int i = 0;
+    SEC_INFO("Creating NULL auth/enc descriptor");
+    ASSERT(0);
+#if 1
+    *((uint32_t*)(ctx->sh_desc) + i++) = 0xBA800008;    // shared descriptor header; no sharing
+    *((uint32_t*)(ctx->sh_desc) + i++) = 0xA80AFB04;    // Put SEQ-IN-Length into VSOL
+    *((uint32_t*)(ctx->sh_desc) + i++) = 0x69300000;    // SEQ FIFO STORE
+    *((uint32_t*)(ctx->sh_desc) + i++) = 0xA82A4F04;    // MATH VSIL - imm -> No DEST (to set math size flags)
+    *((uint32_t*)(ctx->sh_desc) + i++) = 0x00000FFF;    // immediate value with maximum permitted length of frame to copy.  I arbitrarily set this to 4095...this can go up to 65535.
+    *((uint32_t*)(ctx->sh_desc) + i++) = 0xA0C108F1;    // HALT with status if the length of the input frame (as in VSIL) is bigger than the length in the immediate value
+    *((uint32_t*)(ctx->sh_desc) + i++) = 0xA80AF004;    // MATH ADD VSIL + 0 -> MATH 0 (to put the length of the input frame into MATH 0)
+    *((uint32_t*)(ctx->sh_desc) + i++) = 0x70820000;    // Move Length from Deco Alignment block to Output FIFO using length from MATH 0
+#else
+    *((uint32_t*)ctx->sh_desc + i++) = 0xB8801011;    /* Shared Descriptor Header */
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA8084A04;    /* CMD MATH: VSIL <- SEQ_IN_Length + Immediate(0x0) = Data_length */
+    *((uint32_t*)ctx->sh_desc + i++) = 0x00000000;    /* Immediate    = 0x0 */
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA8084B04;    /* CMD MATH: VSOL <- SEQ_IN_Length + Immediate(0x0) = Data_length */
+    *((uint32_t*)ctx->sh_desc + i++) = 0x00000000;    /* Immediate    = 0x0 */
+
+    *((uint32_t*)ctx->sh_desc + i++) = 0x16860800;    /* CMD LOAD: Disable Automatic Info FIFO entries */
+    *((uint32_t*)ctx->sh_desc + i++) = 0x2B120000;    /* CMD SEQ FIFO LOAD */
+
+    *((uint32_t*)ctx->sh_desc + i++) = 0x69300000;    /* CMD SEQ FIFO STORE */
+    *((uint32_t*)ctx->sh_desc + i++) = 0x16860400;    /* CMD LOAD: Enable Automatic Info FIFO entries */
+
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA80C4104;    /* CMD MATH: Math_reg_1 <- ZERO + Immediate(Move_size) = Move_size */
+    *((uint32_t*)ctx->sh_desc + i++) = 0x00000008;    /* Immediate = Move_size -> 8 bytes */
+
+    /* LOOP */
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA82A1F04;    /* CMD MATH: VSIL - Math_reg1 */
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA0020C04;    /* CMD JUMP: if Z or N; Jump forward 4 [last chunk of data - JMP to 19] */
+    *((uint32_t*)ctx->sh_desc + i++) = 0x78820008;    /* CMD MOVE: Move Data from FIFO IN to FIFO out (length:Move_size -> 8 bytes) */
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA82A1A04;    /* CMD MATH: VSIL = VSIL - Math_Reg1 (Remaining Len - Move Len -> Remaining Length) */
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA00000FC;    /* CMD JUMP: LOOP - jump backward 4 */
+    *((uint32_t*)ctx->sh_desc + i++) = 0x7C820008; /* CMD MOVE: Move Data from FIFO IN to FIFO out with FLUSH set */
 #endif
+    SEC_PDCP_DUMP_DESC(ctx->sh_desc);
+
+    return SEC_SUCCESS;
+}
+#endif // SEC_HW_VERSION_3_1
 /*==================================================================================================
                                      GLOBAL FUNCTIONS
 ==================================================================================================*/
+
 int sec_pdcp_context_set_crypto_info(sec_context_t *ctx,
                                      const sec_pdcp_context_info_t *crypto_info)
 {
@@ -1473,7 +1512,7 @@ int sec_pdcp_context_update_descriptor(sec_context_t *ctx,
 
     return ret;
 }
-#else
+#else // SEC_HW_VERSION_3_1
 int sec_pdcp_context_update_descriptor(sec_context_t *ctx,
                                        sec_job_t *job,
                                        sec_descriptor_t *descriptor,
@@ -1486,8 +1525,7 @@ int sec_pdcp_context_update_descriptor(sec_context_t *ctx,
 
     PDCP_INIT_JD(descriptor);
     PDCP_JD_SET_SD(descriptor,
-                   phys_addr,
-                   PDCP_SD_LEN);
+                   phys_addr);
 
     phys_addr = sec_vtop(job->out_packet->address);
     PDCP_JD_SET_OUT_PTR(descriptor,
@@ -1532,7 +1570,7 @@ static create_desc_fp u_plane_create_desc[NUM_CIPHER_ALGS] ={
         create_u_plane_hw_acc_desc,   create_u_plane_hw_acc_desc,         create_copy_desc
 };
 
-#endif
+#endif // SEC_HW_VERSION_3_1
 /*================================================================================================*/
 
 #ifdef __cplusplus

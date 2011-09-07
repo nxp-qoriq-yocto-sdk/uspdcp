@@ -72,7 +72,7 @@ extern "C"{
 
 /** @brief Reads SEC configuration data from DTS.
  * @param [in]      job_ring_number     Number of job rings to be configured
- * @param [in,out]  job_rings           Job ring array to be updated with configuration data. 
+ * @param [in,out]  job_rings           Job ring array to be updated with configuration data.
  *
  * @retval #SEC_SUCCESS                 for successful execution
  * @retval #SEC_INVALID_INPUT_PARAM     in case of invalid configuration found in DTS
@@ -80,11 +80,11 @@ extern "C"{
 int sec_configure(int job_ring_number, struct sec_job_ring_t *job_rings);
 
 /** @brief Obtains file handle to access UIO device for a specific job ring.
- *  The file handle can be used to: 
+ *  The file handle can be used to:
  *  - receive job done interrupts(read number of IRQs)
- *  - request SEC engine reset (write #value TODO)
+ *  - request SEC engine reset
  *
- * @param [in,out]  job_ring            Job ring 
+ * @param [in,out]  job_ring            Job ring
  *
  * @retval #SEC_SUCCESS                 for successful execution
  * @retval #SEC_INVALID_INPUT_PARAM     in case of invalid configuration found in DTS

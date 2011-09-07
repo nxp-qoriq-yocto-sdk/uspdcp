@@ -98,9 +98,8 @@ extern "C" {
 #define JOB_RING_POLL_UNLIMITED -1
 #define JOB_RING_POLL_LIMIT      5
 
-// Alignment for input/output packets allocated from DMA-memory zone
+// Alignment in bytes for input/output packets allocated from DMA-memory zone
 #define BUFFER_ALIGNEMENT 32
-#define BUFFER_SIZE       128
 // Max length in bytes for a confidentiality /integrity key.
 #define MAX_KEY_LENGTH    32
 
@@ -335,7 +334,7 @@ static uint8_t snow_f8_enc_data_in[] = {
     0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
     0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
     0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-   
+
 
     0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
     0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
@@ -719,7 +718,7 @@ static uint8_t aes_cmac_dec_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
 
 static uint8_t aes_cmac_auth_dec_key[] = {0xd3,0xc5,0xd5,0x92,0x32,0x7f,0xb1,0x1c,
                                           0x40,0x35,0xc6,0x68,0x0a,0xf8,0xc6,0xd1};
-    
+
 // PDCP header
 static uint8_t aes_cmac_dec_pdcp_hdr[] = { 0x48};
 
@@ -1035,10 +1034,6 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
            sizeof(test_data_in));
 
     (*in_packet)->length = sizeof(test_data_in) + PDCP_HEADER_LENGTH + (*in_packet)->offset;
-    // TODO: finalize this...
-    // Need extra 4 bytes at end of input/output packet for MAC-I code, in case of PDCP control-plane packets
-    // Need  extra 8 bytes at start of input packet  for Initialization Vector (IV) when testing
-    // PDCP control-plane with AES CMAC algorithm.
     assert((*in_packet)->length + 4 <= PDCP_BUFFER_SIZE);
 
     (*out_packet)->length = sizeof(test_data_in) + PDCP_HEADER_LENGTH + (*out_packet)->offset;
@@ -1365,7 +1360,7 @@ static void* pdcp_thread_routine(void* config)
 
     printf("Sent %d packets. Received %d packets.\nStart Time %d sec %d usec."
             "End Time %d sec %d usec.\n",
-            total_packets_sent, total_packets_received, (int)start_time.tv_sec, (int)start_time.tv_usec, 
+            total_packets_sent, total_packets_received, (int)start_time.tv_sec, (int)start_time.tv_usec,
             (int)end_time.tv_sec, (int)end_time.tv_usec);
 
     // signal to main thread that the work is done
@@ -1446,7 +1441,7 @@ static int setup_sec_environment(void)
         pdcp_ul_contexts[i].input_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT,
                                                              sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_UL);
         // validate that the address of the freshly allocated buffer falls in the second memory are.
-        pdcp_ul_contexts[i].output_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT, 
+        pdcp_ul_contexts[i].output_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT,
                                                               sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_UL);
 
         pdcp_ul_contexts[i].pdcp_ctx_cfg_data.cipher_key = dma_mem_memalign(BUFFER_ALIGNEMENT,
@@ -1517,14 +1512,14 @@ static int cleanup_sec_environment(void)
 
     for (i = 0; i < PDCP_CONTEXT_NUMBER; i++)
     {
-        dma_mem_free(pdcp_dl_contexts[i].input_buffers,  BUFFER_SIZE * PACKET_NUMBER_PER_CTX_DL);
-        dma_mem_free(pdcp_dl_contexts[i].output_buffers,  BUFFER_SIZE * PACKET_NUMBER_PER_CTX_DL);
+        dma_mem_free(pdcp_dl_contexts[i].input_buffers, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_DL);
+        dma_mem_free(pdcp_dl_contexts[i].output_buffers, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_DL);
 
         dma_mem_free(pdcp_dl_contexts[i].pdcp_ctx_cfg_data.cipher_key, MAX_KEY_LENGTH);
         dma_mem_free(pdcp_dl_contexts[i].pdcp_ctx_cfg_data.integrity_key, MAX_KEY_LENGTH);
 
-        dma_mem_free(pdcp_ul_contexts[i].input_buffers,  BUFFER_SIZE * PACKET_NUMBER_PER_CTX_UL);
-        dma_mem_free(pdcp_ul_contexts[i].output_buffers,  BUFFER_SIZE * PACKET_NUMBER_PER_CTX_UL);
+        dma_mem_free(pdcp_ul_contexts[i].input_buffers, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_UL);
+        dma_mem_free(pdcp_ul_contexts[i].output_buffers, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_UL);
 
         dma_mem_free(pdcp_ul_contexts[i].pdcp_ctx_cfg_data.cipher_key, MAX_KEY_LENGTH);
         dma_mem_free(pdcp_ul_contexts[i].pdcp_ctx_cfg_data.integrity_key, MAX_KEY_LENGTH);
