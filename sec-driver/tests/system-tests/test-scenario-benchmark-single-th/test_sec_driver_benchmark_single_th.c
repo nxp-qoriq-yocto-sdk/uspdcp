@@ -1356,7 +1356,7 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
 
     // Needed 8 bytes before actual start of PDCP packet, for PDCP control-plane + AES algo testing.
     (*in_packet)->offset = 8;
-    (*in_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
+    //(*in_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
 
     assert(pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].usage == PDCP_BUFFER_FREE);
     *out_packet = &(pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].pdcp_packet);
@@ -1368,7 +1368,7 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
 
     // Needed 8 bytes before actual start of PDCP packet, for PDCP control-plane + AES algo testing.
     (*out_packet)->offset = 8;
-    (*out_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
+    //(*out_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
 
     // copy PDCP header
     memcpy((*in_packet)->address + (*in_packet)->offset, test_pdcp_hdr, sizeof(test_pdcp_hdr));

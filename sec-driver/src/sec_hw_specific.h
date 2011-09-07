@@ -658,12 +658,12 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 
 #define PDCP_JD_SET_IN_PTR(descriptor,phys_addr,offset,length) {    \
     (descriptor)->seq_in_ptr = (phys_addr) + (offset);              \
-    (descriptor)->in_ext_length = (length) - (offset);              \
+    (descriptor)->in_ext_length = (length);                         \
 }
 
 #define PDCP_JD_SET_OUT_PTR(descriptor,phys_addr,offset,length) {   \
     (descriptor)->seq_out_ptr = (phys_addr) + (offset);             \
-    (descriptor)->out_ext_length = (length) - (offset);             \
+    (descriptor)->out_ext_length = (length);                        \
 }
 
 #define SEC_PDCP_SH_SET_PROT_DIR(descriptor,dir)    ( (descriptor)->protocol.command.field.optype = \

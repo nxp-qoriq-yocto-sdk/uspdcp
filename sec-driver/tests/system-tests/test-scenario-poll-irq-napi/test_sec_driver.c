@@ -505,7 +505,7 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
 
     // Needed 8 bytes before actual start of PDCP packet, for PDCP control-plane + AES algo testing.
     (*in_packet)->offset = test_packet_offset;
-    (*in_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
+    //(*in_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
 
     assert(pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].usage == PDCP_BUFFER_FREE);
     *out_packet = &(pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].pdcp_packet);
@@ -517,7 +517,7 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
 
     // Needed 8 bytes before actual start of PDCP packet, for PDCP control-plane + AES algo testing.
     (*out_packet)->offset = test_packet_offset;
-    (*out_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
+    //(*out_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
 
     // copy PDCP header
     memcpy((*in_packet)->address + (*in_packet)->offset, test_pdcp_hdr, sizeof(test_pdcp_hdr));
@@ -526,7 +526,7 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
            test_data_in,
            sizeof(test_data_in));
 
-    (*in_packet)->length = sizeof(test_data_in) + PDCP_HEADER_LENGTH + (*in_packet)->offset;
+    (*in_packet)->length = sizeof(test_data_in) + PDCP_HEADER_LENGTH; // + (*in_packet)->offset;
 #ifdef SEC_HW_VERSION_3_1
 #ifdef TEST_PDCP_CONTROL_PLANE_DOUBLE_PASS_ENC
     // Need extra 4 bytes at end of input/output packet for MAC-I code, in case of PDCP control-plane packets
@@ -538,7 +538,7 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
     // PDCP control-plane with AES CMAC algorithm, which is captured in 'offset' field.
     assert((*in_packet)->length <= PDCP_BUFFER_SIZE);
 
-    (*out_packet)->length = sizeof(test_data_out) + PDCP_HEADER_LENGTH + (*out_packet)->offset;
+    (*out_packet)->length = sizeof(test_data_out) + PDCP_HEADER_LENGTH; //+ (*out_packet)->offset;
 #ifdef SEC_HW_VERSION_3_1
 #ifdef TEST_PDCP_CONTROL_PLANE_DOUBLE_PASS_ENC
     // Need extra 4 bytes at end of input/output packet for MAC-I code, in case of PDCP control-plane packets

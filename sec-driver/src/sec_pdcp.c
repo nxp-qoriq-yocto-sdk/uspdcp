@@ -1545,7 +1545,7 @@ int sec_pdcp_context_update_descriptor(sec_context_t *ctx,
                    (uint32_t)(job->in_packet->address),
                    job->in_packet->length,
                    job->in_packet->offset);
-        for(; i < job->in_packet->length - job->in_packet->offset; i++ )
+        for(; i < job->in_packet->length; i++ )
         {
             SEC_DEBUG("0x%x",*(job->in_packet->address + job->in_packet->offset + i));
         }

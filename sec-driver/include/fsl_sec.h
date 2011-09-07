@@ -204,11 +204,12 @@ typedef struct sec_packet_s
     uint8_t         *address;       /**< The virtual address of the buffer. */
     uint32_t        offset;         /**< Offset within packet from where SEC will access (read or write) data. */
     uint32_t        length;         /**< Packet length. */
-    packet_type_t   scatter_gather; /**< A value of #SEC_SCATTER_GATHER_BUFFER indicates the packet is
-                                         passed as a scatter/gather table.
-                                         A value of #SEC_CONTIGUOUS_BUFFER means the packet is contiguous
-                                         in memory and is accessible at the given address.
-                                         @todo export format for link table.*/
+    uint32_t        tail_offset;    /**< Offset from buffer head where tail room is reserved. */
+    uint32_t        total_length;   /**< Total Data Length in all fragements including the parent buf.
+                                         This is valid only when num_frags is non 0 */
+    uint32_t        num_fragments;  /**< Is set only in the first fragment from a s/g packet.
+                                         It excludes the parent buffer. */
+
 }sec_packet_t;
 
 
