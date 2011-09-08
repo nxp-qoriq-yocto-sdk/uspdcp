@@ -77,11 +77,11 @@
 /** Test if job ring is full. Used job ring capacity to be 32 = a power of 2.
  * A job ring is full when there are 24 entries, which is the maximum
  * capacity of SEC's hardware FIFO. */
-#ifdef SEC_HW_VERSION_3_1
+//#ifdef SEC_HW_VERSION_3_1
 #define SEC_JOB_RING_IS_FULL            FIFO_IS_FULL
-#else
-#define SEC_JOB_RING_IS_FULL(jr)        ( hw_get_available_slots((jr)) == 0 )
-#endif
+//#else
+//#define SEC_JOB_RING_IS_FULL(jr)        ( hw_get_available_slots((jr)) == 0 )
+//#endif
 
 /*==============================================================================
                                     ENUMS

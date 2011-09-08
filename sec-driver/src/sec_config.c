@@ -367,12 +367,22 @@ int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
 
         for_each_compatible_node(child_node, NULL, "fsl,p4080-sec4.0-job-ring")
         {
+#if 1
             prop = of_get_property(child_node,"kernel-user-space-flag",&len);
             if( prop == NULL )
             {
                 SEC_ERROR("Error reading kernel-user-space-flag property from DTS!");
                 return SEC_INVALID_INPUT_PARAM;
             }
+#else
+            prop = of_get_property(child_node,"user-space-ring",NULL);
+            if( prop == NULL )
+            {
+                SEC_ERROR("Error reading user-space-ring property from DTS!");
+                return SEC_INVALID_INPUT_PARAM;
+
+            }
+#endif
             /* TODO: This code assumes that the JRs are added in order in DTS.
              * The same assumption is done in kernel driver, though it's not
              * correct

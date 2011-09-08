@@ -453,6 +453,7 @@ static int release_pdcp_buffers(pdcp_context_t * pdcp_context,
     // was received.
     if (status == SEC_STATUS_LAST_OVERDUE)
     {
+        test_printf("%p",pdcp_context->sec_ctx);
         assert(pdcp_context->usage == PDCP_CONTEXT_MARKED_FOR_DELETION ||
         pdcp_context->usage == PDCP_CONTEXT_MARKED_FOR_DELETION_LAST_IN_FLIGHT_PACKET);
 
@@ -729,7 +730,7 @@ static int delete_context(pdcp_context_t * pdcp_context, int *no_of_used_pdcp_co
 
     assert(pdcp_context != NULL);
     assert(no_of_used_pdcp_contexts != NULL);
-
+    test_printf("%d",pdcp_context->usage);
     // Try to delete the context from SEC driver and also
     // release the UA's context
     test_printf("trying to delete ctx id: %d",pdcp_context->id);
@@ -838,8 +839,8 @@ static int is_packet_valid(pdcp_context_t *pdcp_context,
 
     if(user_plane == PDCP_DATA_PLANE)
     {
-        assert(in_packet->length == sizeof(test_data_in) + PDCP_HEADER_LENGTH + in_packet->offset);
-        assert(out_packet->length == sizeof(test_data_out) + PDCP_HEADER_LENGTH + out_packet->offset);
+        assert(in_packet->length == sizeof(test_data_in) + PDCP_HEADER_LENGTH );
+        assert(out_packet->length == sizeof(test_data_out) + PDCP_HEADER_LENGTH );
 
         test_pass = (0 == memcmp(out_packet->address + out_packet->offset,
                                  test_pdcp_hdr,
@@ -1050,7 +1051,7 @@ static void* pdcp_thread_routine(void* config)
                    test_auth_key_len);
             pdcp_context->pdcp_ctx_cfg_data.integrity_key_len = test_auth_key_len;
         }
-#if 0
+
         if(is_last_context)
         {
             if(pdcp_context->pdcp_ctx_cfg_data.user_plane == PDCP_CONTROL_PLANE)
@@ -1062,7 +1063,7 @@ static void* pdcp_thread_routine(void* config)
                 pdcp_context->pdcp_ctx_cfg_data.integrity_key_len = 0;
             }
         }
-#endif
+
         pdcp_context->thread_id = th_config_local->tid;
 
         // create a SEC context in SEC driver

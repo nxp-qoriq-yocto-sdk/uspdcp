@@ -347,9 +347,12 @@ extern "C"{
  *
  * @note Round up to nearest power of 2 for optimized update
  * of producer/consumer indexes of each job ring
+ *
+ * TODO: Should set to 750, according to the calculation above, but
+ * the JR size must be power of 2, thus the next closest value must
+ * be chosen (i.e. 1024)
  */
 #define SEC_JOB_RING_SIZE       32
-//#define SEC_JOB_RING_HW_SIZE    SEC_JOB_RING_SIZE
 
 #else
 

@@ -529,6 +529,7 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
     SEC_DEBUG("Jr[%p] pi[%d] ci[%d].Jobs submitted %d.Jobs to notify %d",
               job_ring, job_ring->pidx, job_ring->cidx,
               number_of_jobs_available, jobs_no_to_notify);
+    SEC_DEBUG("head: %d, tail %d",head,tail);
     while(jobs_no_to_notify > notified_packets_no
 #ifdef SEC_HW_VERSION_4_4
             && (SEC_JOB_RING_NUMBER_OF_ITEMS(SEC_JOB_RING_SIZE,head, tail) >= 1 )
@@ -693,7 +694,7 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
         // it does not care about any other packet status.
         if(sec_context->state == SEC_CONTEXT_RETIRING)
         {
-            SEC_DEBUG("context retiring");
+            SEC_DEBUG("%p",sec_context);
             // at this point, PI per context is frozen, context is retiring,
             // no more packets can be submitted for it.
             status = (CONTEXT_GET_PACKETS_NO(sec_context) > 1) ?
@@ -1672,8 +1673,9 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
         return SEC_JR_IS_FULL;
     }
 #else
-    if( SEC_JOB_RING_IS_FULL(job_ring) ||
-        SEC_JOB_RING_NUMBER_OF_ITEMS(SEC_JOB_RING_SIZE,job_ring->pidx + 1,job_ring->cidx) <= 0)
+    if( hw_get_available_slots(job_ring) == 0 ||
+        SEC_JOB_RING_IS_FULL(job_ring->pidx, job_ring->cidx,
+                             SEC_JOB_RING_SIZE,0 ))
     {
         SEC_DEBUG("Jr[%p] pi[%d] ci[%d].Job Ring is full.",
                           job_ring, job_ring->pidx, job_ring->cidx);

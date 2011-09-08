@@ -1438,10 +1438,11 @@ static int create_copy_desc(sec_context_t *ctx)
 {
     int i = 0;
     SEC_INFO("Creating NULL auth/enc descriptor");
-    ASSERT(0);
+    //ASSERT(0);
 #if 1
-    *((uint32_t*)(ctx->sh_desc) + i++) = 0xBA800008;    // shared descriptor header; no sharing
-    *((uint32_t*)(ctx->sh_desc) + i++) = 0xA80AFB04;    // Put SEQ-IN-Length into VSOL
+    //*((uint32_t*)(ctx->sh_desc) + i++) = 0xBA800008;    // shared descriptor header; no sharing
+    *((uint32_t*)(ctx->sh_desc) + i++) = 0xBA801008;
+    *((uint32_t*)(ctx->sh_desc) + i++) = 0xA80AFB04;    // Set VSOL=MATH0 + VSIL
     *((uint32_t*)(ctx->sh_desc) + i++) = 0x69300000;    // SEQ FIFO STORE
     *((uint32_t*)(ctx->sh_desc) + i++) = 0xA82A4F04;    // MATH VSIL - imm -> No DEST (to set math size flags)
     *((uint32_t*)(ctx->sh_desc) + i++) = 0x00000FFF;    // immediate value with maximum permitted length of frame to copy.  I arbitrarily set this to 4095...this can go up to 65535.
