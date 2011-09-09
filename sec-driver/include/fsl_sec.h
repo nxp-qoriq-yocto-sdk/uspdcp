@@ -219,7 +219,7 @@ typedef struct sec_job_ring_descriptor_s
 }sec_job_ring_descriptor_t;
 
 /**
-    @}  //end SecUserSpaceDriverFunctions
+    @}
  */
 
 /**
@@ -326,7 +326,7 @@ typedef struct sec_config_s
 }sec_config_t;
 
 /**
-    @}  //end SecUserSpaceDriverFunctions
+    @}
  */
 
 /*==================================================================================================
@@ -394,7 +394,7 @@ sec_return_code_t sec_release();
 
 
 /**
-    @}  //end SecUserSpaceDriverManagementFunctions
+    @}
  */
 
 
@@ -464,7 +464,7 @@ sec_return_code_t sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle);
 
 
 /**
-    @}  //end SecUserSpaceDriverContextFunctions
+    @}
  */
 
 /**
@@ -623,7 +623,7 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
                                      ua_context_handle_t ua_ctx_handle);
 
 /**
-    @}  //end SecUserSpaceDriverPacketFunctions
+    @}
  */
 
 /**
@@ -666,7 +666,7 @@ const char* sec_get_status_message(sec_status_t status);
 const char* sec_get_error_message(sec_return_code_t return_code);
 
 /**
-    @}  //end SecUserSpaceDriverErrorFunctions
+    @}
  */
 
 /*================================================================================================*/

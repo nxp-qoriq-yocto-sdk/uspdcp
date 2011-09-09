@@ -1,8 +1,8 @@
 ----------------------------------------------------------------------------------------------------
 ABOUT THIS FILE
 ----------------------------------------------------------------------------------------------------
-Date:	29 July 2011
-SEC User Space Driver version:	1.0
+Date:	09 September 2011
+SEC User Space Driver version:	2.0
 
 This file contains SEC User Space Driver-related information about versioning, hardware, software,
 and tools dependencies, as well as known issues and a history of changes.
@@ -10,30 +10,43 @@ and tools dependencies, as well as known issues and a history of changes.
 SEC USER SPACE DRIVER - HARDWARE AND SOFTWARE DEPENDENCIES
 ----------------------------------------------------------------------------------------------------
 Hardware:
-	- P2020RDB board
+	- P1010RDB board
 
 Software:
-    - Freescale P2020RDB SDK
-    - Linux kernel 2.6.32
+    - Freescale P1010RDB SDK
+    - Linux kernel 2.6.35
 
 Tools:
-	- GNU toolchain for Freescale P2020 hardware platform: gcc-4.3.74-eglibc-2.8.74-dp-2
+	- GNU toolchain for Freescale P1010 hardware platform: gcc-4.5.55-eglibc-2.11.55
 
 ----------------------------------------------------------------------------------------------------
 SEC USER SPACE DRIVER - LIMITATIONS
 ----------------------------------------------------------------------------------------------------
 1. Scatter/gather format for packets is not implemented.
+
 2. 36 bit physical address support is not tested. Standard P2020RDB has only
 1GB DDR.
+
+3. PDCP Data Plane and PDCP User Plane do not support NULL algorithm (EEA0/EIA0)
+
+4. Race condition if using more than 3 PDCP contexts
+
+5. NAPI and interrupt mechanisms for retrieving packets is not tested
+
+6. Benchmark testing not performed
+
 ----------------------------------------------------------------------------------------------------
 SEC USER SPACE DRIVER - ERRATA
 ----------------------------------------------------------------------------------------------------
-1. Implementation of PDCP data plane and control plane with NULL algorithm is based on memcpy.
-   Reason is that SEC 3.1 hardware accelerator does not support advanced features to allow doing 
-   PDCP NULL processing in hardware.
+
 ----------------------------------------------------------------------------------------------------
 SEC USER SPACE DRIVER - CHANGELOG
 ----------------------------------------------------------------------------------------------------
+Version 2.0:
+	- First release of SEC User Space driver on P1010 RDB.
+	- Implements PDCP data plane and control plane, with following algorithms: SNOW, AES.
+	- Allows polling method for retrieving processed packets: 
+	- Requires an external memory management mechanism.
 
 Version 1.0:
 	- First release of SEC User Space driver on P2020 RDB.
