@@ -13,8 +13,8 @@ Hardware:
 	- P1010RDB board
 
 Software:
-    - Freescale P1010RDB SDK
-    - Linux kernel 2.6.35
+	- Freescale P1010RDB SDK
+	- Linux kernel 2.6.35
 
 Tools:
 	- GNU toolchain for Freescale P1010 hardware platform: gcc-4.5.55-eglibc-2.11.55
@@ -24,7 +24,7 @@ SEC USER SPACE DRIVER - LIMITATIONS
 ----------------------------------------------------------------------------------------------------
 1. Scatter/gather format for packets is not implemented.
 
-2. 36 bit physical address support is not tested. Standard P2020RDB has only
+2. 36 bit physical address support is not tested. Standard P1010RDB has only
 1GB DDR.
 
 3. PDCP Data Plane and PDCP User Plane do not support NULL algorithm (EEA0/EIA0)
@@ -45,7 +45,7 @@ SEC USER SPACE DRIVER - CHANGELOG
 Version 2.0:
 	- First release of SEC User Space driver on P1010 RDB.
 	- Implements PDCP data plane and control plane, with following algorithms: SNOW, AES.
-	- Allows polling method for retrieving processed packets: 
+	- Allows polling method for retrieving processed packets:
 	- Requires an external memory management mechanism.
 
 Version 1.0:
