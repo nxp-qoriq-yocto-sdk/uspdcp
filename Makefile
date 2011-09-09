@@ -61,7 +61,7 @@ endif
 # ----[ Tools ]----
 MAKE		?= make
 INSTALL		?= install
-CC		:= $(CROSS_COMPILE)gcc
+CC		:= $(CROSS_COMPILE)gcc -g
 LD		:= $(CROSS_COMPILE)ld
 AR		:= $(CROSS_COMPILE)ar
 

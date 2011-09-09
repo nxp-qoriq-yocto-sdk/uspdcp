@@ -1419,61 +1419,31 @@ static int create_u_plane_hw_acc_desc(sec_context_t *ctx)
 static int create_mixed_desc(sec_context_t *crypto_pdb)
 {
     SEC_INFO(" Called create_mixed_desc");
-    return SEC_OUT_OF_MEMORY;
+    ASSERT(0);
+
+    return SEC_SUCCESS;
 }
 
 static int create_auth_only_desc(sec_context_t *crypto_pdb)
 {
     SEC_INFO(" Called create_auth_only_desc");
-    return SEC_OUT_OF_MEMORY;
+    ASSERT(0);
+
+    return SEC_SUCCESS;
 }
 
 static int create_cipher_only_desc(sec_context_t *crypto_pdb)
 {
     SEC_INFO(" Called create_cipher_only_desc");
-    return SEC_OUT_OF_MEMORY;
+    ASSERT(0);
+
+    return SEC_SUCCESS;
 }
 
 static int create_copy_desc(sec_context_t *ctx)
 {
-    int i = 0;
-    SEC_INFO("Creating NULL auth/enc descriptor");
-    //ASSERT(0);
-#if 1
-    //*((uint32_t*)(ctx->sh_desc) + i++) = 0xBA800008;    // shared descriptor header; no sharing
-    *((uint32_t*)(ctx->sh_desc) + i++) = 0xBA801008;
-    *((uint32_t*)(ctx->sh_desc) + i++) = 0xA80AFB04;    // Set VSOL=MATH0 + VSIL
-    *((uint32_t*)(ctx->sh_desc) + i++) = 0x69300000;    // SEQ FIFO STORE
-    *((uint32_t*)(ctx->sh_desc) + i++) = 0xA82A4F04;    // MATH VSIL - imm -> No DEST (to set math size flags)
-    *((uint32_t*)(ctx->sh_desc) + i++) = 0x00000FFF;    // immediate value with maximum permitted length of frame to copy.  I arbitrarily set this to 4095...this can go up to 65535.
-    *((uint32_t*)(ctx->sh_desc) + i++) = 0xA0C108F1;    // HALT with status if the length of the input frame (as in VSIL) is bigger than the length in the immediate value
-    *((uint32_t*)(ctx->sh_desc) + i++) = 0xA80AF004;    // MATH ADD VSIL + 0 -> MATH 0 (to put the length of the input frame into MATH 0)
-    *((uint32_t*)(ctx->sh_desc) + i++) = 0x70820000;    // Move Length from Deco Alignment block to Output FIFO using length from MATH 0
-#else
-    *((uint32_t*)ctx->sh_desc + i++) = 0xB8801011;    /* Shared Descriptor Header */
-    *((uint32_t*)ctx->sh_desc + i++) = 0xA8084A04;    /* CMD MATH: VSIL <- SEQ_IN_Length + Immediate(0x0) = Data_length */
-    *((uint32_t*)ctx->sh_desc + i++) = 0x00000000;    /* Immediate    = 0x0 */
-    *((uint32_t*)ctx->sh_desc + i++) = 0xA8084B04;    /* CMD MATH: VSOL <- SEQ_IN_Length + Immediate(0x0) = Data_length */
-    *((uint32_t*)ctx->sh_desc + i++) = 0x00000000;    /* Immediate    = 0x0 */
-
-    *((uint32_t*)ctx->sh_desc + i++) = 0x16860800;    /* CMD LOAD: Disable Automatic Info FIFO entries */
-    *((uint32_t*)ctx->sh_desc + i++) = 0x2B120000;    /* CMD SEQ FIFO LOAD */
-
-    *((uint32_t*)ctx->sh_desc + i++) = 0x69300000;    /* CMD SEQ FIFO STORE */
-    *((uint32_t*)ctx->sh_desc + i++) = 0x16860400;    /* CMD LOAD: Enable Automatic Info FIFO entries */
-
-    *((uint32_t*)ctx->sh_desc + i++) = 0xA80C4104;    /* CMD MATH: Math_reg_1 <- ZERO + Immediate(Move_size) = Move_size */
-    *((uint32_t*)ctx->sh_desc + i++) = 0x00000008;    /* Immediate = Move_size -> 8 bytes */
-
-    /* LOOP */
-    *((uint32_t*)ctx->sh_desc + i++) = 0xA82A1F04;    /* CMD MATH: VSIL - Math_reg1 */
-    *((uint32_t*)ctx->sh_desc + i++) = 0xA0020C04;    /* CMD JUMP: if Z or N; Jump forward 4 [last chunk of data - JMP to 19] */
-    *((uint32_t*)ctx->sh_desc + i++) = 0x78820008;    /* CMD MOVE: Move Data from FIFO IN to FIFO out (length:Move_size -> 8 bytes) */
-    *((uint32_t*)ctx->sh_desc + i++) = 0xA82A1A04;    /* CMD MATH: VSIL = VSIL - Math_Reg1 (Remaining Len - Move Len -> Remaining Length) */
-    *((uint32_t*)ctx->sh_desc + i++) = 0xA00000FC;    /* CMD JUMP: LOOP - jump backward 4 */
-    *((uint32_t*)ctx->sh_desc + i++) = 0x7C820008; /* CMD MOVE: Move Data from FIFO IN to FIFO out with FLUSH set */
-#endif
-    SEC_PDCP_DUMP_DESC(ctx->sh_desc);
+    SEC_INFO("Called create_copy_desc");
+    ASSERT(0);
 
     return SEC_SUCCESS;
 }

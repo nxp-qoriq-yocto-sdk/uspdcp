@@ -326,7 +326,7 @@ extern "C"{
  * SEC_DRIVER_LOG_INFO  - log errors and info messages
  * SEC_DRIVER_LOG_DEBUG - log errors, info and debug messages
  */
-#define SEC_DRIVER_LOGGING_LEVEL SEC_DRIVER_LOG_DEBUG
+#define SEC_DRIVER_LOGGING_LEVEL SEC_DRIVER_LOG_ERROR
 
 /***************************************/
 /* SEC JOB RING related configuration. */
