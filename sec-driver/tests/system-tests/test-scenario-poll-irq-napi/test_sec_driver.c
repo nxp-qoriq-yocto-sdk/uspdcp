@@ -61,8 +61,13 @@ extern "C" {
 #define JOB_RING_NUMBER              2
 
 // Number of worker threads created by this application
+#ifdef SEC_HW_VERSION_3_1
 // One thread is producer on JR 1 and consumer on JR 2 (PDCP UL processing).
 // The other thread is producer on JR 2 and consumer on JR 1 (PDCP DL processing).
+#else
+// One thread is producer on JR 1 and consumer on JR 1 (PDCP UL processing).
+// The other thread is producer on JR 2 and consumer on JR 2 (PDCP DL processing).
+#endif
 #define THREADS_NUMBER               2
 
 // The size of a PDCP input buffer.
@@ -514,6 +519,8 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
     pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].usage = PDCP_BUFFER_USED;
     (*out_packet)->address = &(pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].buffer[0]);
 
+    *((uint8_t*)((*out_packet)->address)) = pdcp_context->id;
+
     //out_packet->offset = pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].offset;
 
     // Needed 8 bytes before actual start of PDCP packet, for PDCP control-plane + AES algo testing.
@@ -901,8 +908,7 @@ static int start_sec_worker_threads(void)
     th_config[0].tid = 0;
     // PDCP UL thread is consumer on JR ID 0 and producer on JR ID 1
     th_config[0].consumer_job_ring_id = 0;
-    //th_config[0].producer_job_ring_id = 1;
-    th_config[0].producer_job_ring_id = 0;
+    th_config[0].producer_job_ring_id = 1;
     th_config[0].pdcp_contexts = &pdcp_ul_contexts[0];
     th_config[0].no_of_used_pdcp_contexts = &no_of_used_pdcp_ul_contexts;
     th_config[0].no_of_pdcp_contexts_to_test =
@@ -918,8 +924,7 @@ static int start_sec_worker_threads(void)
     th_config[1].tid = 1;
     // PDCP DL thread is consumer on JR ID 1 and producer on JR ID 0
     th_config[1].consumer_job_ring_id = 1;
-    //th_config[1].producer_job_ring_id = 0;
-    th_config[1].producer_job_ring_id = 1;
+    th_config[1].producer_job_ring_id = 0;
     th_config[1].pdcp_contexts = &pdcp_dl_contexts[0];
     th_config[1].no_of_used_pdcp_contexts = &no_of_used_pdcp_dl_contexts;
     th_config[1].no_of_pdcp_contexts_to_test =
@@ -1070,6 +1075,7 @@ static void* pdcp_thread_routine(void* config)
         ret = sec_create_pdcp_context (job_ring_descriptors[th_config_local->producer_job_ring_id].job_ring_handle,
                                        &pdcp_context->pdcp_ctx_cfg_data,
                                        &pdcp_context->sec_ctx);
+        test_printf("sec context %p for context no %d",pdcp_context->sec_ctx,pdcp_context->id);
         if (ret != SEC_SUCCESS)
         {
             test_printf("thread #%d:producer: sec_create_pdcp_context return error %d for PDCP context no %d \n",
@@ -1320,9 +1326,11 @@ static int setup_sec_environment(void)
 //    sec_config_data.work_mode = SEC_STARTUP_POLLING_MODE;
     sec_config_data.work_mode = SEC_STARTUP_INTERRUPT_MODE;
 #ifdef SEC_HW_VERSION_4_4
+#if (SEC_INT_COALESCING_ENABLE == ON)
     sec_config_data.irq_coalescing_count = IRQ_COALESCING_COUNT;
     sec_config_data.irq_coalescing_timer = IRQ_COALESCING_TIMER;
-#endif
+#endif // SEC_INT_COALESCING_ENABLE == ON
+#endif // SEC_HW_VERSION_4_4
 
     ret = sec_init(&sec_config_data, JOB_RING_NUMBER, &job_ring_descriptors);
     if (ret != SEC_SUCCESS)

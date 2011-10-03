@@ -72,11 +72,11 @@
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CMAC_DEC
 
 // Test data plane PDCP with NULL-crypto(EEA0) algorithm set
-#define PDCP_TEST_SCENARIO  PDCP_TEST_DATA_PLANE_NULL_ALGO
+//#define PDCP_TEST_SCENARIO  PDCP_TEST_DATA_PLANE_NULL_ALGO
 
 // Test control plane PDCP with NULL-crypto(EEA0)
 // and NULL-authentication(EIA0) algorithms set
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_NULL_ALGO
+#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_NULL_ALGO
 
 // Test PDCP control plane encapsulation with SNOW F8 ciphering
 // and SNOW F9 authentication
@@ -120,11 +120,9 @@
 // #MIN_PDCP_CONTEXT_NUMBER ... #MAX_PDCP_CONTEXT_NUMBER
 
 // Higher limit for number of PDCP contexts
-//#define MAX_PDCP_CONTEXT_NUMBER         15
+#define MAX_PDCP_CONTEXT_NUMBER         15
 // Lower limit for number of PDCP contexts
-//#define MIN_PDCP_CONTEXT_NUMBER         5
-#define MAX_PDCP_CONTEXT_NUMBER 3
-#define MIN_PDCP_CONTEXT_NUMBER         MAX_PDCP_CONTEXT_NUMBER
+#define MIN_PDCP_CONTEXT_NUMBER         5
 
 // The maximum number of packets processed per context
 // This test application will process a random number of packets per context ranging

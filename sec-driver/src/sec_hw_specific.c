@@ -213,7 +213,9 @@ static inline void hw_handle_jr_err(union hw_error_code hw_error_code)
 int hw_reset_job_ring(sec_job_ring_t *job_ring)
 {
     int ret = 0;
+#ifdef SEC_HW_VERSION_3_1
     uint32_t reg_val = 0;
+#endif
 
     ASSERT(job_ring->register_base_addr != NULL);
 
@@ -221,8 +223,8 @@ int hw_reset_job_ring(sec_job_ring_t *job_ring)
     ret = hw_shutdown_job_ring(job_ring);
     SEC_ASSERT(ret == 0, ret, "Failed resetting job ring in hardware");
 #ifdef SEC_HW_VERSION_3_1
-    // Set done writeback enable at job ring level.
     reg_val = SEC_REG_VAL_CCCR_LO_CDWE;
+    // Set done writeback enable at job ring level.
 
 #if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
     // Set 36-bit addressing if enabled
@@ -253,33 +255,12 @@ int hw_reset_job_ring(sec_job_ring_t *job_ring)
     reg_val = SEC_REG_AESU_IMR_DISABLE_ICE;
     setbits32(job_ring->register_base_addr + SEC_REG_AESU_IMR_LO, reg_val);
 #else // SEC_HW_VERSION_3_1
-#if SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE_POLL
-#if (SEC_INT_COALESCING_ENABLE == ON)
-
-    /* Get the current value of the register */
-    reg_val = GET_JR_REG_LO(JRCR);
-
-    // Enable coalescing
-    reg_val |= JRCR_LO_ICEN_EN;
-
-    // Set descriptor count coalescing
-    reg_val |= (SEC_INTERRUPT_COALESCING_DESCRIPTOR_COUNT_THRESH << JRCR_LO_ICDT_SHIFT);
-
-    // Set coalescing timer value
-    reg_val |=  (SEC_INTERRUPT_COALESCING_TIMER_THRESH << JRCR_LO_ICTT_SHIFT);
-
-    // Write register value
-    SET_JR_REG_LO(JRCR,reg_val)
-#endif // SEC_INT_COALESCING_ENABLE == ON
-#endif // SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE_POLL
-
-
     /* In order to have the HW JR in a workable state
      * after a reset, I need to re-write the input
      * queue size, input start address, output queue
      * size and output start address
      */
-
+    SEC_DEBUG("JRCFG_LO: 0x%x", GET_JR_REG_LO(JRCFG,job_ring));
     // Write the JR input queue size to the HW register
     hw_set_input_ring_size(job_ring,SEC_JOB_RING_SIZE);
 
@@ -308,6 +289,7 @@ int hw_reset_job_ring(sec_job_ring_t *job_ring)
 
     // Set HW write index to 0
     job_ring->hw_pidx = 0;
+
 #endif // SEC_HW_VERSION_3_1
     return 0;
 }
@@ -354,8 +336,8 @@ int hw_shutdown_job_ring(sec_job_ring_t *job_ring)
 int hw_shutdown_job_ring(sec_job_ring_t *job_ring)
 {
     unsigned int timeout = SEC_TIMEOUT;
-    uint32_t    tmp;
-    int usleep_interval = 100;
+    uint32_t    tmp = 0;
+    int usleep_interval = 10;
 
     if(job_ring->register_base_addr == NULL)
     {
@@ -367,13 +349,15 @@ int hw_shutdown_job_ring(sec_job_ring_t *job_ring)
 
     SEC_INFO("Resetting Job ring %d", job_ring->jr_id);
 
-#if SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE
     /*
-     * mask interrupts since we are going to poll
+     * Mask interrupts since we are going to poll
      * for reset completion status
+     * Also, at POR, interrupts are ENABLED on a JR, thus
+     * this is the point where I can disable them without
+     * changing the code logic too much
      */
     uio_job_ring_disable_irqs(job_ring);
-#endif
+
     /* initiate flush (required prior to reset) */
     SET_JR_REG(JRCR,job_ring, JR_REG_JRCR_VAL_RESET);
 
@@ -386,14 +370,15 @@ int hw_shutdown_job_ring(sec_job_ring_t *job_ring)
 
     if( (tmp & JRINT_ERR_HALT_MASK) != JRINT_ERR_HALT_COMPLETE || \
             timeout == 0)
-     {
+    {
         SEC_ERROR("Failed to flush hw job ring with id %d", job_ring->jr_id);
+        SEC_DEBUG("0x%x, %d",tmp, timeout);
 #if SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE_POLL
         /* unmask interrupts */
         uio_job_ring_enable_irqs(job_ring);
 #endif
         return -1;
-     }
+    }
 
     /* Initiate reset */
     timeout = SEC_TIMEOUT;
@@ -409,7 +394,7 @@ int hw_shutdown_job_ring(sec_job_ring_t *job_ring)
      {
          SEC_ERROR("Failed to reset hw job ring with id  %d\n", job_ring->jr_id);
 #if SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE_POLL
-     /* unmask interrupts */
+         /* unmask interrupts */
          uio_job_ring_enable_irqs(job_ring);
 #endif
          return -1;
@@ -701,7 +686,102 @@ int hw_job_ring_error(sec_job_ring_t* job_ring)
     return jrint_error_code;
 }
 
-#endif
+#if (SEC_INT_COALESCING_ENABLE == ON)
+int hw_job_ring_set_coalescing_param(sec_job_ring_t *job_ring,
+                                     uint16_t irq_coalescing_timer,
+                                     uint8_t  irq_coalescing_count)
+{
+    uint32_t reg_val = 0;
+
+    ASSERT(job_ring != NULL);
+
+    if(job_ring->register_base_addr == NULL)
+    {
+        SEC_ERROR("Jr[%p] Jr id %d has register base address NULL."
+                  "Probably driver not properly initialized",
+                  job_ring, job_ring->jr_id);
+        return -1;
+    }
+
+    // Set descriptor count coalescing
+    reg_val |= (irq_coalescing_count << JR_REG_JRCFG_LO_ICDCT_SHIFT);
+
+    // Set coalescing timer value
+    reg_val |=  (irq_coalescing_timer << JR_REG_JRCFG_LO_ICTT_SHIFT);
+
+    // Update parameters in HW
+    SET_JR_REG_LO(JRCFG,job_ring,reg_val);
+
+    SEC_DEBUG("Jr[%p]. Set coalescing params on jr id %d "
+              "(timer: %d, descriptor count: %d",
+              job_ring,
+              job_ring->jr_id,
+              irq_coalescing_timer,
+              irq_coalescing_timer);
+
+    return 0;
+}
+int hw_job_ring_enable_coalescing(sec_job_ring_t *job_ring)
+
+{
+    uint32_t reg_val = 0;
+
+    ASSERT(job_ring != NULL );
+    if(job_ring->register_base_addr == NULL)
+    {
+        SEC_ERROR("Jr[%p] Jr id %d has register base address NULL."
+                  "Probably driver not properly initialized",
+                  job_ring, job_ring->jr_id);
+        return -1;
+    }
+
+    /* Get the current value of the register */
+    reg_val = GET_JR_REG_LO(JRCFG,job_ring);
+
+    // Enable coalescing
+    reg_val |= JR_REG_JRCFG_LO_ICEN_EN;
+
+    //Write in hw
+    SET_JR_REG_LO(JRCFG,job_ring,reg_val);
+
+    SEC_DEBUG("Jr[%p]. Enabled coalescing on jr id %d ",
+              job_ring,
+              job_ring->jr_id);
+
+    return 0;
+}
+
+int hw_job_ring_disable_coalescing(sec_job_ring_t *job_ring)
+{
+    uint32_t reg_val = 0;
+    ASSERT(job_ring != NULL );
+
+    if(job_ring->register_base_addr == NULL)
+    {
+        SEC_ERROR("Jr[%p] Jr id %d has register base address NULL."
+                  "Probably driver not properly initialized",
+                  job_ring, job_ring->jr_id);
+        return -1;
+    }
+
+    /* Get the current value of the register */
+    reg_val = GET_JR_REG_LO(JRCFG,job_ring);
+
+    // Disable coalescing
+    reg_val &= ~JR_REG_JRCFG_LO_ICEN_EN;
+
+    //Write in hw
+    SET_JR_REG_LO(JRCFG,job_ring,reg_val);
+
+    SEC_DEBUG("Jr[%p]. Disabled coalescing on jr id %d ",
+              job_ring,
+              job_ring->jr_id);
+
+    return 0;
+
+}
+#endif // SEC_INT_COALESCING_ENABLE == ON
+#endif // SEC_HW_VERSION_3_1
 /*================================================================================================*/
 
 #ifdef __cplusplus

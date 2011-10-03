@@ -487,6 +487,9 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 
 #define JR_REG_JRCR_VAL_RESET               0x00000001
 
+#define JR_REG_JRCFG_LO_ICTT_SHIFT           0x10
+#define JR_REG_JRCFG_LO_ICDCT_SHIFT          0x08
+#define JR_REG_JRCFG_LO_ICEN_EN              0x02
 
 /******************************************************************
  * Constants for Packet Processing errors
@@ -576,12 +579,13 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 
 #endif
 
-#define hw_remove_one_entry(jr)              hw_remove_entries(jr,1)
+#define hw_remove_one_entry(jr)                 hw_remove_entries(jr,1)
 
-#define hw_remove_entries(jr,no_entries)     SET_JR_REG(ORJR,(jr),(no_entries))
+#define hw_remove_entries(jr,no_entries)        SET_JR_REG(ORJR,(jr),(no_entries))
 
-#define hw_get_available_slots(jr)              GET_JR_REG(IRSA,jr)
 
+//#define hw_get_available_slots(jr)              GET_JR_REG(IRSA,jr)
+#define hw_get_available_slots(jr)              (SEC_JOB_RING_SIZE - GET_JR_REG(ORSFR,jr))
 #define hw_get_no_finished_jobs(jr)             GET_JR_REG(ORSFR, jr)
 
 
@@ -612,10 +616,9 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 /******************************************************************
  * Macros manipulating descriptors
  *****************************************************************/
-#define PDCP_JD_SET_SD(descriptor,ptr)           {              \
+#define PDCP_JD_SET_SD(descriptor,ptr,len)           {          \
     (descriptor)->sd_ptr = (ptr);                               \
-    (descriptor)->deschdr.command.jd.shr_desc_len =             \
-        SEC_PDCP_GET_DESC_LEN(ptr);                             \
+    (descriptor)->deschdr.command.jd.shr_desc_len = (len);      \
 }
 
 #define PDCP_INIT_JD(descriptor)              { \
@@ -666,6 +669,10 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
     (descriptor)->out_ext_length = (length);                        \
 }
 
+#define PDCP_JD_SET_SG_IN(descriptor)   ( (descriptor)->seq_in.command.field.sgf =  1 )
+
+#define PDCP_JD_SET_SG_OUT(descriptor)  ( (descriptor)->seq_out.command.field.sgf = 1 )
+
 #define SEC_PDCP_SH_SET_PROT_DIR(descriptor,dir)    ( (descriptor)->protocol.command.field.optype = \
                         ((dir) == PDCP_ENCAPSULATION) ? CMD_PROTO_ENCAP : CMD_PROTO_DECAP )
 
@@ -685,7 +692,7 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
             __i < SEC_PDCP_GET_DESC_LEN(descriptor);                        \
             __i++)                                                          \
         {                                                                   \
-            SEC_DEBUG("0x%08x: %08x",                                       \
+            SEC_DEBUG("0x%08x: 0x%08x",                                     \
                     (uint32_t)(((uint32_t*)(descriptor)) + __i),            \
                     *(((uint32_t*)(descriptor)) + __i));                    \
         }                                                                   \
@@ -1074,6 +1081,27 @@ void hw_handle_job_ring_error(sec_job_ring_t *job_ring,
  * TODO: Write something meaningful here
  */
 int hw_job_ring_error(sec_job_ring_t *job_ring);
+
+#if (SEC_INT_COALESCING_ENABLE == ON)
+
+/**
+ * TODO: Write something meaningful here
+ */
+int hw_job_ring_set_coalescing_param(sec_job_ring_t *job_ring,
+                                     uint16_t irq_coalescing_timer,
+                                     uint8_t irq_coalescing_count);
+
+/**
+ * TODO: Write something meaningful here
+ */
+int hw_job_ring_enable_coalescing(sec_job_ring_t *job_ring);
+
+/**
+ * TODO: Write something meaningful here
+ */
+int hw_job_ring_disable_coalescing(sec_job_ring_t *job_ring);
+
+#endif // SEC_INT_COALESCING_ENABLE
 
 #endif // SEC_HW_VERSION_4_4
 /*============================================================================*/

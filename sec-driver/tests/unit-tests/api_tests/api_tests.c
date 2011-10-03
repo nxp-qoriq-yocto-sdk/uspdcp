@@ -81,7 +81,11 @@ extern "C" {
 
 // Sizeof sec_context_t struct as defined in driver.
 // @note this has to be defined to have exactly the value of sizeof(struct sec_context_t)!
+#ifdef SEC_HW_VERSION_3_1
 #define SIZEOF_SEC_CONTEXT_T_STRUCT 128
+#else
+#define SIZEOF_SEC_CONTEXT_T_STRUCT 64
+#endif
 
 // Number of SEC contexts in each pool. Define taken from SEC user-space driver.
 #define MAX_SEC_CONTEXTS_PER_POOL   (SEC_MAX_PDCP_CONTEXTS / (JOB_RING_NUMBER))
@@ -209,11 +213,16 @@ static void get_free_packet(int packet_idx, sec_packet_t **in_packet, sec_packet
     (*in_packet)->address = &(test_input_packets[packet_idx].buffer[0]);
     (*in_packet)->offset = TEST_PACKET_OFFSET;
     (*in_packet)->length = TEST_PACKET_LENGTH;
-    
+    (*in_packet)->total_length = 0;
+    (*in_packet)->num_fragments = 0;
+
     // Initialize with valid info the output packet
     (*out_packet)->address = &(test_output_packets[packet_idx].buffer[0]);
     (*out_packet)->offset = TEST_PACKET_OFFSET;
     (*out_packet)->length = TEST_PACKET_LENGTH;
+    (*out_packet)->total_length = 0;
+    (*out_packet)->num_fragments = 0;
+
 }
 
 static void send_packets(sec_context_handle_t ctx, int packet_no, int expected_ret_code)
@@ -281,7 +290,7 @@ static void test_setup(void)
     assert_not_equal_with_message(test_input_packets, NULL,
             "ERROR allocating test_input_packets with dma_mem_memalign");
     memset(test_input_packets, 0, sizeof(buffer_t) * TEST_PACKETS_NUMBER);
-    
+
     test_output_packets = dma_mem_memalign(BUFFER_ALIGNEMENT,
             sizeof(buffer_t) * TEST_PACKETS_NUMBER);
     assert_not_equal_with_message(test_output_packets, NULL,
@@ -316,7 +325,7 @@ static void test_sec_init_invalid_params(void)
     ////////////////////////////////////
     ////////////////////////////////////
 
-    // Init sec driver. Invalid sec_config_data param 
+    // Init sec driver. Invalid sec_config_data param
     ret = sec_init(NULL, JOB_RING_NUMBER, &job_ring_descriptors);
     assert_equal_with_message(ret, SEC_INVALID_INPUT_PARAM,
                               "ERROR on sec_init: expected ret[%d]. actual ret[%d]",
@@ -325,7 +334,7 @@ static void test_sec_init_invalid_params(void)
     ////////////////////////////////////
     ////////////////////////////////////
 
-    // Init sec driver. Invalid sec_config_data.memory_area param 
+    // Init sec driver. Invalid sec_config_data.memory_area param
     tmp = sec_config_data.memory_area;
     sec_config_data.memory_area = NULL;
 
@@ -356,7 +365,7 @@ static void test_sec_init_invalid_params(void)
     ////////////////////////////////////
     ////////////////////////////////////
 
-    // Init sec driver. Invalid job_rings_no param 
+    // Init sec driver. Invalid job_rings_no param
     ret = sec_init(&sec_config_data, 5, &job_ring_descriptors);
     assert_equal_with_message(ret, SEC_INVALID_INPUT_PARAM,
                               "ERROR on sec_init: expected ret[%d]. actual ret[%d]",
@@ -379,7 +388,7 @@ static void test_sec_init_invalid_params(void)
     ////////////////////////////////////
     ////////////////////////////////////
 
-    // Init sec driver. Invalid job_ring_descriptors param 
+    // Init sec driver. Invalid job_ring_descriptors param
     ret = sec_init(&sec_config_data, JOB_RING_NUMBER, NULL);
     assert_equal_with_message(ret, SEC_INVALID_INPUT_PARAM,
                               "ERROR on sec_init: expected ret[%d]. actual ret[%d]",
@@ -410,7 +419,7 @@ static void test_sec_init_invalid_params(void)
     assert_equal_with_message(ret, SEC_DRIVER_ALREADY_INITIALIZED,
                               "ERROR on sec_init: expected ret[%d]. actual ret[%d]",
                               SEC_DRIVER_ALREADY_INITIALIZED, ret);
-    
+
     assert_string_equal_with_message(sec_get_error_message(ret),
             "SEC_DRIVER_ALREADY_INITIALIZED",
             "sec_get_error_message returned wrong string"
@@ -677,6 +686,17 @@ static void test_sec_process_packet_invalid_params(void)
     sec_packet_t *out_packet = NULL;
     uint8_t* tmp = NULL;
     int packet_idx = 0;
+#ifdef SEC_HW_VERSION_4_4
+    uint32_t    tmp_num;
+#if (SEC_ENABLE_SCATTER_GATHER == ON)
+    sec_packet_t *in_packet2 = NULL;
+    sec_packet_t *out_packet2 = NULL;
+    sec_packet_t *in_packet3 = NULL;
+    sec_packet_t *out_packet3 = NULL;
+    sec_packet_t in_sg_packet[3];
+    sec_packet_t out_sg_packet[3];
+#endif // defined(SEC_HW_VERSION_4_4)
+#endif //(SEC_ENABLE_SCATTER_GATHER == ON)
 
     printf("Running test %s\n", __FUNCTION__);
 
@@ -692,7 +712,7 @@ static void test_sec_process_packet_invalid_params(void)
     assert_equal_with_message(ret, SEC_DRIVER_NOT_INITIALIZED,
                               "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
                               SEC_DRIVER_NOT_INITIALIZED, ret);
-    
+
     assert_string_equal_with_message(sec_get_error_message(ret),
             "SEC_DRIVER_NOT_INITIALIZED",
             "sec_get_error_message returned wrong string"
@@ -718,7 +738,7 @@ static void test_sec_process_packet_invalid_params(void)
 
     ////////////////////////////////////
     ////////////////////////////////////
-    
+
     // Create one context
     ret = sec_create_pdcp_context(NULL, &ctx_info, &ctx_handle);
     assert_equal_with_message(ret, SEC_SUCCESS,
@@ -771,20 +791,462 @@ static void test_sec_process_packet_invalid_params(void)
 
     // Restore output packet address
     out_packet->address = tmp;
+#ifdef SEC_HW_VERSION_4_4
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Invalid length on input packet
+    tmp_num = in_packet->length;
+    in_packet->length = 0;
+    ret = sec_process_packet(ctx_handle, in_packet, out_packet, (ua_context_handle_t)&ua_data[packet_idx]);
+    assert_equal_with_message(ret, SEC_INVALID_INPUT_PARAM,
+                              "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                              SEC_INVALID_INPUT_PARAM, ret);
+
+    // Restore input packet num of frags
+    in_packet->length = tmp_num;
 
     ////////////////////////////////////
     ////////////////////////////////////
-    
+
+    // Invalid length on input packet
+    tmp_num = out_packet->length;
+    out_packet->length = 0;
+    ret = sec_process_packet(ctx_handle, in_packet, out_packet, (ua_context_handle_t)&ua_data[packet_idx]);
+    assert_equal_with_message(ret, SEC_INVALID_INPUT_PARAM,
+                              "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                              SEC_INVALID_INPUT_PARAM, ret);
+
+    // Restore input packet num of frags
+    out_packet->length = tmp_num;
+
+#if (SEC_ENABLE_SCATTER_GATHER == ON)
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Invalid number of fragments on input packet
+    tmp_num = in_packet->num_fragments;
+    in_packet->num_fragments = 100;
+    ret = sec_process_packet(ctx_handle, in_packet, out_packet, (ua_context_handle_t)&ua_data[packet_idx]);
+    assert_equal_with_message(ret, SEC_INVALID_INPUT_PARAM,
+                              "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                               SEC_INVALID_INPUT_PARAM, ret);
+
+    // Restore input packet num of frags
+    in_packet->num_fragments = tmp_num;
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Invalid number of fragments on output packet
+    tmp_num = out_packet->num_fragments;
+    out_packet->num_fragments = 100;
+    ret = sec_process_packet(ctx_handle, in_packet, out_packet, (ua_context_handle_t)&ua_data[packet_idx]);
+    assert_equal_with_message(ret, SEC_INVALID_INPUT_PARAM,
+                             "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                             SEC_INVALID_INPUT_PARAM, ret);
+
+    // Restore output packet num of frags
+    out_packet->num_fragments = tmp_num;
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Invalid offset
+    tmp_num = in_packet->offset;
+    in_packet->offset = in_packet->length;
+
+    ret = sec_process_packet(ctx_handle, in_packet, out_packet, (ua_context_handle_t)&ua_data[packet_idx]);
+    assert_equal_with_message(ret, SEC_INVALID_INPUT_PARAM,
+                              "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                              SEC_INVALID_INPUT_PARAM, ret);
+
+    // Restore input packet offset
+    in_packet->offset = tmp_num;
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Invalid total length
+    tmp_num = in_packet->total_length;
+    in_packet->total_length = 100;
+
+    ret = sec_process_packet(ctx_handle, in_packet, out_packet, (ua_context_handle_t)&ua_data[packet_idx]);
+    assert_equal_with_message(ret, SEC_INVALID_INPUT_PARAM,
+                             "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                             SEC_INVALID_INPUT_PARAM, ret);
+
+    // Restore input packet total length
+    in_packet->total_length = tmp_num;
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Invalid total length
+    tmp_num = out_packet->total_length;
+    out_packet->total_length = 100;
+
+    ret = sec_process_packet(ctx_handle, in_packet, out_packet, (ua_context_handle_t)&ua_data[packet_idx]);
+    assert_equal_with_message(ret, SEC_INVALID_INPUT_PARAM,
+                             "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                             SEC_INVALID_INPUT_PARAM, ret);
+
+    // Restore input packet total length
+    out_packet->total_length = tmp_num;
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Invalid offset
+    tmp_num = out_packet->offset;
+    out_packet->offset = out_packet->length;
+
+    ret = sec_process_packet(ctx_handle, in_packet, out_packet, (ua_context_handle_t)&ua_data[packet_idx]);
+    assert_equal_with_message(ret, SEC_INVALID_INPUT_PARAM,
+                              "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                              SEC_INVALID_INPUT_PARAM, ret);
+
+    // Restore output packet offset
+    out_packet->offset = tmp_num;
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Invalid total length, two fragments input
+
+    tmp_num = in_packet->total_length;
+    in_packet->num_fragments = 1; // two packets
+    in_packet->total_length = 2 * in_packet->length + 1; // two fragments
+
+    in_sg_packet[0] = *in_packet;
+    in_sg_packet[1] = *in_packet;
+
+    ret = sec_process_packet(ctx_handle,in_sg_packet, out_packet, (ua_context_handle_t)&ua_data[packet_idx]);
+    assert_equal_with_message(ret, SEC_INVALID_INPUT_PARAM,
+                             "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                             SEC_INVALID_INPUT_PARAM, ret);
+
+    // Restore
+    in_packet->num_fragments = 0;
+    in_packet->total_length = tmp_num;
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Invalid total length, two fragments output
+
+    tmp_num = out_packet->total_length;
+    out_packet->num_fragments = 1; // two packets
+    out_packet->total_length = 2 * out_packet->length + 1; // two fragments
+
+    out_sg_packet[0] = *out_packet;
+    out_sg_packet[1] = *out_packet;
+
+    ret = sec_process_packet(ctx_handle, in_packet, out_sg_packet, (ua_context_handle_t)&ua_data[packet_idx]);
+    assert_equal_with_message(ret, SEC_INVALID_INPUT_PARAM,
+                             "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                             SEC_INVALID_INPUT_PARAM, ret);
+
+    // Restore
+    out_packet->num_fragments = 0;
+    out_packet->total_length = tmp_num;
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Invalid fragment length, two fragments input
+
+    tmp_num = in_packet->length;
+    in_packet->length = in_packet->length + 1;
+    in_packet->num_fragments = 1; // two fragments
+    in_packet->total_length = 2 * tmp_num;
+
+    in_sg_packet[0] = *in_packet;
+    in_sg_packet[1] = *in_packet;
+
+    ret = sec_process_packet(ctx_handle,in_sg_packet, out_packet, (ua_context_handle_t)&ua_data[packet_idx]);
+    assert_equal_with_message(ret, SEC_INVALID_INPUT_PARAM,
+                              "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                              SEC_INVALID_INPUT_PARAM, ret);
+
+    // Restore
+    in_packet->num_fragments = 0;
+    in_packet->total_length = 0;
+    in_packet->length = tmp_num;
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Invalid fragment length, two fragments output
+
+    tmp_num = out_packet->length;
+    out_packet->length = out_packet->length + 1;
+    out_packet->num_fragments = 1; // two fragments
+    out_packet->total_length = 2 * tmp_num;
+
+    out_sg_packet[0] = *out_packet;
+    out_sg_packet[1] = *out_packet;
+
+    ret = sec_process_packet(ctx_handle, in_packet, out_sg_packet, (ua_context_handle_t)&ua_data[packet_idx]);
+    assert_equal_with_message(ret, SEC_INVALID_INPUT_PARAM,
+                              "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                              SEC_INVALID_INPUT_PARAM, ret);
+
+    // Restore
+    out_packet->num_fragments = 0;
+    out_packet->total_length = 0;
+    out_packet->length = tmp_num;
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Invalid fragment pointer, two fragments input
+
+    in_packet->num_fragments = 1; // two fragments
+    in_packet->total_length = 2 * in_packet->length;
+
+    in_sg_packet[0] = *in_packet;
+    tmp = in_packet->address;
+    in_packet->address = NULL;
+    in_sg_packet[1] = *in_packet;
+    in_packet->address = tmp;
+
+    ret = sec_process_packet(ctx_handle,in_sg_packet, out_packet, (ua_context_handle_t)&ua_data[packet_idx]);
+    assert_equal_with_message(ret, SEC_INVALID_INPUT_PARAM,
+                              "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                              SEC_INVALID_INPUT_PARAM, ret);
+
+    // Restore
+    in_packet->num_fragments = 0;
+    in_packet->total_length = 0;
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Invalid fragment pointer, two fragments output
+
+    out_packet->num_fragments = 1; // two fragments
+    out_packet->total_length = 2 * in_packet->length;
+
+    out_sg_packet[0] = *out_packet;
+    tmp = out_packet->address;
+    out_packet->address = NULL;
+    out_sg_packet[1] = *out_packet;
+    out_packet->address = tmp;
+
+    ret = sec_process_packet(ctx_handle,in_packet, out_sg_packet, (ua_context_handle_t)&ua_data[packet_idx]);
+    assert_equal_with_message(ret, SEC_INVALID_INPUT_PARAM,
+                              "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                              SEC_INVALID_INPUT_PARAM, ret);
+
+    // Restore
+    out_packet->num_fragments = 0;
+    out_packet->total_length = 0;
+    out_packet->length = tmp_num;
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Invalid fragment offset, two fragments input
+
+    in_packet->num_fragments = 1; // two fragments
+    in_packet->total_length = 2 * in_packet->length;
+
+    in_sg_packet[0] = *in_packet;
+    tmp_num = in_packet->offset;
+    in_packet->offset = in_packet->length;
+    in_sg_packet[1] = *in_packet;
+    in_packet->offset = tmp_num;
+
+    ret = sec_process_packet(ctx_handle,in_sg_packet, out_packet, (ua_context_handle_t)&ua_data[packet_idx]);
+    assert_equal_with_message(ret, SEC_INVALID_INPUT_PARAM,
+                              "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                              SEC_INVALID_INPUT_PARAM, ret);
+
+    // Restore
+    in_packet->num_fragments = 0;
+    in_packet->total_length = 0;
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Invalid fragment offset, two fragments out
+
+    out_packet->num_fragments = 1; // two fragments
+    out_packet->total_length = 2 * out_packet->length;
+
+    out_sg_packet[0] = *out_packet;
+    tmp_num = out_packet->offset;
+    out_packet->offset = out_packet->length;
+    out_sg_packet[1] = *out_packet;
+    out_packet->offset = tmp_num;
+
+    ret = sec_process_packet(ctx_handle,in_packet, out_sg_packet, (ua_context_handle_t)&ua_data[packet_idx]);
+    assert_equal_with_message(ret, SEC_INVALID_INPUT_PARAM,
+                              "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                              SEC_INVALID_INPUT_PARAM, ret);
+
+    // Restore
+    out_packet->num_fragments = 0;
+    out_packet->total_length = 0;
+
+#endif //(SEC_ENABLE_SCATTER_GATHER == ON)
+#endif // defined(SEC_HW_VERSION_4_4)
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
     // Submit one packet on the context
     ret = sec_process_packet(ctx_handle, in_packet, out_packet, (ua_context_handle_t)&ua_data[packet_idx]);
     assert_equal_with_message(ret, SEC_SUCCESS,
                               "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
                               SEC_SUCCESS, ret);
-    
+
     assert_string_equal_with_message(sec_get_error_message(ret),
             "SEC_SUCCESS",
             "sec_get_error_message returned wrong string"
             "representation for ret code %d", ret);
+
+#if defined(SEC_HW_VERSION_4_4) && (SEC_ENABLE_SCATTER_GATHER == ON)
+    // Get one additional packets
+    packet_idx = 1;
+    get_free_packet(packet_idx,&in_packet2,&out_packet2);
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Submit one packet, two fragments input, one output
+
+    in_packet->num_fragments = 1; // two fragments
+    in_packet->total_length = in_packet->length + in_packet2->length;;
+
+    in_sg_packet[0] = *in_packet;
+    in_sg_packet[1] = *in_packet2;
+
+    ret = sec_process_packet(ctx_handle,in_sg_packet, out_packet, (ua_context_handle_t)&ua_data[packet_idx]);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                              "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                              SEC_SUCCESS, ret);
+
+    // Restore
+    in_packet->num_fragments = 0;
+    in_packet->total_length = 0;
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Submit one packet, one input, two fragments output
+
+    out_packet->num_fragments = 1; // two fragments
+    out_packet->total_length = 2 * in_packet->length;
+
+    out_sg_packet[0] = *out_packet;
+    out_sg_packet[1] = *out_packet2;
+
+    ret = sec_process_packet(ctx_handle,in_packet, out_sg_packet, (ua_context_handle_t)&ua_data[packet_idx]);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                              "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                              SEC_SUCCESS, ret);
+
+    // Restore
+    out_packet->num_fragments = 0;
+    out_packet->total_length = 0;
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Submit one packet, two fragments input, two fragments output
+
+    in_packet->num_fragments = 1; // two fragments
+    in_packet->total_length = 2 * in_packet->length;
+
+    out_packet->num_fragments = 1; // two fragments
+    out_packet->total_length = 2 * out_packet->length;
+
+    in_sg_packet[0] = *in_packet;
+    in_sg_packet[1] = *in_packet2;
+
+    out_sg_packet[0] = *out_packet;
+    out_sg_packet[1] = *out_packet2;
+
+    ret = sec_process_packet(ctx_handle,in_sg_packet, out_sg_packet, (ua_context_handle_t)&ua_data[packet_idx]);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                              "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                              SEC_SUCCESS, ret);
+
+    // Restore
+    in_packet->num_fragments = 0;
+    in_packet->total_length = 0;
+
+    out_packet->num_fragments = 0;
+    out_packet->total_length = 0;
+
+    // Get one additional packet
+    packet_idx = 2;
+    get_free_packet(packet_idx,&in_packet3,&out_packet3);
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Submit one packet, two fragments input, three fragments output
+
+    in_packet->num_fragments = 1; // two fragments
+    in_packet->total_length = 2 * in_packet->length;
+
+    out_packet->num_fragments = 2; // three fragments
+    out_packet->total_length = 3 * out_packet->length;
+
+    in_sg_packet[0] = *in_packet;
+    in_sg_packet[1] = *in_packet2;
+
+    out_sg_packet[0] = *out_packet;
+    out_sg_packet[1] = *out_packet2;
+    out_sg_packet[2] = *out_packet3;
+
+    ret = sec_process_packet(ctx_handle,in_sg_packet, out_sg_packet, (ua_context_handle_t)&ua_data[packet_idx]);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                              "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                              SEC_SUCCESS, ret);
+
+    // Restore
+    in_packet->num_fragments = 0;
+    in_packet->total_length = 0;
+
+    out_packet->num_fragments = 0;
+    out_packet->total_length = 0;
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Submit one packet, three fragments input, two fragments output
+
+    in_packet->num_fragments = 2; // three fragments
+    in_packet->total_length = 3 * in_packet->length;
+
+    out_packet->num_fragments = 1; // two fragments
+    out_packet->total_length = 2 * out_packet->length;
+
+    in_sg_packet[0] = *in_packet;
+    in_sg_packet[1] = *in_packet2;
+    in_sg_packet[2] = *in_packet3;
+
+    out_sg_packet[0] = *out_packet;
+    out_sg_packet[1] = *out_packet2;
+
+    ret = sec_process_packet(ctx_handle,in_sg_packet, out_sg_packet, (ua_context_handle_t)&ua_data[packet_idx]);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                              "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                              SEC_SUCCESS, ret);
+
+    // Restore
+    in_packet->num_fragments = 0;
+    in_packet->total_length = 0;
+
+    out_packet->num_fragments = 0;
+    out_packet->total_length = 0;
+
+    // Poll five packets so the test below still works
+    sec_poll(5, 1, &tmp_num);
+#endif // defined(SEC_HW_VERSION_4_4) && (SEC_ENABLE_SCATTER_GATHER == ON)
 
     // Delete context with 1 packet in flight.
     // Because we do not poll for results, the context is
@@ -805,7 +1267,7 @@ static void test_sec_process_packet_invalid_params(void)
     assert_equal_with_message(ret, SEC_CONTEXT_MARKED_FOR_DELETION,
                               "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
                               SEC_CONTEXT_MARKED_FOR_DELETION, ret);
-    
+
     assert_string_equal_with_message(sec_get_error_message(ret),
             "SEC_CONTEXT_MARKED_FOR_DELETION",
             "sec_get_error_message returned wrong string"
@@ -1039,7 +1501,7 @@ static void test_sec_poll_job_ring_invalid_params(void)
     assert_equal_with_message(ret, SEC_SUCCESS,
                               "ERROR on sec_init: expected ret[%d]. actual ret[%d]",
                               SEC_SUCCESS, ret);
-    
+
     // Test only first job ring from the two JR's intialized
     test_jr_id = 0;
     jr_handle = job_ring_descriptors[test_jr_id].job_ring_handle;
@@ -1154,14 +1616,14 @@ static void test_poll_job_ring_scenarios(void)
     assert_equal_with_message(ret, SEC_SUCCESS,
                               "ERROR on sec_init: expected ret[%d]. actual ret[%d]",
                               SEC_SUCCESS, ret);
-    
+
     // Test only first job ring from the two JR's intialized
     test_jr_id = 0;
     jr_handle = job_ring_descriptors[test_jr_id].job_ring_handle;
 
     ////////////////////////////////////
     ////////////////////////////////////
-    
+
     // Create one context and affine it to one job ring.
     ret = sec_create_pdcp_context(jr_handle, &ctx_info, &ctx_handle);
     assert_equal_with_message(ret, SEC_SUCCESS,
@@ -1183,7 +1645,7 @@ static void test_poll_job_ring_scenarios(void)
 #ifdef SEC_HW_VERSION_3_1
     limit = SEC_JOB_RING_HW_SIZE;
 #else
-    limit = SEC_JOB_RING_SIZE;
+    limit = SEC_JOB_RING_SIZE  - 1;
 #endif
 
     usleep(1000);
@@ -1208,7 +1670,7 @@ static void test_poll_job_ring_scenarios(void)
 #ifdef SEC_HW_VERSION_3_1
     packets_handled = SEC_JOB_RING_HW_SIZE;
 #else
-    packets_handled = SEC_JOB_RING_SIZE;
+    packets_handled = SEC_JOB_RING_SIZE  - 1;
 #endif
 
     // Submit packets on the context
@@ -1218,7 +1680,7 @@ static void test_poll_job_ring_scenarios(void)
 #ifdef SEC_HW_VERSION_3_1
     limit = SEC_JOB_RING_HW_SIZE;
 #else
-    limit = SEC_JOB_RING_SIZE;
+    limit = SEC_JOB_RING_SIZE - 1;
 #endif
 
     usleep(1000);
@@ -1244,7 +1706,7 @@ static void test_poll_job_ring_scenarios(void)
 #ifdef SEC_HW_VERSION_3_1
     packets_handled = SEC_JOB_RING_HW_SIZE;
 #else
-    packets_handled = SEC_JOB_RING_SIZE;
+    packets_handled = SEC_JOB_RING_SIZE - 1;
 #endif
 
     // Submit packets on the context
@@ -1258,7 +1720,7 @@ static void test_poll_job_ring_scenarios(void)
 #ifdef SEC_HW_VERSION_3_1
     limit = SEC_JOB_RING_HW_SIZE;
 #else
-    limit = SEC_JOB_RING_SIZE;
+    limit = SEC_JOB_RING_SIZE  - 1;
 #endif
 
     usleep(1000);
@@ -1275,13 +1737,13 @@ static void test_poll_job_ring_scenarios(void)
 
     ////////////////////////////////////
     ////////////////////////////////////
-    
+
     // How many packets to send and receive to/from SEC
     packets_handled = 5;
 
     // Submit some more packets on the context. Now it should work
     send_packets(ctx_handle, packets_handled, SEC_SUCCESS);
-    
+
     usleep(1000);
     ret = sec_poll_job_ring(jr_handle, limit, &packets_out);
     assert_equal_with_message(ret, SEC_SUCCESS,
@@ -1299,14 +1761,14 @@ static void test_poll_job_ring_scenarios(void)
 
     // Test that when submited x packets, we can poll and
     // retrieve for y < x packets at a time.
-    
+
     // How many packets to send and receive to/from SEC
     packets_handled = 21;
 
     // Submit some more packets on the context. Now it should work
     send_packets(ctx_handle, packets_handled, SEC_SUCCESS);
     usleep(1000);
-    
+
     // Do not retrieve all submitted packets in the same poll step.
     limit = 10;
 
@@ -1372,7 +1834,7 @@ static void test_poll_job_ring_scenarios(void)
     // Submit some more packets on the context. Now it should work
     send_packets(ctx_handle, packets_handled, SEC_SUCCESS);
     usleep(1000);
-    
+
     // Do not retrieve all submitted packets in the same poll step.
     limit = 10;
 
@@ -1477,13 +1939,13 @@ static void test_poll_scenarios(void)
     assert_equal_with_message(ret, SEC_SUCCESS,
                               "ERROR on sec_init: expected ret[%d]. actual ret[%d]",
                               SEC_SUCCESS, ret);
-    
+
     jr_handle_0 = job_ring_descriptors[0].job_ring_handle;
     jr_handle_1 = job_ring_descriptors[1].job_ring_handle;
 
     ////////////////////////////////////
     ////////////////////////////////////
-    
+
     // Create one context and affine it to first job ring.
     ret = sec_create_pdcp_context(jr_handle_0, &ctx_info, &ctx_handle_0);
     assert_equal_with_message(ret, SEC_SUCCESS,
@@ -1511,7 +1973,7 @@ static void test_poll_scenarios(void)
 #ifdef SEC_HW_VERSION_3_1
     limit = SEC_JOB_RING_HW_SIZE;
 #else
-    limit = SEC_JOB_RING_SIZE;
+    limit = SEC_JOB_RING_SIZE - 1;
 #endif
 
     usleep(1000);
@@ -1541,7 +2003,7 @@ static void test_poll_scenarios(void)
 #ifdef SEC_HW_VERSION_3_1
     limit = SEC_JOB_RING_HW_SIZE;
 #else
-    limit = SEC_JOB_RING_SIZE;
+    limit = SEC_JOB_RING_SIZE - 1;
 #endif
 
     usleep(1000);
@@ -1567,7 +2029,7 @@ static void test_poll_scenarios(void)
 
     // Submit one packet on the context
     send_packets(ctx_handle_0, packets_handled/2, SEC_SUCCESS);
-    
+
     // Submit one packet on the context
     send_packets(ctx_handle_1, packets_handled/2, SEC_SUCCESS);
 
@@ -1575,7 +2037,7 @@ static void test_poll_scenarios(void)
 #ifdef SEC_HW_VERSION_3_1
     limit = SEC_JOB_RING_HW_SIZE;
 #else
-    limit = SEC_JOB_RING_SIZE;
+    limit = SEC_JOB_RING_SIZE - 1;
 #endif
 
     usleep(1000);
@@ -1599,12 +2061,12 @@ static void test_poll_scenarios(void)
 #ifdef SEC_HW_VERSION_3_1
     packets_handled = 2 * SEC_JOB_RING_HW_SIZE;
 #else
-    packets_handled = 2 * SEC_JOB_RING_SIZE;
+    packets_handled = 2 * (SEC_JOB_RING_SIZE - 1);
 #endif
 
     // Submit packets on first context
     send_packets(ctx_handle_0, packets_handled/2, SEC_SUCCESS);
-    
+
     // Submit packets on second context
     send_packets(ctx_handle_1, packets_handled/2, SEC_SUCCESS);
 
@@ -1612,7 +2074,7 @@ static void test_poll_scenarios(void)
 #ifdef SEC_HW_VERSION_3_1
     limit = 2 * SEC_JOB_RING_HW_SIZE;
 #else
-    limit = 2 * SEC_JOB_RING_SIZE;
+    limit = 2 * (SEC_JOB_RING_SIZE - 1);
 #endif
 
     usleep(1000);
@@ -1638,12 +2100,12 @@ static void test_poll_scenarios(void)
 #ifdef SEC_HW_VERSION_3_1
     packets_handled = 2 * SEC_JOB_RING_HW_SIZE;
 #else
-    packets_handled = 2 * SEC_JOB_RING_SIZE;
+    packets_handled = 2 * (SEC_JOB_RING_SIZE - 1);
 #endif
-    
+
     // Submit packets on first context
     send_packets(ctx_handle_0, packets_handled/2, SEC_SUCCESS);
-    
+
     // Submit packets on second context
     send_packets(ctx_handle_1, packets_handled/2, SEC_SUCCESS);
 
@@ -1659,7 +2121,7 @@ static void test_poll_scenarios(void)
 #ifdef SEC_HW_VERSION_3_1
     limit = 2 * SEC_JOB_RING_HW_SIZE;
 #else
-    limit = 2 * SEC_JOB_RING_SIZE;
+    limit = 2 * (SEC_JOB_RING_SIZE - 1);
 #endif
 
     usleep(1000);
@@ -1675,16 +2137,16 @@ static void test_poll_scenarios(void)
                               packets_handled, packets_out);
     ////////////////////////////////////
     ////////////////////////////////////
-    
+
     // How many packets to send and receive to/from SEC
     packets_handled = 2 * 5;
 
     // Submit some more packets on the context. Now it should work
     send_packets(ctx_handle_0, packets_handled/2, SEC_SUCCESS);
-    
+
     // Submit some more packets on the context. Now it should work
     send_packets(ctx_handle_1, packets_handled/2, SEC_SUCCESS);
-    
+
     usleep(1000);
     ret = sec_poll(limit, weight, &packets_out);
     assert_equal_with_message(ret, SEC_SUCCESS,
@@ -1701,7 +2163,7 @@ static void test_poll_scenarios(void)
 
     // Test that when submited x packets, we can poll and
     // retrieve for y < x packets at a time.
-    
+
     // How many packets to send and receive to/from SEC
     packets_handled = 21 * 2;
 
@@ -1711,7 +2173,7 @@ static void test_poll_scenarios(void)
     // Submit some more packets on the context. Now it should work
     send_packets(ctx_handle_1, packets_handled/2, SEC_SUCCESS);
     usleep(1000);
-    
+
     // Do not retrieve all submitted packets in the same poll step.
     limit = 20;
 
@@ -1772,13 +2234,19 @@ static void test_poll_scenarios(void)
 
     // Reset this global counter. It is incremented each time handle_packet_from_sec() is called.
     test_packets_notified = 0;
-
+#ifdef SEC_HW_VERSION_3_1
     // Configure handle_packet_from_sec() to return SEC_RETURN_STOP after 11 packets notified.
     test_packets_notified_ret_stop = 11;
 
     // How many packets to send and receive to/from SEC
     packets_handled = 2 * 12;
+#else
+    // Configure handle_packet_from_sec() to return SEC_RETURN_STOP after 11 packets notified.
+    test_packets_notified_ret_stop = 16;
 
+    // How many packets to send and receive to/from SEC
+    packets_handled = 2 * 16;
+#endif
     // Submit packets on the context.
     send_packets(ctx_handle_0, packets_handled/2, SEC_SUCCESS);
 
@@ -1786,7 +2254,7 @@ static void test_poll_scenarios(void)
     send_packets(ctx_handle_1, packets_handled/2, SEC_SUCCESS);
 
     usleep(1000);
-    
+
     // Do not retrieve all submitted packets in the same poll step.
     limit = 20;
 
@@ -1872,7 +2340,7 @@ static void test_poll_scenarios(void)
 
 static void test_sec_get_status_message(void)
 {
-    sec_status_t status = SEC_STATUS_SUCCESS; 
+    sec_status_t status = SEC_STATUS_SUCCESS;
 
     printf("Running test %s\n", __FUNCTION__);
 
@@ -1881,7 +2349,7 @@ static void test_sec_get_status_message(void)
             "sec_get_status_message returned wrong string"
             "representation for status code %d", status);
 
-    status = SEC_STATUS_ERROR; 
+    status = SEC_STATUS_ERROR;
     assert_string_equal_with_message(sec_get_status_message(status),
             "SEC_STATUS_ERROR",
             "sec_get_status_message returned wrong string"
@@ -1910,15 +2378,15 @@ static void test_sec_get_status_message(void)
 
 static void test_sec_get_error_message(void)
 {
-    sec_return_code_t ret = SEC_SUCCESS; 
-    
+    sec_return_code_t ret = SEC_SUCCESS;
+
     printf("Running test %s\n", __FUNCTION__);
     assert_string_equal_with_message(sec_get_error_message(ret),
             "SEC_SUCCESS",
             "sec_get_error_message returned wrong string"
             "representation for ret code %d", ret);
 
-    ret = SEC_PACKET_PROCESSING_ERROR; 
+    ret = SEC_PACKET_PROCESSING_ERROR;
     assert_string_equal_with_message(sec_get_error_message(ret),
             "SEC_PACKET_PROCESSING_ERROR",
             "sec_get_error_message returned wrong string"

@@ -59,6 +59,13 @@ enum dma_data_direction {
 	DMA_NONE = 3,
 };
 
+#ifdef SEC_HW_VERSION_4_4
+typedef struct {
+        dma_addr_t phys_addr;
+        void    *vaddr;
+        uint32_t size;
+}range_t;
+#endif
 /* For an efficient conversion between user-space virtual address map(s) and bus
  * addresses required by hardware for DMA, we use a single contiguous mmap() on
  * the /dev/mem device, a pre-arranged physical base address (and
@@ -83,8 +90,12 @@ void dma_mem_free(void *ptr, size_t size);
  * rather than void*, so that 32/64 type conversions aren't required for
  * ptov/vtop when sizeof(dma_addr_t)>sizeof(void*). */
 extern dma_addr_t __dma_virt;
+#ifdef SEC_HW_VERSION_4_4
+extern dma_addr_t __dma_phys;
+#endif
 
 /* Conversion between user-virtual ("v") and physical ("p") address */
+#ifdef SEC_HW_VERSION_3_1
 static inline void *dma_mem_ptov(dma_addr_t p)
 {
 	return (void *)(p + __dma_virt - DMA_MEM_PHYS);
@@ -93,7 +104,17 @@ static inline dma_addr_t dma_mem_vtop(void *v)
 {
 	return (dma_addr_t)v + DMA_MEM_PHYS - __dma_virt;
 }
+#else // SEC_HW_VERSION_3_1
+static inline void *dma_mem_ptov(dma_addr_t p)
+{
+    return (void *)(p + __dma_virt - __dma_phys);
+}
+static inline dma_addr_t dma_mem_vtop(void *v)
+{
+    return (dma_addr_t)v + __dma_phys - __dma_virt;
+}
 
+#endif // SEC_HW_VERSION_3_1
 /* These interfaces are also for linux-compatibility, but are declared down here
  * because the implementations are dependent on dma_mem-specific interfaces
  * above. */

@@ -1862,9 +1862,11 @@ static int setup_sec_environment(void)
     // Fill SEC driver configuration data
     sec_config_data.work_mode = SEC_STARTUP_POLLING_MODE;
 #ifdef SEC_HW_VERSION_4_4
+#if (SEC_INT_COALESCING_ENABLE == ON)
     sec_config_data.irq_coalescing_count = IRQ_COALESCING_COUNT;
     sec_config_data.irq_coalescing_timer = IRQ_COALESCING_TIMER;
-#endif
+#endif // SEC_INT_COALESCING_ENABLE == ON
+#endif // SEC_HW_VERSION_4_4
 
     ret_code = sec_init(&sec_config_data, JOB_RING_NUMBER, &job_ring_descriptors);
     if (ret_code != SEC_SUCCESS)

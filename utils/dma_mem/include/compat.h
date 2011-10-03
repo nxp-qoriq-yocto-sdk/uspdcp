@@ -305,6 +305,17 @@ typedef uint32_t	irqreturn_t; /* as per hwi.h */
 #define irq_can_set_affinity(x)	0
 #define irq_set_affinity(x,y)	0
 
+#ifdef SEC_HW_VERSION_4_4
+/* V2P from Het Manager */
+
+#define IOCTL_HET_MGR_V2P               _IOR(HET_MGR_MAGIC, 2, range_t *)
+#define HET_MGR_MAGIC   'S'
+
+#endif // SEC_HW_VERSION_4_4
+
+
+
+
 // REMOTE_ATOMIC_TYPE will be defined if atomic_t type is already defined by an external lib
 #ifndef REMOTE_ATOMIC_TYPE
 /* Atomic stuff */

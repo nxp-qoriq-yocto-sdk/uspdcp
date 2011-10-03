@@ -1442,8 +1442,19 @@ static int create_cipher_only_desc(sec_context_t *crypto_pdb)
 
 static int create_copy_desc(sec_context_t *ctx)
 {
-    SEC_INFO("Called create_copy_desc");
-    ASSERT(0);
+    int i = 0;
+    SEC_INFO("Creating U-PLANE/C-Plane descriptor with NULL alg.");
+
+    *((uint32_t*)ctx->sh_desc + i++) = 0xBA800008;    // shared descriptor header -- desc len is 8; no sharing
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA80AFB04;    // Put SEQ-IN-Length into VSOL
+    *((uint32_t*)ctx->sh_desc + i++) = 0x69300000;    // SEQ FIFO STORE
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA82A4F04;    // MATH VSIL - imm -> No DEST (to set math size flags)
+    *((uint32_t*)ctx->sh_desc + i++) = 0x00000FFF;    // immediate value with maximum permitted length of frame to copy.  I arbitrarily set this to 4095...this can go up to 65535.
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA0C108F1;    // HALT with status if the length of the input frame (as in VSIL) is bigger than the length in the immediate value
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA80AF004;    // MATH ADD VSIL + 0 -> MATH 0 (to put the length of the input frame into MATH 0)
+    *((uint32_t*)ctx->sh_desc + i++) = 0x70820000;    // Move Length from Deco Alignment block to Output FIFO using length from MATH 0
+
+    SEC_PDCP_DUMP_DESC(ctx->sh_desc);
 
     return SEC_SUCCESS;
 }
@@ -1490,37 +1501,58 @@ int sec_pdcp_context_update_descriptor(sec_context_t *ctx,
                                        uint8_t do_integrity_check)
 {
     dma_addr_t  phys_addr;
+    uint32_t    offset = 0;
+    uint32_t    length = 0;
     int ret = SEC_SUCCESS;
 
     phys_addr = sec_vtop(job->sec_context->sh_desc);
 
     PDCP_INIT_JD(descriptor);
     PDCP_JD_SET_SD(descriptor,
-                   phys_addr);
+                   phys_addr,
+                   SEC_PDCP_GET_DESC_LEN(job->sec_context->sh_desc));
 
-    phys_addr = sec_vtop(job->out_packet->address);
+#if (SEC_ENABLE_SCATTER_GATHER == ON)
+    if( SG_CONTEXT_OUT_TBL_EN(job->sg_ctx ))
+    {
+        PDCP_JD_SET_SG_OUT(descriptor);
+        phys_addr = sec_vtop(SG_CONTEXT_GET_TBL_OUT(job->sg_ctx));
+        offset = 0;
+        length = SG_CONTEXT_GET_LEN_OUT(job->sg_ctx);
+    }
+    else
+#endif // SEC_ENABLE_SCATTER_GATHER == ON
+    {
+        phys_addr = sec_vtop(job->out_packet->address);
+        offset = job->out_packet->offset;
+        length = job->out_packet->length;
+    }
+
     PDCP_JD_SET_OUT_PTR(descriptor,
                         phys_addr,
-                        job->out_packet->offset,
-                        job->out_packet->length);
+                        offset,
+                        length);
 
-    phys_addr = sec_vtop(job->in_packet->address);
+#if (SEC_ENABLE_SCATTER_GATHER == ON)
+    if( SG_CONTEXT_IN_TBL_EN(job->sg_ctx ))
+    {
+        PDCP_JD_SET_SG_IN(descriptor);
+        phys_addr = sec_vtop(SG_CONTEXT_GET_TBL_OUT(job->sg_ctx));
+        offset = 0;
+        length = SG_CONTEXT_GET_LEN_IN(job->sg_ctx);
+    }
+    else
+#endif // (SEC_ENABLE_SCATTER_GATHER == ON)
+    {
+        phys_addr = sec_vtop(job->in_packet->address);
+        offset = job->in_packet->offset;
+        length = job->in_packet->length;
+    }
+
     PDCP_JD_SET_IN_PTR(descriptor,
                        phys_addr,
-                       job->in_packet->offset,
-                       job->in_packet->length);
-
-    {
-        int i = 0;
-        SEC_DEBUG("in pkt @ 0x%06x (length: %d, offset %d)",
-                   (uint32_t)(job->in_packet->address),
-                   job->in_packet->length,
-                   job->in_packet->offset);
-        for(; i < job->in_packet->length; i++ )
-        {
-            SEC_DEBUG("0x%x",*(job->in_packet->address + job->in_packet->offset + i));
-        }
-    }
+                       offset,
+                       length);
 
     SEC_PDCP_DUMP_DESC(descriptor);
 
@@ -1530,15 +1562,15 @@ int sec_pdcp_context_update_descriptor(sec_context_t *ctx,
 }
 
 static create_desc_fp c_plane_create_desc[NUM_CIPHER_ALGS][NUM_INT_ALGS] = {
-        /*              SNOW                      AES                          NULL */
-        /* SNOW */{create_c_plane_hw_acc_desc,    create_mixed_desc,           create_auth_only_desc},
-        /* AES  */{create_mixed_desc,             create_c_plane_hw_acc_desc,  create_auth_only_desc},
-        /* NULL */{create_cipher_only_desc,       create_cipher_only_desc,     create_copy_desc},
+        /*              NULL                      SNOW                          AES */
+        /* NULL */{create_copy_desc,        create_cipher_only_desc,       create_cipher_only_desc          },
+        /* SNOW */{create_auth_only_desc,   create_c_plane_hw_acc_desc,    create_mixed_desc                },
+        /* AES  */{create_auth_only_desc,   create_mixed_desc,             create_c_plane_hw_acc_desc       },
 };
 
 static create_desc_fp u_plane_create_desc[NUM_CIPHER_ALGS] ={
-        /*              SNOW                      AES                          NULL */
-        create_u_plane_hw_acc_desc,   create_u_plane_hw_acc_desc,         create_copy_desc
+        /*      NULL                   SNOW                     AES */
+        create_copy_desc,   create_u_plane_hw_acc_desc,   create_u_plane_hw_acc_desc
 };
 
 #endif // SEC_HW_VERSION_3_1

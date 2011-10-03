@@ -37,4 +37,4 @@ AM_CFLAGS := -I$(TOP_LEVEL)/sec-driver/include -I$(TOP_LEVEL)/utils/of/include -
 SRC=src
 sec-driver_SOURCES := $(SRC)/sec_driver.c $(SRC)/list.c $(SRC)/sec_contexts.c \
 $(SRC)/sec_config.c $(SRC)/sec_job_ring.c $(SRC)/sec_hw_specific.c \
-$(SRC)/sec_pdcp.c
+$(SRC)/sec_pdcp.c $(SRC)/sec_sg_contexts.c

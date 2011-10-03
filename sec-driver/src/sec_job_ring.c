@@ -82,7 +82,11 @@ sec_job_ring_t g_job_rings[MAX_SEC_JOB_RINGS];
 /*==================================================================================================
                                      GLOBAL FUNCTIONS
 ==================================================================================================*/
-int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mode)
+int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mode
+#ifdef SEC_HW_VERSION_4_4
+        , uint8_t irq_coalescing_timer, uint8_t irq_coalescing_count
+#endif
+        )
 {
     int ret = 0;
     int i = 0;
@@ -103,6 +107,14 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
     // Allocate mem for input and output ring
     ASSERT(job_ring->input_ring == NULL);
 
+
+#if 0
+#if (SEC_INT_COALESCING_ENABLE == ON)
+    // Save parameters to be used after reset
+    job_ring->irq_coalescing_timer = irq_coalescing_timer;
+    job_ring->irq_coalescing_count = irq_coalescing_count;
+#endif // SEC_INT_COALESCING_ENABLE == ON
+#endif
     // Allocate memory for input ring
     /** TODO: It would make sense to have this cacheline-aligned
      *
@@ -154,8 +166,13 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
     ASSERT(job_ring->descriptors == NULL);
 
     job_ring->descriptors = *dma_mem;
+#ifdef SEC_HW_VERSION_4_4
     memset(job_ring->descriptors, 0, SEC_JOB_RING_SIZE * SEC_CRYPTO_DESCRIPTOR_SIZE);
     *dma_mem += SEC_JOB_RING_SIZE * SEC_CRYPTO_DESCRIPTOR_SIZE;
+#else
+    memset(job_ring->descriptors, 0, SEC_JOB_RING_SIZE * sizeof(struct sec_descriptor_t));
+    *dma_mem += SEC_JOB_RING_SIZE * sizeof(struct sec_descriptor_t);
+#endif // SEC_HW_VERSION_4_4
 
     // TODO: check that we do not use more DMA mem than actually allocated/reserved for us by User App.
     // Options:
@@ -190,6 +207,19 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
         memset(job_ring->pdcp_c_plane_fifo.items[i], 0, sizeof(sec_job_t));
     }
 #endif
+
+#ifdef SEC_HW_VERSION_4_4
+#if (SEC_INT_COALESCING_ENABLE == ON)
+    SEC_DEBUG("JRCFG_LO b4: 0x%x", GET_JR_REG_LO(JRCFG,job_ring));
+    hw_job_ring_set_coalescing_param(job_ring,
+                                     irq_coalescing_timer,
+                                     irq_coalescing_count);
+
+    hw_job_ring_enable_coalescing(job_ring);
+    SEC_DEBUG("JRCFG_LO: 0x%x", GET_JR_REG_LO(JRCFG,job_ring));
+#endif // SEC_INT_COALESCING_ENABLE == ON
+#endif //SEC_HW_VERSION_4_4
+
     job_ring->jr_state = SEC_JOB_RING_STATE_STARTED;
 
     return SEC_SUCCESS;
@@ -200,14 +230,33 @@ int shutdown_job_ring(sec_job_ring_t * job_ring)
     int ret = 0;
 
     ASSERT(job_ring != NULL);
+#ifdef SEC_HW_VERSION_3_1
     if(job_ring->uio_fd != 0)
     {
         close(job_ring->uio_fd);
     }
-
+#endif
     ret = hw_shutdown_job_ring(job_ring);
     SEC_ASSERT(ret == 0, ret, "Failed to shutdown hardware job ring with id %d", job_ring->jr_id);
+#ifdef SEC_HW_VERSION_4_4
+#if (SEC_INT_COALESCING_ENABLE == ON)
+    hw_job_ring_disable_coalescing(job_ring);
+#endif // SEC_INT_COALESCING_ENABLE == ON
 
+#if SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE_POLL
+    uio_job_ring_disable_irqs(job_ring);
+#endif
+
+    /* On SEC 4.4 I need to close the fd after
+     * I shutdown the JR because i need to send
+     * UIO commands using the fd
+     */
+    if(job_ring->uio_fd != 0)
+    {
+        SEC_INFO("Closed device file for job ring %d , fd = %d", job_ring->jr_id, job_ring->uio_fd);
+        close(job_ring->uio_fd);
+    }
+#endif
     memset(job_ring, 0, sizeof(sec_job_ring_t));
 #ifdef SEC_HW_VERSION_3_1
     int i;
@@ -219,7 +268,8 @@ int shutdown_job_ring(sec_job_ring_t * job_ring)
             job_ring->pdcp_c_plane_fifo.items[i] = NULL;
         }
     }
-#endif
+#endif //SEC_HW_VERSION_3_1
+
     return SEC_SUCCESS;
 }
 
@@ -245,11 +295,11 @@ void uio_job_ring_enable_irqs(sec_job_ring_t *job_ring)
     // SEC kernel driver enable DONE and Error IRQs for this job ring,
     // at Controller level.
     ret = sec_uio_send_command(job_ring, SEC_UIO_ENABLE_IRQ_CMD);
-    SEC_DEBUG("Jr[%p]. Enabled IRQs on jr id %d\n", job_ring, job_ring->jr_id);
     SEC_ASSERT_RET_VOID(ret == sizeof(int),
                         "Failed to request SEC engine to enable job done and "
                         "error IRQs through UIO control. Job ring id %d. Reset SEC driver!",
                         job_ring->jr_id);
+    SEC_DEBUG("Jr[%p]. Enabled IRQs on jr id %d", job_ring, job_ring->jr_id);
 }
 
 #ifdef SEC_HW_VERSION_4_4
@@ -262,14 +312,14 @@ void uio_job_ring_disable_irqs(sec_job_ring_t *job_ring)
     // SEC kernel driver disable IRQs for this job ring,
     // at Controller level.
     ret = sec_uio_send_command(job_ring, SEC_UIO_DISABLE_IRQ_CMD);
-    SEC_DEBUG("Jr[%p]. Disabled IRQs on jr id %d\n", job_ring, job_ring->jr_id);
     SEC_ASSERT_RET_VOID(ret == sizeof(int),
                         "Failed to request SEC engine to disable job done and "
                         "IRQs through UIO control. Job ring id %d. Reset SEC driver!",
                         job_ring->jr_id);
+    SEC_DEBUG("Jr[%p]. Disabled IRQs on jr id %d", job_ring, job_ring->jr_id);
 }
 
-#endif
+#endif // SEC_HW_VERSION_4_4
 /*================================================================================================*/
 
 #ifdef __cplusplus

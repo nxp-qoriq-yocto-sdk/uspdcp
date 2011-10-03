@@ -194,7 +194,7 @@ static bool uio_find_device_file(int jr_id, char *device_file, int *uio_device_i
                 if(jr_number == jr_id)
                 {
                     sprintf(device_file, "%s%d", SEC_UIO_DEVICE_FILE_NAME, uio_minor_number);
-                    SEC_INFO("Found UIO device %s for job ring id %d\n",
+                    SEC_INFO("Found UIO device %s for job ring id %d",
                             device_file,
                             jr_id);
                     device_file_found = true;
@@ -301,10 +301,10 @@ int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
     uint32_t *prop = NULL;
     uint32_t kernel_usr_channel_map = 0;
     uint32_t usr_channel_map = 0;
-    uint32_t len = 0;
     uint8_t config_jr_no = 0;
     int jr_idx = 0, jr_no = 0;
 #ifdef SEC_HW_VERSION_3_1
+    uint32_t len = 0;
     uint32_t channel_remap = 0;
     int my_map = 0;
 #endif // SEC_HW_VERSION_3_1
@@ -469,8 +469,8 @@ sec_return_code_t sec_config_uio_job_ring(sec_job_ring_t *job_ring)
             "Failed to open UIO device file for job ring %d",
             job_ring->jr_id);
 
-    SEC_INFO("Opened device file for job ring %d , fd = %d", job_ring->jr_id, job_ring->uio_fd);
 
+    SEC_INFO("Opened device file for job ring %d , fd = %d", job_ring->jr_id, job_ring->uio_fd);
     // Map register range for this job ring.
     // On SEC 4.x each job ring has its specific registers
     // in a separate 4K map-able memory area.

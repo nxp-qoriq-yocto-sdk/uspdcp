@@ -40,6 +40,9 @@
 #include "sec_contexts.h"
 #include "sec_hw_specific.h"
 #include "fifo.h"
+#ifdef SEC_HW_VERSION_4_4
+#include "sec_sg_contexts.h"
+#endif // SEC_HW_VERSION_4_4
 
 /*==============================================================================
                               DEFINES AND MACROS
@@ -77,11 +80,7 @@
 /** Test if job ring is full. Used job ring capacity to be 32 = a power of 2.
  * A job ring is full when there are 24 entries, which is the maximum
  * capacity of SEC's hardware FIFO. */
-//#ifdef SEC_HW_VERSION_3_1
 #define SEC_JOB_RING_IS_FULL            FIFO_IS_FULL
-//#else
-//#define SEC_JOB_RING_IS_FULL(jr)        ( hw_get_available_slots((jr)) == 0 )
-//#endif
 
 /*==============================================================================
                                     ENUMS
@@ -102,6 +101,9 @@ typedef struct sec_mac_i_s
 struct sec_job_t
 {
     sec_context_t *sec_context;         /*< SEC context this packet belongs to */
+#ifdef SEC_HW_VERSION_4_4
+    sec_sg_context_t *sg_ctx;           /*< SEC Scatter Gather context this packet belongs to */
+#endif
     struct sec_descriptor_t *descr;     /*< SEC descriptor sent to SEC engine(virtual address)*/
     dma_addr_t descr_phys_addr;         /*< SEC descriptor sent to SEC engine(physical address) */
     const sec_packet_t *in_packet;      /*< Input packet */
@@ -124,7 +126,9 @@ struct sec_outring_entry {
     dma_addr_t  desc;                   /*< Pointer to completed descriptor */
     uint32_t    status;                 /*< Status for completed descriptor */
 } PACKED;
+
 #endif // SEC_HW_VERSION_4_4
+
 /** Lists the possible states for a job ring. */
 typedef enum sec_job_ring_state_e
 {
@@ -136,46 +140,50 @@ typedef enum sec_job_ring_state_e
 struct sec_job_ring_t
 {
     // TODO: Add wrapper macro to make it obvious this is the consumer index on the output ring
-    volatile uint32_t cidx;                    /*< Consumer index for job ring (jobs array).
-                                                   @note: cidx and pidx are accessed from different threads.
-                                                   Place the cidx and pidx inside the structure so that
-                                                   they lay on different cachelines, to avoid false
-                                                   sharing between threads when the threads run on different cores! */
-    struct sec_job_t jobs[SEC_JOB_RING_SIZE];  /*< Ring of jobs. The same ring is used for
-                                                   input jobs and output jobs because SEC engine writes
-                                                   back output indication in input job.
-                                                   Size of array is power of 2 to allow fast update of
-                                                   producer/consumer indexes with bitwise operations. */
-    struct sec_descriptor_t *descriptors;      /*< Ring of descriptors sent to SEC engine for processing */
+    volatile uint32_t cidx;                     /*< Consumer index for job ring (jobs array).
+                                                    @note: cidx and pidx are accessed from different threads.
+                                                    Place the cidx and pidx inside the structure so that
+                                                    they lay on different cachelines, to avoid false
+                                                    sharing between threads when the threads run on different cores! */
+    struct sec_job_t jobs[SEC_JOB_RING_SIZE];   /*< Ring of jobs. The same ring is used for
+                                                    input jobs and output jobs because SEC engine writes
+                                                    back output indication in input job.
+                                                    Size of array is power of 2 to allow fast update of
+                                                    producer/consumer indexes with bitwise operations. */
+    struct sec_descriptor_t *descriptors;       /*< Ring of descriptors sent to SEC engine for processing */
 #ifdef SEC_HW_VERSION_3_1
-    struct fifo_t pdcp_c_plane_fifo;           /*< Ring of PDCP control plane packets that must be sent
-                                                   a second time to SEC for processing */
+    struct fifo_t pdcp_c_plane_fifo;            /*< Ring of PDCP control plane packets that must be sent
+                                                    a second time to SEC for processing */
 #endif
     // TODO: Add wrapper macro to make it obvious this is the producer index on the input ring
-    volatile uint32_t pidx;                    /*< Producer index for job ring (jobs array) */
+    volatile uint32_t pidx;                     /*< Producer index for job ring (jobs array) */
 #ifdef SEC_HW_VERSION_4_4
-    dma_addr_t *input_ring;                        /*< Ring of output descriptors received from SEC.
-                                                   Size of array is power of 2 to allow fast update of
-                                                   producer/consumer indexes with bitwise operations. */
+    dma_addr_t *input_ring;                     /*< Ring of output descriptors received from SEC.
+                                                    Size of array is power of 2 to allow fast update of
+                                                    producer/consumer indexes with bitwise operations. */
 
-    struct sec_outring_entry *output_ring;       /*< Ring of output descriptors received from SEC.
-                                                   Size of array is power of 2 to allow fast update of
-                                                   producer/consumer indexes with bitwise operations. */
-    volatile uint32_t   hw_cidx;
-    volatile uint32_t   hw_pidx;
+    struct sec_outring_entry *output_ring;      /*< Ring of output descriptors received from SEC.
+                                                    Size of array is power of 2 to allow fast update of
+                                                    producer/consumer indexes with bitwise operations. */
+
+    volatile uint32_t   hw_cidx;                /* TODO: Add comment */
+    volatile uint32_t   hw_pidx;                /* TODO: Add comment */
 #endif // SEC_HW_VERSION_4_4
-    uint32_t uio_fd;                        /*< The file descriptor used for polling from user space
-                                                for interrupts notifications */
-    uint32_t jr_id;                         /*< Job ring id */
+    uint32_t uio_fd;                            /*< The file descriptor used for polling from user space
+                                                    for interrupts notifications */
+    uint32_t jr_id;                             /*< Job ring id */
 #ifdef SEC_HW_VERSION_3_1
-    uint32_t alternate_register_range;      /*< Can be #TRUE or #FALSE. Indicates if the registers for
-                                                this job ring are mapped to an alternate 4k page.*/
+    uint32_t alternate_register_range;          /*< Can be #TRUE or #FALSE. Indicates if the registers for
+                                                    this job ring are mapped to an alternate 4k page.*/
 #endif // SEC_HW_VERSION_3_1
-    volatile void *register_base_addr;      /*< Base address for SEC's register memory for this job ring.
-                                                @note On SEC 3.1 all channels share the same register address space,
-                                                      so this member will have the exact same value for all of them. */
-    volatile sec_job_ring_state_t jr_state; /*< The state of this job ring */
-    sec_contexts_pool_t ctx_pool;           /*< Pool of SEC contexts */
+    volatile void *register_base_addr;          /*< Base address for SEC's register memory for this job ring.
+                                                    @note On SEC 3.1 all channels share the same register address space,
+                                                    so this member will have the exact same value for all of them. */
+    volatile sec_job_ring_state_t jr_state;     /*< The state of this job ring */
+    sec_contexts_pool_t ctx_pool;               /*< Pool of SEC contexts */
+#ifdef SEC_HW_VERSION_4_4
+    sec_sg_contexts_pool_t sg_ctx_pool;         /*< Pool of SEC Scatter Gather contexts */
+#endif
 }__CACHELINE_ALIGNED;
 /*==============================================================================
                                  CONSTANTS
@@ -199,11 +207,17 @@ extern struct sec_job_ring_t g_job_rings[MAX_SEC_JOB_RINGS];
  * @param [in]     startup_work_mode    The work mode to configure a job ring at startup.
  *                                      Used only when #SEC_NOTIFICATION_TYPE is set to
  *                                      #SEC_NOTIFICATION_TYPE_NAPI.
+ * @param [in]     irq_coalescing_timer Only for SEC 4.4
+ * @param [in]     irq_coalescing_count Only for SEC 4.4
  * @retval  SEC_SUCCESS for success
  * @retval  other for error
  *
  */
-int init_job_ring(struct sec_job_ring_t *job_ring, void **dma_mem, int startup_work_mode);
+int init_job_ring(struct sec_job_ring_t *job_ring, void **dma_mem,int startup_work_mode
+#ifdef SEC_HW_VERSION_4_4
+        ,uint8_t irq_coalescing_timer, uint8_t irq_coalescing_count
+#endif
+    );
 
 /** @brief Release the software and hardware resources tied to a job ring.
  * @param [in] job_ring The job ring
@@ -239,7 +253,15 @@ void uio_job_ring_enable_irqs(sec_job_ring_t *job_ring);
  */
 void uio_job_ring_disable_irqs(sec_job_ring_t *job_ring);
 
-#endif
+#if (SEC_INT_COALESCING_ENABLE == ON)
+/**
+ * TODO: Write something meaningful here
+ */
+void enable_job_ring_coalescing(sec_job_ring_t *job_ring,
+                                const sec_config_t *sec_config_data);
+
+#endif // SEC_INT_COALESCING_ENABLE == ON
+#endif // SEC_HW_VERSION_4_4
 /*============================================================================*/
 
 

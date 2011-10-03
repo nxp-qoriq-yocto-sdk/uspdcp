@@ -32,6 +32,11 @@
 #define LOCAL_DMA_ADDR_TYPE
 
 #include "private.h"
+#ifdef SEC_HW_VERSION_4_4
+#include <sys/ipc.h>    // _IOXXX macros
+#include <sys/shm.h>    // shmXXX functions
+#include <sys/ioctl.h>  // ioctl function
+#endif //SEC_HW_VERSION_4_4
 
 #define test_printf(format, ...)
 //#define test_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__)
@@ -43,14 +48,21 @@
  * parameter). See conf.h for the hard-coded constants that are used. */
 
 static int fd;
+#ifdef SEC_HW_VERSION_4_4
+int     shmid;
+#endif // SEC_HW_VERSION_4_4
 
 /* This global is exported for use in ptov/vtop inlines. It is the result of the
  * mmap(), but pre-cast to dma_addr_t, so if we have 64-bit physical addresses
  * the ptov/vtop inlines will have less conversion to do. */
 dma_addr_t __dma_virt;
+#ifdef SEC_HW_VERSION_4_4
+dma_addr_t __dma_phys;
+#endif //SEC_HW_VERSION_4_4
+
 /* This is the same value, but it's the pointer type */
 static void *virt;
-
+#ifdef SEC_HW_VERSION_3_1
 int dma_mem_setup(void)
 {
 	void *trial;
@@ -112,3 +124,78 @@ int dma_mem_release(void)
 	}
 	return 0;
 }
+#else // SEC_HW_VERSION_3_1
+int dma_mem_setup(void)
+{
+        int ret = -ENODEV;
+        range_t r;
+
+        test_printf("Trying to open %s\n",DMA_MEM_PATH);
+
+        /* query ranges from /dev/het_mgr */
+        fd = open(DMA_MEM_PATH, O_RDWR);
+        if (fd < 0)
+        {
+                perror("Error: Cannot open DMA_MEM_PATH");
+                return ret;
+        }
+
+        /* Try to get memory range */
+        shmid = shmget(DMA_MEM_KEY, DMA_MEM_SIZE, SHM_HUGETLB| IPC_CREAT | SHM_R | SHM_W);
+        if ( shmid < 0 ) {
+                perror("shmget failed");
+                return -1;
+        }
+
+        test_printf("HugeTLB shmid: 0x%x\n", shmid);
+        r.vaddr = shmat(shmid, 0, 0);
+
+        if (r.vaddr == (char *)-1) {
+                perror("Shared memory attach failure");
+                shmctl(shmid, IPC_RMID, NULL);
+                return -1;
+        }
+
+        test_printf("Clearing the memory");
+        memset(r.vaddr, 0, 4); //try with 4 bytes
+
+        // Get phyisical address
+        ret = ioctl(fd, IOCTL_HET_MGR_V2P, &r);
+        test_printf("Ret ioctl = %d\n",ret);
+        test_printf("V2P %x %x \n", (uint32_t)r.vaddr, r.phys_addr);
+
+
+        virt = r.vaddr;
+        __dma_virt = (dma_addr_t)virt;
+
+        __dma_phys = (dma_addr_t)r.phys_addr;
+
+        /* dma_mem is used for ad-hoc allocations. */
+        ret = dma_mem_alloc_init(virt + DMA_MEM_SEC_DRIVER, DMA_MEM_SIZE - DMA_MEM_SEC_DRIVER);
+        if (ret)
+            goto err;
+
+        return 0;
+
+err:
+#warning "Copy-paste, modify"
+    fprintf(stderr, "ERROR: dma_mem setup failed, ret = %d\n", ret);
+    close(fd);
+    return ret;
+}
+
+int dma_mem_release(void)
+{
+    if (shmdt(virt) != 0) {
+        perror("Detach failure");
+        shmctl(shmid, IPC_RMID, NULL);
+        return -1;
+    }
+
+    close(fd);
+    shmctl(shmid, IPC_RMID, NULL);
+
+    return 0;
+}
+
+#endif // SEC_HW_VERSION_3_1

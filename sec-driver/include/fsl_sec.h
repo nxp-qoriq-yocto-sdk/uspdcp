@@ -148,13 +148,16 @@ typedef enum sec_ua_return_e
                                      processing any other SEC responses. */
 }sec_ua_return_t;
 
-/** Cryptographic/Integrity check algorithms */
+/** Cryptographic/Integrity check algorithms.
+ *  @note The id values for each algorithm are synchronized with those
+ *  specified in 3gpp spec 33.401.
+ */
 typedef enum sec_crypto_alg_e
 {
-    SEC_ALG_SNOW = 0,       /**< Use SNOW algorithm for confidentiality(EEA1) or integrity protection(EIA1) */
+    SEC_ALG_NULL = 0,       /**< Use EEA0 for confidentiality or EIA0 for integrity protection
+                                (no confidentiality and no integrity).*/
+    SEC_ALG_SNOW,           /**< Use SNOW algorithm for confidentiality(EEA1) or integrity protection(EIA1) */
     SEC_ALG_AES,            /**< Use AES algorithm for confidentiality(EEA2) or integrity protection(EIA2)) */
-    SEC_ALG_NULL,           /**< Use EEA0 for confidentiality or EIA0 for integrity protection
-                                 (no confidentiality and no integrity).*/
 
 }sec_crypto_alg_t;
 /*==================================================================================================
@@ -301,6 +304,7 @@ typedef struct sec_config_s
     void            *memory_area;           /**< UA provided- virtual memory of size #SEC_DMA_MEMORY_SIZE to be used internally
                                                  by the driver to allocate data (like SEC descriptors) that needs to be passed to
                                                  SEC device in physical addressing. */
+#ifdef SEC_HW_VERSION_4_4
     uint32_t        irq_coalescing_timer;   /**< Interrupt Coalescing Timer Threshold.
                                                  @note Applicable to SEC 4.4 only!
 
@@ -321,6 +325,7 @@ typedef struct sec_config_s
                                                  coalescing since the threshold value is reached each time that a
                                                  Job Descriptor is completed. A value of 0 is treated in the same
                                                  manner as a value of 1.*/
+#endif // SEC_HW_VERSION_4_4
     uint8_t         work_mode;              /**< Choose between hardware poll vs interrupt notification when driver is initialized.
                                                  Valid values are #SEC_STARTUP_POLLING_MODE and #SEC_STARTUP_INTERRUPT_MODE.*/
 }sec_config_t;
