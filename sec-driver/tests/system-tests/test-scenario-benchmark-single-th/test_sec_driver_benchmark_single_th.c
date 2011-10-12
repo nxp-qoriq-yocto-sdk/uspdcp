@@ -1352,23 +1352,21 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
 
     pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].usage = PDCP_BUFFER_USED;
     (*in_packet)->address = &(pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].buffer[0]);
-    //in_packet->offset = pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].offset;
 
-    // Needed 8 bytes before actual start of PDCP packet, for PDCP control-plane + AES algo testing.
+#ifdef SEC_HW_VERSION_3_1
     (*in_packet)->offset = 8;
-    //(*in_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
-
+    (*in_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
+#endif // SEC_HW_VERSION_3_1
     assert(pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].usage == PDCP_BUFFER_FREE);
     *out_packet = &(pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].pdcp_packet);
 
     pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].usage = PDCP_BUFFER_USED;
     (*out_packet)->address = &(pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].buffer[0]);
 
-    //out_packet->offset = pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].offset;
-
-    // Needed 8 bytes before actual start of PDCP packet, for PDCP control-plane + AES algo testing.
+#ifdef SEC_HW_VERSION_3_1
     (*out_packet)->offset = 8;
-    //(*out_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
+    (*out_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
+#endif // SEC_HW_VERSION_3_1
 
     // copy PDCP header
     memcpy((*in_packet)->address + (*in_packet)->offset, test_pdcp_hdr, sizeof(test_pdcp_hdr));
@@ -1378,10 +1376,14 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
            sizeof(test_data_in));
 
     (*in_packet)->length = sizeof(test_data_in) + PDCP_HEADER_LENGTH + (*in_packet)->offset;
+#ifdef SEC_HW_VERSION_3_1
     assert((*in_packet)->length + 4 <= PDCP_BUFFER_SIZE);
+#endif // SEC_HW_VERSION_3_1
 
     (*out_packet)->length = sizeof(test_data_in) + PDCP_HEADER_LENGTH + (*out_packet)->offset;
+#ifdef SEC_HW_VERSION_3_1
     assert((*out_packet)->length + 4 <= PDCP_BUFFER_SIZE);
+#endif // SEC_HW_VERSION_3_1
 
     pdcp_context->no_of_used_buffers++;
 

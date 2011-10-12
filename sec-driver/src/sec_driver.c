@@ -48,7 +48,10 @@ extern "C" {
 #include "sec_hw_specific.h"
 #ifdef SEC_HW_VERSION_4_4
 #include "external_mem_management.h"
-#endif
+#if (SEC_ENABLE_SCATTER_GATHER == ON)
+#include "sec_sg_utils.h"
+#endif // (SEC_ENABLE_SCATTER_GATHER == ON)
+#endif // SEC_HW_VERSION_4_4
 #include <stdio.h>
 
 /*==================================================================================================
@@ -58,13 +61,6 @@ extern "C" {
  *  All the available contexts will be split evenly between all the per-job-ring pools.
  *  There is one additional global pool besides the per-job-ring pools. */
 #define MAX_SEC_CONTEXTS_PER_POOL   (SEC_MAX_PDCP_CONTEXTS / (g_job_rings_no))
-
-#ifdef SEC_HW_VERSION_4_4
-/** Max number of Scatter Gather contexts, based on the JR size
- * One SG context contains two tables with SEC_MAX_SG_TBL_ENTRIES
- * each, one for input and one for output */
-#define MAX_SEC_SG_CONTEXTS_PER_POOL   (SEC_JOB_RING_SIZE)
-#endif // SEC_HW_VERSION_4_4
 
 /** Max length of a string describing a ::sec_status_t value or a ::sec_return_code_t value */
 #define MAX_STRING_REPRESENTATION_LENGTH    50
@@ -377,11 +373,7 @@ static void hw_flush_job_ring(sec_job_ring_t * job_ring,
     int32_t discarded_packets_no = 0;
     int32_t number_of_jobs_available = 0;
     int ret;
-#ifdef SEC_HW_VERSION_4_4
-#if (SEC_ENABLE_SCATTER_GATHER == ON)
-    sec_sg_context_t    *sg_ctx = NULL;
-#endif // SEC_ENABLE_SCATTER_GATHER
-#endif // SEC_HW_VERSION_4_4
+
     SEC_DEBUG("Jr[%p] pi[%d] ci[%d].Flushing jr id %d.packet status[%d]."
               "SEC error code[0x%x]. notify packet=[%d]",
               job_ring, job_ring->pidx, job_ring->cidx,
@@ -413,15 +405,6 @@ static void hw_flush_job_ring(sec_job_ring_t * job_ring,
 #else
         job = &job_ring->jobs[job_ring->hw_cidx];
 #endif
-#if defined(SEC_HW_VERSION_4_4) && ( SEC_ENABLE_SCATTER_GATHER == ON )
-        /* Since the packet is already processed
-         * there's no need for the Scatter Gather context
-         * so it can be reused; put it back in the pool
-         */
-        sg_ctx = job->sg_ctx;
-        free_sg_context(sg_ctx->pool,sg_ctx);
-
-#endif // defined(SEC_HW_VERSION_4_4) && ( SEC_ENABLE_SCATTER_GATHER == ON )
         sec_context = job->sec_context;
 
         discarded_packets_no++;
@@ -518,9 +501,6 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
     int sw_idx = job_ring->cidx;
     int tail = job_ring->cidx;
     int i;
-#if ( SEC_ENABLE_SCATTER_GATHER == ON )
-    sec_sg_context_t *sg_ctx = NULL;
-#endif // SEC_ENABLE_SCATTER_GATHER == ON
 
     /* check here if any JR error that cannot be written
     * in the output status word has occurred
@@ -535,7 +515,7 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
     }
 #endif
     // Compute the number of notifications that need to be raised to UA
-    // If limit < 0 -> notify all done jobs1h
+    // If limit < 0 -> notify all done jobs
     // If limit > total number of done jobs -> notify all done jobs
     // If limit = 0 -> error
     // If limit > 0 && limit < total number of done jobs -> notify a number of done jobs equal with limit
@@ -561,9 +541,7 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
           )
     {
 #ifdef SEC_HW_VERSION_4_4
-        // Reset status here, otherwise strange things happen :)
         status = SEC_STATUS_SUCCESS;
-
         hw_idx = job_ring->hw_cidx;
 
         for (i = 0;
@@ -614,7 +592,7 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
             status = SEC_STATUS_HFN_THRESHOLD_REACHED;
         }
 
-#else
+#else // SEC_HW_VERSION_4_4
         if(SEC_JOB_RING_NUMBER_OF_ITEMS(SEC_JOB_RING_SIZE, job_ring->pidx, job_ring->cidx) == 0)
         {
             SEC_DEBUG("Job Ring %p was emptied by moving c-plane packets into internal FIFO",
@@ -624,16 +602,16 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
 
         // get the first un-notified job from the job ring
         job = &job_ring->jobs[job_ring->cidx];
-#endif
-#if SEC_HW_VERSION_3_1
+#endif // SEC_HW_VERSION_4_4
+#ifdef SEC_HW_VERSION_3_1
         // check if job is DONE
         if(!hw_job_is_done(job))
-#endif
+#endif // SEC_HW_VERSION_3_1
         {
-#if SEC_HW_VERSION_3_1
+#ifdef SEC_HW_VERSION_3_1
             // check if any job generated error, not only this job.
             sec_error_code = hw_job_ring_error(job_ring);
-#endif
+#endif // SEC_HW_VERSION_3_1
             if (sec_error_code)
             {
                 // Set errno value to the error code returned by SEC engine.
@@ -659,7 +637,7 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
                           job_ring, job->descr->hdr);
                 break;
             }
-#endif
+#endif // SEC_HW_VERSION_3_1
         }
 
         sec_context = job->sec_context;
@@ -685,7 +663,7 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
                 continue;
             }
         }
-#endif
+#endif // SEC_HW_VERSION_3_1
         // copy into a temporary job the fields from the job we need to raise callback
         // this is done to free the slot before the callback is called,
         // which we cannot control in terms of how much processing it will do.
@@ -696,18 +674,10 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
         // now increment the consumer index for the current job ring,
         // AFTER saving job in temporary location!
         job_ring->cidx = SEC_CIRCULAR_COUNTER(job_ring->cidx, SEC_JOB_RING_SIZE);
-#if SEC_HW_VERSION_4_4
+#ifdef SEC_HW_VERSION_4_4
         /* Increment HW read index */
         job_ring->hw_cidx = SEC_CIRCULAR_COUNTER(job_ring->hw_cidx, SEC_JOB_RING_SIZE);
-#if SEC_ENABLE_SCATTER_GATHER == ON
-        /* Since the packet is already processed
-         * there's no need for the Scatter Gather context
-         * so it can be reused; put it back in the pool
-         */
-        SEC_DEBUG("My ctx: %p",job->sg_ctx);
-        sg_ctx = job->sg_ctx;
-        free_sg_context(sg_ctx->pool,sg_ctx);
-#endif // SEC_ENABLE_SCATTER_GATHER == ON
+
         /*
          * if this job completed out-of-order, do not increment
          * the tail.  Otherwise, increment tail by 1 plus the
@@ -725,7 +695,7 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
 
         /* Restore descriptor address */
         hw_remove_one_entry(job_ring);
-#endif
+#endif // SEC_HW_VERSION_4_4
         // If context is retiring, set a suggestive status for the packets notified to UA.
         // Doesn't matter if the status is overwritten here, if UA deleted the context,
         // it does not care about any other packet status.
@@ -746,7 +716,7 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
 #ifdef SEC_HW_VERSION_4_4
         head = job_ring->pidx;
         sw_idx = tail = job_ring->cidx;
-#endif
+#endif // SEC_HW_VERSION_4_4
         // consume processed packet for this sec context
         CONTEXT_CONSUME_PACKET(sec_context);
         notified_packets_no++;
@@ -1087,7 +1057,9 @@ static void sec_handle_packet_error(sec_job_ring_t *job_ring,
                                     uint32_t *notified_packets,
                                     uint32_t *do_driver_shutdown)
 {
+#ifdef SEC_HW_VERSION_3_1
     int ret;
+#endif // SEC_HW_VERSION_3_1
     uint32_t reset_cont_job_ring = FALSE;
 
     ASSERT(notified_packets != NULL);
@@ -1108,7 +1080,7 @@ static void sec_handle_packet_error(sec_job_ring_t *job_ring,
                       SEC_STATUS_ERROR, // the status to be set for each packet when notified to UA
                       sec_error_code,
                       notified_packets);
-
+#ifdef SEC_HW_VERSION_3_1
     // Reset job ring if required
     if(reset_cont_job_ring == TRUE)
     {
@@ -1139,11 +1111,14 @@ static void sec_handle_packet_error(sec_job_ring_t *job_ring,
         }
     }
     else
+#endif //  SEC_HW_VERSION_3_1
     {
         // Job ring can be used again by UA
         job_ring->jr_state = SEC_JOB_RING_STATE_STARTED;
     }
 }
+
+
 
 /*==================================================================================================
                                      GLOBAL FUNCTIONS
@@ -1200,7 +1175,7 @@ sec_return_code_t sec_init(const sec_config_t *sec_config_data,
     // Configure DMA-capable memory area assigned to the driver by UA
     g_dma_mem_start = sec_config_data->memory_area;
     g_dma_mem_free = g_dma_mem_start;
-    SEC_INFO("Using DMA memory area with start address = %p", g_dma_mem_start);
+    SEC_INFO("Using DMA memory area with start address = %p\n", g_dma_mem_start);
 
     // Read configuration data from DTS (Device Tree Specification).
     ret = sec_configure(g_job_rings_no, g_job_rings);
@@ -1215,6 +1190,9 @@ sec_return_code_t sec_init(const sec_config_t *sec_config_data,
         // create/delete contexts for a certain JR (also known as the producer of the JR).
         ret = init_contexts_pool(&(g_job_rings[i].ctx_pool),
                                  MAX_SEC_CONTEXTS_PER_POOL,
+#ifdef SEC_HW_VERSION_4_4
+                                 &g_dma_mem_free,
+#endif // SEC_HW_VERSION_4_4
                                  THREAD_UNSAFE_POOL);
         if (ret != SEC_SUCCESS)
         {
@@ -1224,19 +1202,6 @@ sec_return_code_t sec_init(const sec_config_t *sec_config_data,
             g_driver_state = SEC_DRIVER_STATE_IDLE;
             return ret;
         }
-#ifdef SEC_HW_VERSION_4_4
-        ret = init_sg_contexts_pool(&(g_job_rings[i].sg_ctx_pool),
-                                    MAX_SEC_SG_CONTEXTS_PER_POOL,
-                                    &g_dma_mem_free);
-        if (ret != SEC_SUCCESS)
-        {
-            SEC_ERROR("Failed to initialize SEC SG context pool "
-                      "for job ring id %d. Starting sec_release()", g_job_rings[i].jr_id);
-            sec_release();
-            g_driver_state = SEC_DRIVER_STATE_IDLE;
-            return ret;
-        }
-#endif
 
         // Configure each owned job ring with UIO data:
         // - UIO device file descriptor
@@ -1259,7 +1224,6 @@ sec_return_code_t sec_init(const sec_config_t *sec_config_data,
                 , sec_config_data->irq_coalescing_count
 #endif // SEC_HW_VERSION_4_4
                 );
-
         if (ret != SEC_SUCCESS)
         {
             SEC_ERROR("Failed to initialize job ring with id %d. "
@@ -1277,6 +1241,9 @@ sec_return_code_t sec_init(const sec_config_t *sec_config_data,
     // We need thread synchronizations mechanisms for this pool.
     ret = init_contexts_pool(&g_ctx_pool,
                              MAX_SEC_CONTEXTS_PER_POOL,
+#ifdef SEC_HW_VERSION_4_4
+                             &g_dma_mem_free,
+#endif
                              THREAD_SAFE_POOL);
     if (ret != SEC_SUCCESS)
     {
@@ -1287,6 +1254,23 @@ sec_return_code_t sec_init(const sec_config_t *sec_config_data,
         return ret;
     }
 
+#ifdef SEC_HW_VERSION_4_4
+    /* Now check if I've overrun the memory 'segment' allocated by the UA
+     * TODO: Add some tests for this*/
+
+    if( (dma_addr_t)g_dma_mem_free - (dma_addr_t)g_dma_mem_start >= DMA_MEM_SEC_DRIVER )
+    {
+        SEC_ERROR("Overrun the memory allocated for SEC driver! (allocated: %lu KB, requested %u KB)",
+                    DMA_MEM_SEC_DRIVER/1024,
+                    ((dma_addr_t)g_dma_mem_free - (dma_addr_t)g_dma_mem_start)/1024);
+    }
+    else
+    {
+        SEC_INFO("Allocated %u KB for SEC driver, remaining free %ul KB",
+                DMA_MEM_SEC_DRIVER/1024,
+                ((dma_addr_t)g_dma_mem_free - (dma_addr_t)g_dma_mem_start)/1024);
+    }
+#endif // SEC_HW_VERSION_4_4
     // Remember initial work mode
     g_sec_work_mode = sec_config_data->work_mode;
 
@@ -1319,10 +1303,7 @@ sec_return_code_t sec_release()
     {
         // destroy the contexts pool per JR
         destroy_contexts_pool(&(g_job_rings[i].ctx_pool));
-#ifdef SEC_HW_VERSION_4_4
-        // destroy the scatter gather contexts pool
-        destroy_sg_contexts_pool(&(g_job_rings[i].sg_ctx_pool));
-#endif
+
     	shutdown_job_ring(&g_job_rings[i]);
     }
     g_job_rings_no = 0;
@@ -1435,7 +1416,7 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
         SEC_DEBUG("Jr[%p].Context %p user plane = %d configured with NULL algorithm",
                   job_ring, ctx, ctx->pdcp_crypto_info->user_plane);
     }
-#endif
+#endif // SEC_HW_VERSION_3_1
 
     // provide to UA a SEC ctx handle
 	*sec_ctx_handle = (sec_context_handle_t)ctx;
@@ -1506,11 +1487,11 @@ sec_return_code_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
     SEC_ASSERT(!(limit == 0 || weight == 0 || (limit <= weight) || (weight > SEC_JOB_RING_HW_SIZE)),
                SEC_INVALID_INPUT_PARAM,
                "Invalid limit/weight parameter configuration");
-#else
+#else // SEC_HW_VERSION_3_1
     SEC_ASSERT(!(limit == 0 || weight == 0 || (limit <= weight) || (weight > SEC_JOB_RING_SIZE)),
                SEC_INVALID_INPUT_PARAM,
                "Invalid limit/weight parameter configuration");
-#endif
+#endif // SEC_HW_VERSION_3_1
     SEC_DEBUG("Polling. weight [%d] limit[%d]", weight, limit);
 
     // Poll job rings
@@ -1642,7 +1623,7 @@ sec_return_code_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle,
         *packets_no = notified_packets_no;
     }
 
-#if SEC_NOTIFICATION_TYPE == SEC_NOTIFICATION_TYPE_NAPI
+#if (SEC_NOTIFICATION_TYPE == SEC_NOTIFICATION_TYPE_NAPI)
     if (limit < 0)
     {
         uio_job_ring_enable_irqs(job_ring);
@@ -1653,7 +1634,7 @@ sec_return_code_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle,
     }
 #endif
 
-#if SEC_NOTIFICATION_TYPE == SEC_NOTIFICATION_TYPE_IRQ
+#if (SEC_NOTIFICATION_TYPE == SEC_NOTIFICATION_TYPE_IRQ)
     // Always enable IRQ generation when in pure IRQ mode
     uio_job_ring_enable_irqs(job_ring);
 
@@ -1661,7 +1642,6 @@ sec_return_code_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle,
     return SEC_SUCCESS;
 }
 sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
-
                                      const sec_packet_t *in_packet,
                                      const sec_packet_t *out_packet,
                                      ua_context_handle_t ua_ctx_handle)
@@ -1669,13 +1649,10 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
     int ret = SEC_SUCCESS;
     sec_job_t *job = NULL;
     sec_job_ring_t *job_ring = NULL;
-#if (SEC_ENABLE_SCATTER_GATHER==ON)
-#ifdef SEC_HW_VERSION_3_1
+
+#if defined(SEC_HW_VERSION_3_1) && (SEC_ENABLE_SCATTER_GATHER==ON)
 #error "Scatter/Gather support is not implemented!"
-#else // SEC_HW_VERSION_3_1
-    sec_sg_context_t    *sg_ctx = NULL;
-#endif // SEC_HW_VERSION_3_1
-#endif // SEC_ENABLE_SCATTER_GATHER == ON
+#endif // defined(SEC_HW_VERSION_3_1) && (SEC_ENABLE_SCATTER_GATHER==ON)
 
     // Validate driver state
     SEC_ASSERT(g_driver_state == SEC_DRIVER_STATE_STARTED,
@@ -1706,7 +1683,7 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
     SEC_ASSERT( (out_packet->total_length != 0 && out_packet->num_fragments != 0) ||
                 (out_packet->total_length == 0 && out_packet->num_fragments == 0),
                 SEC_INVALID_INPUT_PARAM, "out_packet->total_length error (check out_packet->num_fragments");
-#else
+#else // (SEC_ENABLE_SCATTER_GATHER == ON)
     SEC_ASSERT(in_packet->num_fragments == 0, SEC_INVALID_INPUT_PARAM, "Please enable Scatter Gather support");
     SEC_ASSERT(out_packet->num_fragments == 0, SEC_INVALID_INPUT_PARAM, "Please enable Scatter Gather support");
 #endif // SEC_ENABLE_SCATTER_GATHER == ON
@@ -1750,7 +1727,7 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
                   job_ring, job_ring->pidx, job_ring->cidx);
         return SEC_JR_IS_FULL;
     }
-#else
+#else // SEC_HW_VERSION_3_1
     if( (hw_get_available_slots(job_ring) == 0) ||
          SEC_JOB_RING_IS_FULL(job_ring->pidx, job_ring->cidx,
                               SEC_JOB_RING_SIZE,SEC_JOB_RING_SIZE ) )
@@ -1759,43 +1736,29 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
                           job_ring, job_ring->pidx, job_ring->cidx);
                 return SEC_JR_IS_FULL;
     }
-#endif
+#endif // SEC_HW_VERSION_3_1
     SEC_DEBUG("Jr[%p] pi[%d] ci[%d].Before sending packet",
               job_ring, job_ring->pidx, job_ring->cidx);
 
     // get first available job from job ring
     job = &job_ring->jobs[job_ring->pidx];
-#ifdef SEC_HW_VERSION_4_4
-#if (SEC_ENABLE_SCATTER_GATHER == ON)
-    // Pull a SG context from pool
-    sg_ctx = get_free_sg_context(&job_ring->sg_ctx_pool);
-    if( sg_ctx == NULL )
-    {
-        // no free SG contexts
-        return SEC_DRIVER_NO_FREE_CONTEXTS;
-    }
+#if defined(SEC_HW_VERSION_4_4) && (SEC_ENABLE_SCATTER_GATHER == ON)
 
-    ret = build_sg_context(sg_ctx,in_packet,SEC_SG_CONTEXT_DIR_IN);
+    ret = build_sg_context(job->sg_ctx,in_packet,SEC_SG_CONTEXT_TYPE_IN);
     if( ret != SEC_SUCCESS )
     {
         SEC_ERROR("Error creating Scatter-Gather table for input packet: %s",sec_get_error_message(ret));
-        free_sg_context(sg_ctx->pool, sg_ctx);
         return ret;
     }
 
-    ret = build_sg_context(sg_ctx,out_packet,SEC_SG_CONTEXT_DIR_OUT);
+    ret = build_sg_context(job->sg_ctx,out_packet,SEC_SG_CONTEXT_TYPE_OUT);
     if( ret != SEC_SUCCESS )
     {
         SEC_ERROR("Error creating Scatter-Gather table for output packet: %s",sec_get_error_message(ret));
-        free_sg_context(sg_ctx->pool, sg_ctx);
         return ret;
     }
 
-    // Set job SG context
-     job->sg_ctx = sg_ctx;
-     SEC_DEBUG("My ctx: %p",job->sg_ctx);
-#endif // (SEC_ENABLE_SCATTER_GATHER == ON)
-#endif // SEC_HW_VERSION_4_4
+#endif // defined(SEC_HW_VERSION_4_4) && (SEC_ENABLE_SCATTER_GATHER == ON)
 
     // update job with crypto context and in/out packet data
     job->in_packet = in_packet;
@@ -1807,6 +1770,7 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
     job->is_integrity_algo = (sec_context->pdcp_crypto_info->user_plane == PDCP_CONTROL_PLANE) &&
         ((sec_context->double_pass == FALSE && sec_context->pdcp_crypto_info->integrity_algorithm != SEC_ALG_NULL) ||
          (sec_context->double_pass == TRUE && sec_context->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION) );
+
     SEC_DEBUG("Jr[%p] pi[%d] ci[%d].in packet[%p].packet double-pass[%d].is_integrity_algo[%d]",
               job_ring, job_ring->pidx, job_ring->cidx,
               job->in_packet, sec_context->double_pass,
@@ -1815,16 +1779,17 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
 
     // update descriptor with pointers to input/output data and pointers to crypto information
     ASSERT(job->descr != NULL);
-#if SEC_HW_VERSION_4_4
+#ifdef SEC_HW_VERSION_4_4
     // Descriptor Phy Addr will be set to 0 during the search, must be updated here
     job->descr_phys_addr = sec_vtop(job->descr);
-#endif
+#endif // SEC_HW_VERSION_4_4
 
 #ifdef SEC_HW_VERSION_3_1
     // Update SEC descriptor. If HFN reached the configured threshold, then
     // the User App callback will be raised with status set to SEC_STATUS_HFN_THRESHOLD_REACHED.
     ret = sec_pdcp_context_update_descriptor(sec_context, job, job->descr, job->is_integrity_algo);
-#else
+#else // SEC_HW_VERSION_3_1
+
     /* Update SEC Job Descriptor for this packet with the relevant pointers
      * (i.e. Shared Descriptor pointer (per context), in packet address,
      * out packet address)
@@ -1840,6 +1805,7 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
 
     // increment the producer index for the current job ring
     job_ring->pidx = SEC_CIRCULAR_COUNTER(job_ring->pidx, SEC_JOB_RING_SIZE);
+
 
     // Enqueue this descriptor into the Fetch FIFO of this JR
     // Need write memory barrier here so that descriptor is written before
@@ -1872,7 +1838,7 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
 
     // Notify HW that a new job is enqueued
     hw_enqueue_packet_on_job_ring(job_ring);
-#endif
+#endif // SEC_HW_VERSION_3_1
 
     return SEC_SUCCESS;
 }
@@ -1902,6 +1868,34 @@ const char* sec_get_error_message(sec_return_code_t return_code)
     return g_return_code_descriptions[return_code];
 }
 
+#ifdef SEC_HW_VERSION_3_1
+sec_return_code_t sec_push_c_plane_packets(sec_job_ring_handle_t job_ring_handle)
+{
+    sec_job_ring_t * job_ring =  (sec_job_ring_t *)job_ring_handle;
+    int ret = 0;
+
+    // Validate driver state
+    SEC_ASSERT(g_driver_state == SEC_DRIVER_STATE_STARTED,
+               (g_driver_state == SEC_DRIVER_STATE_RELEASE) ?
+               SEC_DRIVER_RELEASE_IN_PROGRESS : SEC_DRIVER_NOT_INITIALIZED,
+               "Driver release is in progress or driver not initialized");
+
+    SEC_ASSERT(job_ring != NULL, SEC_INVALID_INPUT_PARAM, "job_ring_handle is NULL");
+
+    // Check job ring state
+    SEC_ASSERT(job_ring->jr_state == SEC_JOB_RING_STATE_STARTED,
+               SEC_JOB_RING_RESET_IN_PROGRESS,
+               "Job ring with id %d is currently resetting. "
+               "Can use it again after reset is over(when sec_poll function/s return)", job_ring->jr_id);
+
+    // Check control-plane internal queue for packets that need be sent to SEC
+    // for second processing step.
+    ret = sec_process_pdcp_c_plane_packets(job_ring);
+    SEC_ASSERT(ret == SEC_SUCCESS, ret,
+               "sec_process_pdcp_c_plane_packets returned error code %d", ret);
+    return SEC_SUCCESS;
+}
+#endif
 
 /*================================================================================================*/
 

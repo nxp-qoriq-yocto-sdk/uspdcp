@@ -61,13 +61,8 @@ extern "C" {
 #define JOB_RING_NUMBER              2
 
 // Number of worker threads created by this application
-#ifdef SEC_HW_VERSION_3_1
 // One thread is producer on JR 1 and consumer on JR 2 (PDCP UL processing).
 // The other thread is producer on JR 2 and consumer on JR 1 (PDCP DL processing).
-#else
-// One thread is producer on JR 1 and consumer on JR 1 (PDCP UL processing).
-// The other thread is producer on JR 2 and consumer on JR 2 (PDCP DL processing).
-#endif
 #define THREADS_NUMBER               2
 
 // The size of a PDCP input buffer.
@@ -94,7 +89,7 @@ extern "C" {
 // I.e: packet offset should be at least 8. SEC driver will use the last 8 bytes
 // before PDCP header starts, to calculate initialization data required for AES CMAC algorithm.
 #define AES_CMAC_SCTRATCHPAD_PACKET_AREA_LENGHT 8
-#endif
+#endif // SEC_HW_VERSION_3_1
 
 // Offset in input and output packet, where PDCP header starts
 #define PACKET_OFFSET   3
@@ -102,7 +97,7 @@ extern "C" {
 // Length in bytes requried for MAC-I code generation,
 // in case of PDCP control-plane.
 #define MAC_I_LENGTH    4
-#endif
+#endif // SEC_HW_VERSION_3_1
 
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
@@ -458,7 +453,6 @@ static int release_pdcp_buffers(pdcp_context_t * pdcp_context,
     // was received.
     if (status == SEC_STATUS_LAST_OVERDUE)
     {
-        test_printf("%p",pdcp_context->sec_ctx);
         assert(pdcp_context->usage == PDCP_CONTEXT_MARKED_FOR_DELETION ||
         pdcp_context->usage == PDCP_CONTEXT_MARKED_FOR_DELETION_LAST_IN_FLIGHT_PACKET);
 
@@ -507,11 +501,11 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
 
     pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].usage = PDCP_BUFFER_USED;
     (*in_packet)->address = &(pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].buffer[0]);
-    //in_packet->offset = pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].offset;
 
-    // Needed 8 bytes before actual start of PDCP packet, for PDCP control-plane + AES algo testing.
+#ifdef SEC_HW_VERSION_3_1
     (*in_packet)->offset = test_packet_offset;
-    //(*in_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
+    (*in_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
+#endif // SEC_HW_VERSION_3_1
 
     assert(pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].usage == PDCP_BUFFER_FREE);
     *out_packet = &(pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].pdcp_packet);
@@ -519,13 +513,11 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
     pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].usage = PDCP_BUFFER_USED;
     (*out_packet)->address = &(pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].buffer[0]);
 
-    *((uint8_t*)((*out_packet)->address)) = pdcp_context->id;
-
-    //out_packet->offset = pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].offset;
-
+#ifdef SEC_HW_VERSION_3_1
     // Needed 8 bytes before actual start of PDCP packet, for PDCP control-plane + AES algo testing.
     (*out_packet)->offset = test_packet_offset;
-    //(*out_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
+    (*out_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
+#endif // SEC_HW_VERSION_3_1
 
     // copy PDCP header
     memcpy((*in_packet)->address + (*in_packet)->offset, test_pdcp_hdr, sizeof(test_pdcp_hdr));
@@ -534,24 +526,30 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
            test_data_in,
            sizeof(test_data_in));
 
-    (*in_packet)->length = sizeof(test_data_in) + PDCP_HEADER_LENGTH; // + (*in_packet)->offset;
+    (*in_packet)->length = sizeof(test_data_in) + PDCP_HEADER_LENGTH
 #ifdef SEC_HW_VERSION_3_1
+            + (*in_packet)->offset;
 #ifdef TEST_PDCP_CONTROL_PLANE_DOUBLE_PASS_ENC
     // Need extra 4 bytes at end of input/output packet for MAC-I code, in case of PDCP control-plane packets
     (*in_packet)->length += MAC_I_LENGTH;
 #endif // TEST_PDCP_CONTROL_PLANE_DOUBLE_PASS_ENC
+#else // SEC_HW_VERSION_3_1
+    ;
 #endif // SEC_HW_VERSION_3_1
     // Need extra 4 bytes at end of input/output packet for MAC-I code, in case of PDCP control-plane packets
     // Need  extra 8 bytes at start of input packet  for Initialization Vector (IV) when testing
     // PDCP control-plane with AES CMAC algorithm, which is captured in 'offset' field.
     assert((*in_packet)->length <= PDCP_BUFFER_SIZE);
 
-    (*out_packet)->length = sizeof(test_data_out) + PDCP_HEADER_LENGTH; //+ (*out_packet)->offset;
+    (*out_packet)->length = sizeof(test_data_out) + PDCP_HEADER_LENGTH
 #ifdef SEC_HW_VERSION_3_1
+    + (*out_packet)->offset;
 #ifdef TEST_PDCP_CONTROL_PLANE_DOUBLE_PASS_ENC
     // Need extra 4 bytes at end of input/output packet for MAC-I code, in case of PDCP control-plane packets
     (*out_packet)->length += MAC_I_LENGTH;
 #endif // TEST_PDCP_CONTROL_PLANE_DOUBLE_PASS_ENC
+#else // SEC_HW_VERSION_3_1
+    ;
 #endif // SEC_HW_VERSION_3_1
     assert((*out_packet)->length <= PDCP_BUFFER_SIZE);
 
@@ -737,10 +735,10 @@ static int delete_context(pdcp_context_t * pdcp_context, int *no_of_used_pdcp_co
 
     assert(pdcp_context != NULL);
     assert(no_of_used_pdcp_contexts != NULL);
-    test_printf("%d",pdcp_context->usage);
+
     // Try to delete the context from SEC driver and also
     // release the UA's context
-    test_printf("trying to delete ctx id: %d",pdcp_context->id);
+
     // context is in use and it was not yet removed from SEC driver
     if (pdcp_context->usage == PDCP_CONTEXT_USED)
     {
@@ -846,8 +844,16 @@ static int is_packet_valid(pdcp_context_t *pdcp_context,
 
     if(user_plane == PDCP_DATA_PLANE)
     {
-        assert(in_packet->length == sizeof(test_data_in) + PDCP_HEADER_LENGTH );
-        assert(out_packet->length == sizeof(test_data_out) + PDCP_HEADER_LENGTH );
+        assert(in_packet->length == sizeof(test_data_in) + PDCP_HEADER_LENGTH
+#ifdef SEC_HW_VERSION_3_1
+                + in_packet->offset
+#endif
+                );
+        assert(out_packet->length == sizeof(test_data_out) + PDCP_HEADER_LENGTH
+#ifdef SEC_HW_VERSION_3_1
+                + out_packet->offset
+#endif
+                );
 
         test_pass = (0 == memcmp(out_packet->address + out_packet->offset,
                                  test_pdcp_hdr,
@@ -858,15 +864,6 @@ static int is_packet_valid(pdcp_context_t *pdcp_context,
     }
     else
     {
-        // control plane context -> check if packet belong to last context which is data plane
-        // -> then DO NOT validate packets!
-        if(pdcp_context->pdcp_ctx_cfg_data.user_plane == PDCP_DATA_PLANE)
-        {
-            test_printf("Testing c-plane.Last PDCP context id %d is d-plane.Data plane packet NOT validated!",
-                         pdcp_context->id);
-            return 1;
-        }
-
         // Status must be SUCCESS. When MAC-I validation failed,
         // status is set to #SEC_STATUS_MAC_I_CHECK_FAILED.
         test_pass = (status != SEC_STATUS_MAC_I_CHECK_FAILED && status != SEC_STATUS_ERROR);
@@ -997,7 +994,6 @@ static void* pdcp_thread_routine(void* config)
     int total_no_of_contexts_deleted = 0;
     int no_of_contexts_deleted = 0;
     int total_no_of_contexts_created = 0;
-    int is_last_context = 0;
 
     th_config_local = (thread_config_t*)config;
     assert(th_config_local != NULL);
@@ -1009,10 +1005,6 @@ static void* pdcp_thread_routine(void* config)
     // number of packets per each context
     while(total_no_of_contexts_created < th_config_local->no_of_pdcp_contexts_to_test)
     {
-        if(total_no_of_contexts_created + 1 == th_config_local->no_of_pdcp_contexts_to_test)
-        {
-            is_last_context = 1;
-        }
         ret = get_free_pdcp_context(th_config_local->pdcp_contexts,
                                     th_config_local->no_of_used_pdcp_contexts,
                                     &pdcp_context);
@@ -1031,7 +1023,6 @@ static void* pdcp_thread_routine(void* config)
         pdcp_context->pdcp_ctx_cfg_data.packet_direction = test_packet_direction;
         pdcp_context->pdcp_ctx_cfg_data.protocol_direction = test_protocol_direction;
         pdcp_context->pdcp_ctx_cfg_data.hfn = test_hfn;
-        pdcp_context->pdcp_ctx_cfg_data.hfn_threshold = test_hfn_threshold;
         pdcp_context->pdcp_ctx_cfg_data.hfn_threshold = test_hfn_threshold;
 
         // configure confidentiality algorithm
@@ -1057,25 +1048,12 @@ static void* pdcp_thread_routine(void* config)
             pdcp_context->pdcp_ctx_cfg_data.integrity_key_len = test_auth_key_len;
         }
 
-        if(is_last_context)
-        {
-            if(pdcp_context->pdcp_ctx_cfg_data.user_plane == PDCP_CONTROL_PLANE)
-            {
-                pdcp_context->pdcp_ctx_cfg_data.user_plane = PDCP_DATA_PLANE;
-                pdcp_context->pdcp_ctx_cfg_data.sn_size = SEC_PDCP_SN_SIZE_12;
-                pdcp_context->pdcp_ctx_cfg_data.integrity_algorithm = SEC_ALG_NULL;
-                pdcp_context->pdcp_ctx_cfg_data.integrity_key = NULL;
-                pdcp_context->pdcp_ctx_cfg_data.integrity_key_len = 0;
-            }
-        }
-
         pdcp_context->thread_id = th_config_local->tid;
 
         // create a SEC context in SEC driver
         ret = sec_create_pdcp_context (job_ring_descriptors[th_config_local->producer_job_ring_id].job_ring_handle,
                                        &pdcp_context->pdcp_ctx_cfg_data,
                                        &pdcp_context->sec_ctx);
-        test_printf("sec context %p for context no %d",pdcp_context->sec_ctx,pdcp_context->id);
         if (ret != SEC_SUCCESS)
         {
             test_printf("thread #%d:producer: sec_create_pdcp_context return error %d for PDCP context no %d \n",
@@ -1089,48 +1067,8 @@ static void* pdcp_thread_routine(void* config)
         sec_packet_t *in_packet;
         sec_packet_t *out_packet;
 
-        if(is_last_context)
-        {
-            int counter;
-            for(counter = 0; counter < 10; counter++)
-            {
-                do
-                {
-                    packets_received = 0;
-                    // poll for responses
-                    ret = get_results(th_config_local->consumer_job_ring_id,
-                            JOB_RING_POLL_LIMIT,
-                            &packets_received);
-                    total_packets_received += packets_received;
-                    usleep(10);
-                }while(packets_received != 0);
-            }
-
-            test_printf("thread #%d:Now waiting on barrier\n", th_config_local->tid);
-            ret = pthread_barrier_wait(&th_barrier);
-            if(ret != 0 && ret != PTHREAD_BARRIER_SERIAL_THREAD)
-            {
-                printf("thread #%d:Error waiting on barrier\n", th_config_local->tid);
-                pthread_exit(NULL);
-            }
-        }
-
-
         while (get_free_pdcp_buffer(pdcp_context, &in_packet, &out_packet) == 0)
         {
-#ifdef SEC_HW_VERSION_3_1
-            // When testing PDCP c-plane, the last context tested MUST be
-            // PDCP data plane. This will guarantee that the last c-plane packets stored
-            // into driver's internal FIFO will be sent to SEC, without buffering any other
-            // c-plane packets..because now we are sending data-plane packets.
-#ifdef TEST_PDCP_CONTROL_PLANE_DOUBLE_PASS_ENC
-            if(is_last_context)
-            {
-                in_packet->length -= MAC_I_LENGTH;
-                out_packet->length -= MAC_I_LENGTH;
-            }
-#endif // TEST_PDCP_CONTROL_PLANE_DOUBLE_PASS_ENC
-#endif // SEC_HW_VERSION_3_1
             // if SEC process packet returns that the producer JR is full, do some polling
             // on the consumer JR until the producer JR has free entries.
             do
@@ -1195,7 +1133,12 @@ static void* pdcp_thread_routine(void* config)
                           &packets_received);
         assert(ret == 0);
         total_packets_received += packets_received;
-
+#ifdef SEC_HW_VERSION_3_1
+        do
+        {
+            ret = sec_push_c_plane_packets(job_ring_descriptors[th_config_local->producer_job_ring_id].job_ring_handle);
+        }while(ret == SEC_JR_IS_FULL);
+#endif // SEC_HW_VERSION_3_1
         // try to delete the contexts with packets in flight
         ret = delete_contexts(th_config_local->pdcp_contexts,
                               th_config_local->no_of_used_pdcp_contexts,

@@ -59,10 +59,7 @@ typedef struct sec_job_t sec_job_t;
 typedef struct sec_descriptor_t sec_descriptor_t;
 /** Forward structure declaration */
 typedef struct sec_context_t sec_context_t;
-#ifdef SEC_HW_VERSION_4_4
-/** Forward structure declaration */
-typedef struct sec_sg_context_t sec_sg_context_t;
-#endif // SEC_HW_VERSION_4_4
+
 /*==============================================================================
                                  CONSTANTS
 ==============================================================================*/

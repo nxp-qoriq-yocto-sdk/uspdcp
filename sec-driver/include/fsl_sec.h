@@ -148,6 +148,14 @@ typedef enum sec_ua_return_e
                                      processing any other SEC responses. */
 }sec_ua_return_t;
 
+
+/** Possible types for a packet format */
+typedef enum packet_type_e
+{
+    SEC_CONTIGUOUS_BUFFER = 0,  /**< Packet is a contiguous buffer */
+    SEC_SCATTER_GATHER_BUFFER   /**< Packet is a scatter/gather buffer */
+}packet_type_t;
+
 /** Cryptographic/Integrity check algorithms.
  *  @note The id values for each algorithm are synchronized with those
  *  specified in 3gpp spec 33.401.
@@ -155,9 +163,9 @@ typedef enum sec_ua_return_e
 typedef enum sec_crypto_alg_e
 {
     SEC_ALG_NULL = 0,       /**< Use EEA0 for confidentiality or EIA0 for integrity protection
-                                (no confidentiality and no integrity).*/
-    SEC_ALG_SNOW,           /**< Use SNOW algorithm for confidentiality(EEA1) or integrity protection(EIA1) */
-    SEC_ALG_AES,            /**< Use AES algorithm for confidentiality(EEA2) or integrity protection(EIA2)) */
+                                 (no confidentiality and no integrity).*/
+    SEC_ALG_SNOW = 1,       /**< Use SNOW algorithm for confidentiality(EEA1) or integrity protection(EIA1) */
+    SEC_ALG_AES = 2,        /**< Use AES algorithm for confidentiality(EEA2) or integrity protection(EIA2)) */
 
 }sec_crypto_alg_t;
 /*==================================================================================================
@@ -194,6 +202,7 @@ typedef const void* sec_context_handle_t;
 typedef const void* ua_context_handle_t;
 
 /** Structure used to describe an input or output packet accessed by SEC. */
+#ifdef SEC_HW_VERSION_4_4
 typedef struct sec_packet_s
 {
     uint8_t         *address;       /**< The virtual address of the buffer. */
@@ -209,6 +218,20 @@ typedef struct sec_packet_s
                                          It excludes the parent buffer. */
 
 }sec_packet_t;
+#else // SEC_HW_VERSION_4_4
+typedef struct sec_packet_s
+{
+    uint8_t         *address;       /**< The virtual address of the buffer. */
+    uint32_t        offset;         /**< Offset within packet from where SEC will access (read or write) data. */
+    uint32_t        length;         /**< Packet length. */
+    packet_type_t   scatter_gather; /**< A value of #SEC_SCATTER_GATHER_BUFFER indicates the packet is
+                                         passed as a scatter/gather table.
+                                         A value of #SEC_CONTIGUOUS_BUFFER means the packet is contiguous
+                                         in memory and is accessible at the given address.
+                                         @todo export format for link table.*/
+}sec_packet_t;
+#endif // SEC_HW_VERSION_4_4
+
 
 
 /** Contains Job Ring descriptor info returned to the caller when sec_init() is invoked. */
@@ -257,7 +280,7 @@ typedef int (*sec_out_cbk)(const sec_packet_t  *in_packet,
                            uint32_t            error_info);
 
 /**
-    @} // end SecUserSpaceDriverPacketFunctions
+    @}
  */
 
 /**
@@ -674,6 +697,40 @@ const char* sec_get_error_message(sec_return_code_t return_code);
     @}
  */
 
+#ifdef SEC_HW_VERSION_3_1
+/**
+    @addtogroup SecUserSpaceDriverPacketFunctions
+    @{
+ */
+/** @brief Triggers processing of PDCP control plane packets on a job ring.
+ *
+ * On P2020, SEC 3.1 engine cannot perform both cryptographic and authentication
+ * operations on a PDCP c-plane packet in a single step. This requires c-plane
+ * packets being sent to SEC engine two times, once for performing each security function.
+ * Before the c-plane packets are sent the second time to SEC, they are stored in internal
+ * per-job ring FIFO. This function will send all c-plane packets from internal FIFO to SEC
+ * engine for the second processing function, completing this way all the operations required
+ * to have PDCP c-plane packets ready.
+ *
+ * @note This API is valid only for P2020 PDCP driver.
+ *       It is not required and will not be provided on 913x PDCP driver!
+ *
+ * @param [in]  job_ring_handle     The Job Ring handle.
+ *
+ * @retval ::SEC_SUCCESS                    for successful execution.
+ * @retval ::SEC_INVALID_INPUT_PARAM        is returned if job ring handle is NULL.
+ * @retval ::SEC_DRIVER_NOT_INITIALIZED     is returned if SEC driver is not yet initialized.
+ * @retval ::SEC_DRIVER_RELEASE_IN_PROGRESS is returned if SEC driver release is in progress
+ * @retval ::SEC_JR_IS_FULL                 is returned if the JR is full
+ * @retval ::SEC_JOB_RING_RESET_IN_PROGRESS indicates job ring is resetting due to a per-packet SEC processing error ::SEC_PACKET_PROCESSING_ERROR.
+ *                                          Reset is finished when sec_poll() or sec_poll_job_ring() return.
+ */
+sec_return_code_t sec_push_c_plane_packets(sec_job_ring_handle_t job_ring_handle);
+
+/**
+    @}
+ */
+#endif
 /*================================================================================================*/
 
 #ifdef __cplusplus

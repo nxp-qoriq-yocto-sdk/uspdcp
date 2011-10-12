@@ -107,18 +107,7 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
     // Allocate mem for input and output ring
     ASSERT(job_ring->input_ring == NULL);
 
-
-#if 0
-#if (SEC_INT_COALESCING_ENABLE == ON)
-    // Save parameters to be used after reset
-    job_ring->irq_coalescing_timer = irq_coalescing_timer;
-    job_ring->irq_coalescing_count = irq_coalescing_count;
-#endif // SEC_INT_COALESCING_ENABLE == ON
-#endif
     // Allocate memory for input ring
-    /** TODO: It would make sense to have this cacheline-aligned
-     *
-     */
     job_ring->input_ring = *dma_mem;
     memset(job_ring->input_ring, 0, SEC_DMA_MEM_INPUT_RING_SIZE);
     *dma_mem += SEC_DMA_MEM_INPUT_RING_SIZE;
@@ -126,17 +115,23 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
     // Allocate memory for output ring
     ASSERT(job_ring->output_ring == NULL);
 
-    /** TODO: It would make sense to have this cacheline-aligned
-     *
-     */
+    SEC_ASSERT ((dma_addr_t)*dma_mem % CACHE_LINE_SIZE == 0,
+            SEC_INVALID_INPUT_PARAM,
+            "Current memory position is not cacheline aligned."
+            "Job ring id = %d", job_ring->jr_id);
+    SEC_ASSERT ((dma_addr_t)*dma_mem % CACHE_LINE_SIZE == 0,
+                                SEC_INVALID_INPUT_PARAM,
+                                "Current memory position is not cacheline aligned."
+                                "Job ring id = %d", job_ring->jr_id);
     job_ring->output_ring = *dma_mem;
     memset(job_ring->output_ring, 0, SEC_DMA_MEM_OUTPUT_RING_SIZE);
     *dma_mem += SEC_DMA_MEM_OUTPUT_RING_SIZE;
 
-#endif
+#endif // SEC_HW_VERSION_4_4
     // Reset job ring in SEC hw and configure job ring registers
     ret = hw_reset_job_ring(job_ring);
     SEC_ASSERT(ret == 0, ret, "Failed to reset hardware job ring with id %d", job_ring->jr_id);
+
 
 #if SEC_NOTIFICATION_TYPE == SEC_NOTIFICATION_TYPE_NAPI
     // When SEC US driver works in NAPI mode, the UA can select
@@ -167,8 +162,8 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
 
     job_ring->descriptors = *dma_mem;
 #ifdef SEC_HW_VERSION_4_4
-    memset(job_ring->descriptors, 0, SEC_JOB_RING_SIZE * SEC_CRYPTO_DESCRIPTOR_SIZE);
-    *dma_mem += SEC_JOB_RING_SIZE * SEC_CRYPTO_DESCRIPTOR_SIZE;
+    memset(job_ring->descriptors, 0, SEC_DMA_MEM_DESCRIPTORS);
+    *dma_mem += SEC_DMA_MEM_DESCRIPTORS;
 #else
     memset(job_ring->descriptors, 0, SEC_JOB_RING_SIZE * sizeof(struct sec_descriptor_t));
     *dma_mem += SEC_JOB_RING_SIZE * sizeof(struct sec_descriptor_t);
@@ -187,6 +182,25 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
 
         // Obtain and store the physical address for a job descriptor
         job_ring->jobs[i].descr_phys_addr = sec_vtop(&job_ring->descriptors[i]);
+#if defined(SEC_HW_VERSION_4_4) && (SEC_ENABLE_SCATTER_GATHER == ON)
+        job_ring->jobs[i].sg_ctx = &job_ring->sg_ctxs[i];
+
+        // Need two SG tables, one for input packet, the other for the output
+        SEC_ASSERT ((dma_addr_t)*dma_mem % CACHE_LINE_SIZE == 0,
+                        SEC_INVALID_INPUT_PARAM,
+                        "Current jobs[i]->sg_ctx [i=%d] input SG table is not cacheline aligned.", i);
+        job_ring->sg_ctxs[i].in_sg_tbl = (struct sec_sg_tbl_entry*)*dma_mem;
+        memset(job_ring->sg_ctxs[i].in_sg_tbl, 0, sizeof(struct sec_sg_tbl_entry) * SEC_MAX_SG_TBL_ENTRIES);
+        *dma_mem += sizeof(struct sec_sg_tbl_entry) * SEC_MAX_SG_TBL_ENTRIES;
+
+        SEC_ASSERT ((dma_addr_t)*dma_mem % CACHE_LINE_SIZE == 0,
+                                SEC_INVALID_INPUT_PARAM,
+                                "Current jobs[i]->sg_ctx [i=%d] output SG table is not cacheline aligned.", i);
+        job_ring->sg_ctxs[i].out_sg_tbl = (struct sec_sg_tbl_entry*)*dma_mem;
+        memset(job_ring->sg_ctxs[i].out_sg_tbl, 0, sizeof(struct sec_sg_tbl_entry) * SEC_MAX_SG_TBL_ENTRIES);
+        *dma_mem += sizeof(struct sec_sg_tbl_entry) * SEC_MAX_SG_TBL_ENTRIES;
+
+#endif // defined(SEC_HW_VERSION_4_4) && (SEC_ENABLE_SCATTER_GATHER == ON)
 #ifdef SEC_HW_VERSION_3_1
         SEC_ASSERT ((dma_addr_t)*dma_mem % CACHE_LINE_SIZE == 0,
                 SEC_INVALID_INPUT_PARAM,
@@ -210,13 +224,11 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
 
 #ifdef SEC_HW_VERSION_4_4
 #if (SEC_INT_COALESCING_ENABLE == ON)
-    SEC_DEBUG("JRCFG_LO b4: 0x%x", GET_JR_REG_LO(JRCFG,job_ring));
     hw_job_ring_set_coalescing_param(job_ring,
                                      irq_coalescing_timer,
                                      irq_coalescing_count);
 
     hw_job_ring_enable_coalescing(job_ring);
-    SEC_DEBUG("JRCFG_LO: 0x%x", GET_JR_REG_LO(JRCFG,job_ring));
 #endif // SEC_INT_COALESCING_ENABLE == ON
 #endif //SEC_HW_VERSION_4_4
 

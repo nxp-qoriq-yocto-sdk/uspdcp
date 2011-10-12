@@ -239,16 +239,20 @@ extern "C"{
  *  @note If desired to use also the optional SEQ OUT indication in output ring entries,
  *  then 4 more bytes must be added to the size.
 */
-#define SEC_JOB_OUTPUT_RING_ENTRY_SIZE  SEC_DMA_MEM_INPUT_RING_SIZE + 4
+#define SEC_JOB_OUTPUT_RING_ENTRY_SIZE  SEC_JOB_INPUT_RING_ENTRY_SIZE + 4
 
 /** DMA memory required for an input ring of a job ring. */
-#define SEC_DMA_MEM_INPUT_RING_SIZE     (SEC_JOB_DESCRIPTOR_SIZE + SEC_JOB_INPUT_RING_ENTRY_SIZE) * (SEC_JOB_RING_SIZE)
+#define SEC_DMA_MEM_INPUT_RING_SIZE     (SEC_JOB_INPUT_RING_ENTRY_SIZE) * (SEC_JOB_RING_SIZE)
 
 /** DMA memory required for an output ring of a job ring.
  *  Required extra 4 byte for status word per each entry. */
-#define SEC_DMA_MEM_OUTPUT_RING_SIZE    (SEC_JOB_DESCRIPTOR_SIZE + SEC_JOB_OUTPUT_RING_ENTRY_SIZE) * (SEC_JOB_RING_SIZE)
+#define SEC_DMA_MEM_OUTPUT_RING_SIZE    (SEC_JOB_OUTPUT_RING_ENTRY_SIZE) * (SEC_JOB_RING_SIZE)
+
+/** DMA memory required for descriptors of a job ring. */
+#define SEC_DMA_MEM_DESCRIPTORS         (SEC_CRYPTO_DESCRIPTOR_SIZE)*(SEC_JOB_RING_SIZE)
+
 /** DMA memory required for a job ring, including both input and output rings. */
-#define SEC_DMA_MEM_JOB_RING_SIZE       (SEC_DMA_MEM_INPUT_RING_SIZE) + (SEC_DMA_MEM_OUTPUT_RING_SIZE)
+#define SEC_DMA_MEM_JOB_RING_SIZE       ((SEC_DMA_MEM_INPUT_RING_SIZE) + (SEC_DMA_MEM_OUTPUT_RING_SIZE) + (SEC_DMA_MEM_DESCRIPTORS))
 
 #else //#ifdef SEC_HW_VERSION_4_4
 
@@ -350,9 +354,9 @@ extern "C"{
  *
  * \todo Should set to 750, according to the calculation above, but
  * the JR size must be power of 2, thus the next closest value must
- * be chosen (i.e. 1024)
+ * be chosen (i.e. 512 since 1024 is not available)
  */
-#define SEC_JOB_RING_SIZE       32
+#define SEC_JOB_RING_SIZE       512
 
 #else
 
@@ -420,7 +424,7 @@ extern "C"{
  * coalescing is disabled.*/
 #define SEC_INTERRUPT_COALESCING_TIMER_THRESH  100
 #endif // SEC_NOTIFICATION_TYPE_POLL
-#endif
+#endif // SEC_HW_VERSION_4_4
 
 /*==================================================================================================
                                  GLOBAL VARIABLE DECLARATIONS

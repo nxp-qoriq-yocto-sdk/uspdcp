@@ -548,7 +548,8 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 #endif
 
 /**
- * TODO: Add an explanation why this register is written
+ * IRJA - Input Ring Jobs Added Register tells SEC 4.4
+ * how many new jobs were added to the Input Ring.
  */
 #define hw_enqueue_packet_on_job_ring(job_ring) \
     SET_JR_REG(IRJA, (job_ring), 1);
@@ -579,13 +580,24 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 
 #endif
 
+/** This macro will 'remove' one entry from the output ring of the Job Ring once
+ * the software has finished processing the entry. */
 #define hw_remove_one_entry(jr)                 hw_remove_entries(jr,1)
 
+/** ORJR - Output Ring Jobs Removed Register tells SEC 4.4 how many jobs were
+ * removed from the Output Ring for processing by software. This is done after
+ * the software has processed the entries. */
 #define hw_remove_entries(jr,no_entries)        SET_JR_REG(ORJR,(jr),(no_entries))
 
+/** IRSA - Input Ring Slots Available register holds the number of entries in
+ * the Job Ring's input ring. Once a job is enqueued, the value returned is decremented
+ * by the hardware by the number of jobs enqueued. */
+#define hw_get_available_slots(jr)              GET_JR_REG(IRSA,jr)
 
-//#define hw_get_available_slots(jr)              GET_JR_REG(IRSA,jr)
-#define hw_get_available_slots(jr)              (SEC_JOB_RING_SIZE - GET_JR_REG(ORSFR,jr))
+/** ORSFR - Output Ring Slots Full register holds the number of jobs which were processed
+ * by the SEC and can be retrieved by the software. Once a job has been processed by
+ * software, the user will call hw_remove_one_entry in order to notify the SEC that
+ * the entry was processed */
 #define hw_get_no_finished_jobs(jr)             GET_JR_REG(ORSFR, jr)
 
 
@@ -593,13 +605,11 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
  * Macro for determining if the threshold was exceeded for a
  * context
  *****************************************************************/
-
-#define HFN_THRESHOLD_MATCH(error)                                              \
-    ( ( ((union hw_error_code)(error)).error_desc.deco_src.ssrc ==              \
-            SEC_HW_ERR_SSRC_DECO) &&                                            \
-        (((union hw_error_code)(error)).error_desc.deco_src.desc_err ==         \
-            SEC_HW_ERR_DECO_HFN_THRESHOLD) )
-
+#define HFN_THRESHOLD_MATCH(error)  \
+    COND_EXPR1_EQ_AND_EXPR2_EQ( ((union hw_error_code)(error)).error_desc.deco_src.ssrc,    \
+                                SEC_HW_ERR_SSRC_DECO,                                       \
+                                ((union hw_error_code)(error)).error_desc.deco_src.desc_err,\
+                                SEC_HW_ERR_DECO_HFN_THRESHOLD )
 
 /******************************************************************
  * Macros for manipulating JR registers
@@ -622,23 +632,113 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 }
 
 #define PDCP_INIT_JD(descriptor)              { \
-        (descriptor)->deschdr.command.word = 0xB0801C08; \
-        (descriptor)->seq_out.command.word = 0xF8400000; \
-        (descriptor)->seq_in.command.word  = 0xF0400000; \
+        /* CTYPE = job descriptor                               \
+         * RSMS, DNR = 0
+         * ONE = 1
+         * Start Index = 0
+         * ZRO,TD, MTD = 0
+         * SHR = 1 (there's a shared descriptor referenced
+         *          by this job descriptor,pointer in next word)
+         * REO = 1 (execute job descr. first, shared descriptor
+         *          after)
+         * SHARE = Always
+         * Descriptor Length = 0 ( to be completed @ runtime )
+         *
+         */                                                     \
+        (descriptor)->deschdr.command.word = 0xB0801C08;        \
+        /*
+         * CTYPE = SEQ OUT command
+         * Scater Gather Flag = 0 (can be updated @ runtime)
+         * PRE = 0
+         * EXT = 1 ( data length is in next word, following the
+         *           command)
+         * RTO = 0
+         */                                                     \
+        (descriptor)->seq_out.command.word = 0xF8400000; /**/   \
+        /*
+         * CTYPE = SEQ IN command
+         * Scater Gather Flag = 0 (can be updated @ runtime)
+         * PRE = 0
+         * EXT = 1 ( data length is in next word, following the
+         *           command)
+         * RTO = 0
+         */                                                     \
+        (descriptor)->seq_in.command.word  = 0xF0400000; /**/   \
 }
 
 #define SEC_PDCP_INIT_CPLANE_SD(descriptor){ \
-        (descriptor)->deschdr.command.word  = 0xBA850210;    \
-        (descriptor)->key2_cmd.command.word = 0x04800000;    \
-        (descriptor)->key1_cmd.command.word = 0x02800000;    \
-        (descriptor)->protocol.command.word = 0x80430000;    \
+        /* CTYPE = shared job descriptor                        \
+         * RIF = 1
+         * DNR = 0
+         * ONE = 1
+         * Start Index = 5, in order to jump over PDB
+         * ZRO,CIF,SC = 0
+         * PD = 0, SHARE = Defer (use value from JD)
+         * Descriptor Length = 16
+         */                                                     \
+        (descriptor)->deschdr.command.word  = 0xBA850210;       \
+        /* CTYPE = Key
+         * Class = 2 (authentication)
+         * SGF = 0
+         * IMM = 1 (key immediately after command)
+         * ENC, NWB, EKT, KDEST = 0
+         * TK = 0
+         * Length = 0 (to be completed at runtime)
+         */                                                     \
+        (descriptor)->key2_cmd.command.word = 0x04800000;       \
+        /* CTYPE = Key
+         * Class = 1 (encryption)
+         * SGF = 0
+         * IMM = 1 (key immediately after command)
+         * ENC, NWB, EKT, KDEST = 0
+         * TK = 0
+         * Length = 0 (to be completed at runtime)
+         */                                                     \
+        (descriptor)->key1_cmd.command.word = 0x02800000;       \
+        /* CTYPE = Protocol operation
+         * OpType = 0 (to be completed @ runtime)
+         * Protocol ID = PDCP - C-Plane
+         * Protocol Info = 0 (to be completed @ runtime)
+         */                                                     \
+        (descriptor)->protocol.command.word = 0x80430000;       \
 }
 
 #define SEC_PDCP_INIT_UPLANE_SD(descriptor){ \
-        (descriptor)->deschdr.command.word  = 0xBA8A0210;    \
-        (descriptor)->key2_cmd.command.word = 0x04800000;    \
-        (descriptor)->key1_cmd.command.word = 0x02800000;    \
-        (descriptor)->protocol.command.word = 0x80420000;    \
+        /* CTYPE = shared job descriptor                        \
+         * RIF = 1
+         * DNR = 0
+         * ONE = 1
+         * Start Index = 10, in order to jump over PDB and
+         *                  key2 command
+         * ZRO,CIF,SC = 0
+         * PD = 0, SHARE = Defer (use value from JD)
+         * Descriptor Length = 16
+         */                                                     \
+        (descriptor)->deschdr.command.word  = 0xBA8A0210;       \
+        /* CTYPE = Key
+         * Class = 2 (authentication)
+         * SGF = 0
+         * IMM = 1 (key immediately after command)
+         * ENC, NWB, EKT, KDEST = 0
+         * TK = 0
+         * Length = 0 (to be completed at runtime)
+         */                                                     \
+        (descriptor)->key2_cmd.command.word = 0x04800000;       \
+        /* CTYPE = Key
+         * Class = 1 (encryption)
+         * SGF = 0
+         * IMM = 1 (key immediately after command)
+         * ENC, NWB, EKT, KDEST = 0
+         * TK = 0
+         * Length = 0 (to be completed at runtime)
+         */                                                     \
+        (descriptor)->key1_cmd.command.word = 0x02800000;       \
+        /* CTYPE = Protocol operation
+         * OpType = 0 (to be completed @ runtime)
+         * Protocol ID = PDCP - C-Plane
+         * Protocol Info = 0 (to be completed @ runtime)
+         */                                                     \
+        (descriptor)->protocol.command.word = 0x80420000;       \
 }
 
 #define SEC_PDCP_SD_COPY_KEY(key_dst,key_src,len)    {              \
@@ -761,8 +861,8 @@ typedef struct sec_crypto_pdb_s
 
 #else // SEC_HW_VERSION_3_1
 
-/** TODO: Write something meaningful here
- *
+/** Union describing the possible error codes that
+ * can be set in the descriptor status word
  */
 union hw_error_code{
     uint32_t    error;
@@ -813,8 +913,7 @@ union hw_error_code{
     }PACKED error_desc;
 }PACKED;
 
-/**
- * TODO: Write something meaningful here
+/** Union describing a descriptor header.
  */
 struct descriptor_header_s {
     union {
@@ -855,8 +954,7 @@ struct descriptor_header_s {
     } PACKED command;
 } PACKED;
 
-/**
- * TODO: Write something meaningful here
+/** Union describing a KEY command in a descriptor.
  */
 struct key_command_s {
     union {
@@ -877,8 +975,8 @@ struct key_command_s {
     } PACKED command;
 } PACKED;
 
-/**
- * TODO: Write something meaningful here
+/** Union describing a PROTOCOL command
+ * in a descriptor.
  */
 struct protocol_operation_command_s {
     union {
@@ -892,8 +990,8 @@ struct protocol_operation_command_s {
     } PACKED command;
 } PACKED;
 
-/**
- * TODO: Write something meaningful here
+/** Union describing a SEQIN command in a
+ * descriptor.
  */
 struct seq_in_command_s {
     union {
@@ -913,8 +1011,8 @@ struct seq_in_command_s {
     } PACKED command;
 }PACKED;
 
-/**
- * TODO: Write something meaningful here
+/** Union describing a SEQOUT command in a
+ * descriptor.
  */
 struct seq_out_command_s{
     union {
@@ -932,8 +1030,9 @@ struct seq_out_command_s{
     } PACKED command;
 } PACKED;
 
-/**
- * TODO: Write something meaningful here
+/** Structure describing the PDB (Protocol Data Block)
+ * needed by protocol acceleration descriptors for
+ * PDCP Control Plane.
  */
 struct cplane_pdb_s{
     unsigned int res1;
@@ -946,8 +1045,9 @@ struct cplane_pdb_s{
     unsigned int res4:5;
 }PACKED;
 
-/**
- * TODO: Write something meaningful here
+/** Structure describing the PDB (Protocol Data Block)
+ * needed by protocol acceleration descriptors for
+ * PDCP User Plane.
  */
 struct uplane_pdb_s{
     unsigned int res1:30;
@@ -979,8 +1079,8 @@ struct uplane_pdb_s{
     } PACKED threshold;
 }PACKED;
 
-/**
- * TODO: Write something meaningful here
+/** Structure for aggregating the two types of
+ * PDBs existing in PDCP Driver.
  */
 typedef struct sec_crypto_pdb_s
 {
@@ -991,8 +1091,13 @@ typedef struct sec_crypto_pdb_s
     }PACKED pdb_content;
 }PACKED sec_crypto_pdb_t;
 
-/**
- * TODO: Write something meaningful here
+/** Structure encompassing a shared descriptor,
+ * containing all the information needed by a
+ * SEC for processing the packets belonging to
+ * the same context:
+ *  - key for authentication
+ *  - key for encryption
+ *  - protocol data block (for Hyper Frame Number, etc.)
  */
 struct sec_pdcp_sd_t{
     struct descriptor_header_s  deschdr;
@@ -1004,8 +1109,9 @@ struct sec_pdcp_sd_t{
     struct protocol_operation_command_s protocol;
 } PACKED;
 
-/**
- * TODO: Write something meaningful here
+/** Structure encompassing a job descriptor which processes
+ * a single packet from a context. The job descriptor references
+ * a shared descriptor from a SEC context.
  */
 struct sec_descriptor_t {
     struct descriptor_header_s deschdr;
@@ -1053,6 +1159,7 @@ int hw_reset_job_ring(sec_job_ring_t *job_ring);
  */
 int hw_shutdown_job_ring(sec_job_ring_t *job_ring);
 
+#ifdef SEC_HW_VERSION_3_1
 /** @brief Reset and continue for a job ring/channel in SEC device.
  * Write configuration register/s to reset some settings for a job ring
  * but still continue processing. FIFO with all already submitted jobs
@@ -1064,7 +1171,7 @@ int hw_shutdown_job_ring(sec_job_ring_t *job_ring);
  * @retval -1 in case job ring reset and continue failed
  */
 int hw_reset_and_continue_job_ring(sec_job_ring_t *job_ring);
-
+#endif // SEC_HW_VERSION_3_1
 /** @brief Handle a job ring/channel error in SEC device.
  * Identify the error type and clear error bits if required.
  * Return information if job ring must be restarted.
@@ -1077,27 +1184,42 @@ void hw_handle_job_ring_error(sec_job_ring_t *job_ring,
                               uint32_t sec_error_code,
                               uint32_t *reset_required);
 #ifdef SEC_HW_VERSION_4_4
-/**
- * TODO: Write something meaningful here
+
+/** @brief Handle a job ring error in SEC 4.4 device.
+ * Identify the error type and printout a explanatory
+ * messages.
+ * The Job ring must be reset if return is nonzero.
+ *
+ * @param [in]  job_ring        The job ring
+ *
+ * @Caution                     If the function returns nonzero, then
+ *                              the Job ring must be reset.
  */
 int hw_job_ring_error(sec_job_ring_t *job_ring);
 
 #if (SEC_INT_COALESCING_ENABLE == ON)
 
-/**
- * TODO: Write something meaningful here
+/** @brief Set interrupt coalescing parameters on the Job Ring.
+ * @param [in]  job_ring                The job ring
+ * @param [in]  irq_coalesing_timer     Interrupt coalescing timer threshold.
+ *                                      This value determines the maximum
+ *                                      amount of time after processing a descriptor
+ *                                      before raising an interrupt.
+ * @param [in]  irq_coalescing_count    Interrupt coalescing descriptor count threshold.
+ *                                      This value determines how many descriptors
+ *                                      are completed before raising an interrupt.
  */
 int hw_job_ring_set_coalescing_param(sec_job_ring_t *job_ring,
                                      uint16_t irq_coalescing_timer,
                                      uint8_t irq_coalescing_count);
 
-/**
- * TODO: Write something meaningful here
+/** @brief Enable interrupt coalescing on a job ring
+ * @param [in]  job_ring                The job ring
  */
 int hw_job_ring_enable_coalescing(sec_job_ring_t *job_ring);
 
-/**
- * TODO: Write something meaningful here
+/** @brief Disable interrupt coalescing on a job ring
+ * @param [in]  job_ring                The job ring
  */
 int hw_job_ring_disable_coalescing(sec_job_ring_t *job_ring);
 

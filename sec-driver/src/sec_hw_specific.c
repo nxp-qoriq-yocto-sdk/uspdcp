@@ -74,16 +74,17 @@ extern "C" {
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
 ==================================================================================================*/
-#ifdef SEC_HW_VERSION_3_3
+#ifdef SEC_HW_VERSION_3_1
 /** @brief Identify the SEC descriptor that generated an error
  * on this job ring. Also identify the exact EU that generated the error.
  *
  * @param [in]  job_ring        The job ring
  */
 static void hw_handle_eu_error(sec_job_ring_t *job_ring);
-#else // SEC_HW_VERSION_3_3
-/**
- * TODO: Write something meaningful here
+#else // SEC_HW_VERSION_3_1
+/** @brief Process Jump Halt Condition related errors
+ *
+ * @param [in]  error_code        The error code in the descriptor status word
  */
 static inline void hw_handle_jmp_halt_cond_err(union hw_error_code error_code)
 {
@@ -93,8 +94,9 @@ static inline void hw_handle_jmp_halt_cond_err(union hw_error_code error_code)
               error_code.error_desc.jmp_halt_cond_src.cond);
 }
 
-/**
- * TODO: Write something meaningful here
+/** @brief Process DECO related errors
+ *
+ * @param [in]  error_code        The error code in the descriptor status word
  */
 static inline void hw_handle_deco_err(union hw_error_code error_code)
 {
@@ -113,22 +115,34 @@ static inline void hw_handle_deco_err(union hw_error_code error_code)
     }
 }
 
-/**
- * TODO: Write something meaningful here
+/** @brief Process  Jump Halt User Status related errors
+ *
+ * @param [in]  error_code        The error code in the descriptor status word
  */
-static void hw_handle_jmp_halt_user_err(union hw_error_code error_code);
+static inline void hw_handle_jmp_halt_user_err(union hw_error_code error_code)
+{
+    SEC_DEBUG(" Not implemented");
+}
 
-/**
- * TODO: Write something meaningful here
+/** @brief Process CCB related errors
+ *
+ * @param [in]  error_code        The error code in the descriptor status word
  */
-static void hw_handle_ccb_err(union hw_error_code error_code);
+static inline void hw_handle_ccb_err(union hw_error_code hw_error_code)
+{
+    SEC_DEBUG(" Not implemented");
+}
 
-/**
- * TODO: Write something meaningful here
+/** @brief Process Job Ring related errors
+ *
+ * @param [in]  error_code        The error code in the descriptor status word
  */
-static void hw_handle_jr_err(union hw_error_code error_code);
+static inline void hw_handle_jr_err(union hw_error_code hw_error_code)
+{
+    SEC_DEBUG(" Not implemented");
+}
 
-#endif
+#endif // SEC_HW_VERSION_3_1
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
@@ -188,23 +202,7 @@ static void hw_handle_eu_error(sec_job_ring_t *job_ring)
             break;
     }
 }
-#else
-
-static inline void hw_handle_jmp_halt_user_err(union hw_error_code error_code)
-{
-    SEC_DEBUG(" Not implemented");
-}
-
-static inline void hw_handle_ccb_err(union hw_error_code hw_error_code)
-{
-    SEC_DEBUG(" Not implemented");
-}
-
-static inline void hw_handle_jr_err(union hw_error_code hw_error_code)
-{
-    SEC_DEBUG(" Not implemented");
-}
-#endif
+#endif // SEC_HW_VERSION_3_1
 
 /*==================================================================================================
                                      GLOBAL FUNCTIONS
@@ -260,7 +258,6 @@ int hw_reset_job_ring(sec_job_ring_t *job_ring)
      * queue size, input start address, output queue
      * size and output start address
      */
-    SEC_DEBUG("JRCFG_LO: 0x%x", GET_JR_REG_LO(JRCFG,job_ring));
     // Write the JR input queue size to the HW register
     hw_set_input_ring_size(job_ring,SEC_JOB_RING_SIZE);
 
@@ -269,15 +266,12 @@ int hw_reset_job_ring(sec_job_ring_t *job_ring)
 
     // Write the JR input queue start address
     hw_set_input_ring_start_addr(job_ring, sec_vtop(job_ring->input_ring));
-
-    // Write the JR output queue start address
-    hw_set_output_ring_start_addr(job_ring, sec_vtop(job_ring->output_ring));
-
     SEC_DEBUG(" Set input ring base address to: Virtual: 0x%x, Physical: 0x%x, Read from HW: 0x%08x",
             (dma_addr_t)job_ring->input_ring,
             sec_vtop(job_ring->input_ring),
             hw_get_inp_queue_base(job_ring));
 
+    // Write the JR output queue start address
     hw_set_output_ring_start_addr(job_ring, sec_vtop(job_ring->output_ring));
     SEC_DEBUG(" Set output ring base address to: Virtual: 0x%x, Physical: 0x%x, Read from HW: 0x%08x",
             (dma_addr_t)job_ring->output_ring,
@@ -294,7 +288,7 @@ int hw_reset_job_ring(sec_job_ring_t *job_ring)
     return 0;
 }
 
-#if SEC_HW_VERSION_3_1
+#ifdef SEC_HW_VERSION_3_1
 int hw_shutdown_job_ring(sec_job_ring_t *job_ring)
 {
     unsigned int timeout = SEC_TIMEOUT;
@@ -360,6 +354,9 @@ int hw_shutdown_job_ring(sec_job_ring_t *job_ring)
 
     /* initiate flush (required prior to reset) */
     SET_JR_REG(JRCR,job_ring, JR_REG_JRCR_VAL_RESET);
+
+    // dummy read
+    tmp = GET_JR_REG(JRCR,job_ring);
 
     do
     {
@@ -440,55 +437,7 @@ int hw_reset_and_continue_job_ring(sec_job_ring_t *job_ring)
     }
     return 0;
 }
-#else
-int hw_reset_and_continue_job_ring(sec_job_ring_t *job_ring)
-{
-    unsigned int timeout = SEC_TIMEOUT;
-    int usleep_interval = 10;
-    uint32_t tmp = 0;
 
-    ASSERT(job_ring->register_base_addr != NULL);
-
-#if SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE_POLL
-    /*
-     * mask interrupts since we are going to poll
-     * for reset completion status
-     */
-    uio_job_ring_disable_irqs(job_ring);
-#endif
-    /* initiate flush (required prior to reset) */
-    SET_JR_REG(JRCR,job_ring, JR_REG_JRCR_VAL_RESET);
-
-    do
-    {
-        tmp = GET_JR_REG(JRINT,job_ring);
-        usleep(usleep_interval);
-    }while ( ((tmp  & JRINT_ERR_HALT_MASK) == JRINT_ERR_HALT_INPROGRESS) && \
-               --timeout);
-
-    if( (tmp & JRINT_ERR_HALT_MASK) != JRINT_ERR_HALT_COMPLETE || \
-            timeout == 0)
-     {
-        SEC_ERROR("Failed to flush hw job ring with id %d", job_ring->jr_id);
-#if SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE_POLL
-    /* unmask interrupts */
-    uio_job_ring_enable_irqs(job_ring);
-#endif
-        return -1;
-     }
-
-    /* Resume processing of jobs on this JR*/
-    SET_JR_REG(JRINT,job_ring,JRINT_ERR_HALT_COMPLETE);
-
-#if SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE_POLL
-    /* unmask interrupts */
-    uio_job_ring_enable_irqs(job_ring);
-#endif
-
-    return 0;
-}
-#endif
-#ifdef SEC_HW_VERSION_3_1
 void hw_handle_job_ring_error(sec_job_ring_t *job_ring,
                               uint32_t error_code,
                               uint32_t *reset_required)

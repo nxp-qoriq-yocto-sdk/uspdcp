@@ -71,7 +71,7 @@ extern "C"{
 /** Validation bit pattern. A valid sec_context_t item would contain
  * this pattern at predefined position/s in the item itself. */
 #define CONTEXT_VALIDATION_PATTERN  0xF0A955CD
-#ifdef SEC_HW_VERSION_3_3
+#ifdef SEC_HW_VERSION_3_1
  /** Length of MAC-I code, as required by SEC 3.1. */
 #define SEC_3_1_MAC_I_REQUIRED_LEN  8
 #endif
@@ -163,17 +163,15 @@ struct sec_context_t
     /** Crypto info received from UA.
      * TODO: replace with union when other protocols besides PDCP will be supported!*/
     const sec_pdcp_context_info_t *pdcp_crypto_info;
-#ifdef SEC_HW_VERSION_3_3
+#ifdef SEC_HW_VERSION_3_1
     /** Cryptographic information that defines this SEC context. */
     sec_crypto_pdb_t crypto_desc_pdb;
-#endif
     /** Function used to update a crypto descriptor for a packet
      * belonging to this context. Does not apply to authentication descriptor! */
     sec_update_descriptor update_crypto_descriptor;
     /** Function used to update an authentication descriptor for a packet
      * belonging to this context. */
     sec_update_descriptor update_auth_descriptor;
-#ifdef SEC_HW_VERSION_3_1
     /** Flag set to #TRUE if this context is configured with NULL crypto (PDCP data plane context) or
      *  with NULL crypto + NULL authentication (PDCP control plane context). Set to #FALSE otherwise.
      */
@@ -184,7 +182,10 @@ struct sec_context_t
 #endif
 #ifdef SEC_HW_VERSION_4_4
     /** Shared descriptor used for this context */
-    struct sec_pdcp_sd_t  *sh_desc;
+    struct sec_pdcp_sd_t    *sh_desc;
+    /** Physical address of shared descriptor. Calculated when allocating the descriptor
+     * in order to minimize the overhead of calling vtop. */
+    dma_addr_t              sh_desc_phys;
 #endif
     /** Validation pattern at end of structure. */
     uint32_t end_pattern;
@@ -209,11 +210,16 @@ struct sec_context_t
  *
  * @param [in] pool                Pointer to a sec context pool structure.
  * @param [in] number_of_contexts  The number of contexts to allocated for this pool.
+ * @param [in,out] dma_mem         For SEC 4.4 only: DMA-capable memory area from where to
+ *                                 allocate shared descriptors.
  * @param [in] thread_safe         Configure the thread safeness.
  *                                 Valid values: #THREAD_SAFE_POOL, #THREAD_UNSAFE_POOL
  */
 sec_return_code_t init_contexts_pool(sec_contexts_pool_t *pool,
                                      uint32_t number_of_contexts,
+#ifdef SEC_HW_VERSION_4_4
+                                     void **dma_mem,
+#endif
                                      uint8_t thread_safe);
 
 /** @brief Destroy a pool of sec contexts.

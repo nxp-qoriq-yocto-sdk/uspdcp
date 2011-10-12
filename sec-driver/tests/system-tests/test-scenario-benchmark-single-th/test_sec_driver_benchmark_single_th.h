@@ -99,14 +99,14 @@
 //////////////////////////////////////////////////////////////////////////////
 
 // Disable test application logging
-#define test_printf(format, ...)
+//#define test_printf(format, ...)
 // Disable test application logging for clock cycle measurements
-#define profile_printf(format, ...)
+//#define profile_printf(format, ...)
 
 // Enable test application logging
-//#define test_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__) 
+#define test_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__)
 // Enable test application logging for clock cycle measurements
-//#define profile_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__) 
+#define profile_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__)
 
 /******************************************************************************/
 // END OF CONFIGURATION SECTION

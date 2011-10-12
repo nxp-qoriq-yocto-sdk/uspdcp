@@ -541,11 +541,11 @@ static uint8_t snow_f8_f9_dec_data_in[] =  {0x20,0xd9,0x97,0x63,0x60,0x68,0x2d,0
                                            0x50,0x0a,0xc7,0xfc,0x5e,
                                            // The MAC-I from packet
                                            0x17,0xe3,0xe5,0xd7};
-                                           
+
 // PDCP payload not encrypted
 static uint8_t snow_f8_f9_dec_data_out[] = {0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,
                                           0x57,0xA4,0x9D,0x42,0x14,0x07,0xE8};
-                                          
+
 
 
 // Radio bearer id
@@ -809,6 +809,46 @@ static uint32_t snow_f8_aes_cmac_dec_hfn = 0xFA556;
 
 // HFN threshold
 static uint32_t snow_f8_aes_cmac_dec_hfn_threshold = 0xFF00000;
+
+//////////////////////////////////////////////////////////////////////////////
+// PDCP_TEST_CTRL_PLANE_SNOW_F8_NULL_DEC
+//////////////////////////////////////////////////////////////////////////////
+#elif PDCP_TEST_SCENARIO == PDCP_TEST_CTRL_PLANE_SNOW_F8_NULL_DEC
+
+#define PDCP_TEST_SCENARIO_NAME "PDCP_TEST_CTRL_PLANE_SNOW_F8_NULL_DEC"
+
+// WE HAVE NO PDCP CONTROL-PLANE TEST VECTORS AVAILABLE!
+// Output data was obtained by running encapsulation test.
+// Then the reverse, decapsulation test was done to obtain back the original data.
+// This is the method used for validating to some extent the PDCP control-plane algorithms.
+
+// Length of PDCP header
+#define PDCP_HEADER_LENGTH 1
+
+// Crypto key
+static uint8_t snow_f8_null_dec_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
+                                         0x4E,0xA5,0xF1,0x45,0x10,0x10,0xD8,0x52};
+// Authentication key
+static uint8_t snow_f8_null_dec_auth_key[] = {0xC7,0x36,0xC6,0xAA,0xB2,0x2B,0xFF,0xF9,
+                                              0x1E,0x26,0x98,0xD2,0xE2,0x2A,0xD5,0x7E};
+// PDCP header
+static uint8_t snow_f8_null_dec_pdcp_hdr[] = {0x8B};
+
+// PDCP payload + MAC-I both encrypted
+static uint8_t snow_f8_null_dec_data_in[] =  {0x20,0xd9,0x97,0x63,0x60,0x68,0x2d,0x55,0x0e,0x8d,
+                                              0x50,0x0a,0xc7,0xfc,0x5e};
+
+// PDCP payload not encrypted
+static uint8_t snow_f8_null_dec_data_out[] = {0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,
+                                                  0x57,0xA4,0x9D,0x42,0x14,0x07,0xE8};
+// Radio bearer id
+static uint8_t snow_f8_null_dec_bearer = 0x3;
+
+// Start HFN
+static uint32_t snow_f8_null_dec_hfn = 0xFA556;
+
+// HFN threshold
+static uint32_t snow_f8_null_dec_hfn_threshold = 0xFF00000;
 
 #else
 #error "Unsuported test scenario!"
@@ -1164,9 +1204,9 @@ static uint32_t snow_f8_aes_cmac_dec_hfn_threshold = 0xFF00000;
 #define test_hfn                aes_ctr_cmac_enc_hfn
 #define test_hfn_threshold      aes_ctr_cmac_enc_hfn_threshold
 #ifdef SEC_HW_VERSION_3_1
-#define test_packet_offset      PACKET_OFFSET + AES_CMAC_SCTRATCHPAD_PACKET_AREA_LENGHT
+                                (PACKET_OFFSET + AES_CMAC_SCTRATCHPAD_PACKET_AREA_LENGHT)
 #else
-#define test_packet_offset      PACKET_OFFSET
+#define test_packet_offset      (PACKET_OFFSET)
 #endif
 
 // A double pass of packets through SEC engine is requried for PDCP c-plane
@@ -1319,6 +1359,37 @@ static uint32_t snow_f8_aes_cmac_dec_hfn_threshold = 0xFF00000;
 //#undef VALIDATE_CONFORMITY
 //#endif
 
+//////////////////////////////////////////////////////////////////////////////
+// PDCP_TEST_CTRL_PLANE_SNOW_F8_NULL_DEC
+//////////////////////////////////////////////////////////////////////////////
+#elif PDCP_TEST_SCENARIO == PDCP_TEST_CTRL_PLANE_SNOW_F8_NULL_DEC
+
+#define test_crypto_key         snow_f8_null_dec_key
+#define test_crypto_key_len     sizeof(snow_f8_null_dec_key)
+
+#define test_auth_key           snow_f8_null_dec_auth_key
+#define test_auth_key_len       sizeof(snow_f8_null_dec_auth_key)
+
+#define test_data_in            snow_f8_null_dec_data_in
+#define test_data_out           snow_f8_null_dec_data_out
+
+#define test_pdcp_hdr           snow_f8_null_dec_pdcp_hdr
+#define test_bearer             snow_f8_null_dec_bearer
+#define test_sn_size            SEC_PDCP_SN_SIZE_5
+#define test_user_plane         PDCP_CONTROL_PLANE
+#define test_packet_direction   PDCP_DOWNLINK
+#define test_protocol_direction PDCP_DECAPSULATION
+#define test_cipher_algorithm   SEC_ALG_SNOW
+#define test_integrity_algorithm SEC_ALG_NULL
+#define test_hfn                snow_f8_null_dec_hfn
+#define test_hfn_threshold      snow_f8_null_dec_hfn_threshold
+#define test_packet_offset      PACKET_OFFSET + AES_CMAC_SCTRATCHPAD_PACKET_AREA_LENGHT
+
+// Do not validate conformity against reference test vector
+// as we do not have one for PDCP control-plane
+//#ifdef VALIDATE_CONFORMITY
+//#undef VALIDATE_CONFORMITY
+//#endif
 #else
 #error "Unsuported test scenario!"
 #endif

@@ -178,9 +178,10 @@ int dma_mem_setup(void)
         return 0;
 
 err:
-#warning "Copy-paste, modify"
     fprintf(stderr, "ERROR: dma_mem setup failed, ret = %d\n", ret);
+    shmdt(virt);
     close(fd);
+    shmctl(shmid, IPC_RMID, NULL);
     return ret;
 }
 

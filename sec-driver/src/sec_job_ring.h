@@ -41,9 +41,10 @@
 #include "sec_hw_specific.h"
 #include "fifo.h"
 #ifdef SEC_HW_VERSION_4_4
-#include "sec_sg_contexts.h"
+#if (SEC_ENABLE_SCATTER_GATHER == ON)
+#include "sec_sg_utils.h"
+#endif // (SEC_ENABLE_SCATTER_GATHER == ON)
 #endif // SEC_HW_VERSION_4_4
-
 /*==============================================================================
                               DEFINES AND MACROS
 ==============================================================================*/
@@ -101,9 +102,9 @@ typedef struct sec_mac_i_s
 struct sec_job_t
 {
     sec_context_t *sec_context;         /*< SEC context this packet belongs to */
-#ifdef SEC_HW_VERSION_4_4
+#if defined(SEC_HW_VERSION_4_4) && (SEC_ENABLE_SCATTER_GATHER == ON)
     sec_sg_context_t *sg_ctx;           /*< SEC Scatter Gather context this packet belongs to */
-#endif
+#endif // defined(SEC_HW_VERSION_4_4) && (SEC_ENABLE_SCATTER_GATHER == ON)
     struct sec_descriptor_t *descr;     /*< SEC descriptor sent to SEC engine(virtual address)*/
     dma_addr_t descr_phys_addr;         /*< SEC descriptor sent to SEC engine(physical address) */
     const sec_packet_t *in_packet;      /*< Input packet */
@@ -121,7 +122,7 @@ struct sec_job_t
 #endif // SEC_HW_VERSION_3_1
 }__CACHELINE_ALIGNED;
 
-#if SEC_HW_VERSION_4_4
+#ifdef SEC_HW_VERSION_4_4
 struct sec_outring_entry {
     dma_addr_t  desc;                   /*< Pointer to completed descriptor */
     uint32_t    status;                 /*< Status for completed descriptor */
@@ -139,13 +140,17 @@ typedef enum sec_job_ring_state_e
 /** SEC Job Ring */
 struct sec_job_ring_t
 {
-    // TODO: Add wrapper macro to make it obvious this is the consumer index on the output ring
+    /* TODO: Add wrapper macro to make it obvious this is the consumer index on the output ring */
     volatile uint32_t cidx;                     /*< Consumer index for job ring (jobs array).
                                                     @note: cidx and pidx are accessed from different threads.
                                                     Place the cidx and pidx inside the structure so that
                                                     they lay on different cachelines, to avoid false
                                                     sharing between threads when the threads run on different cores! */
-    struct sec_job_t jobs[SEC_JOB_RING_SIZE];   /*< Ring of jobs. The same ring is used for
+#ifdef SEC_HW_VERSION_4_4
+    volatile uint32_t   hw_cidx;                /*< Index showing the last entry processed by
+                                                    the SEC 4.4 HW. */
+#endif // SEC_HW_VERSION_4_1
+    struct sec_job_t jobs[SEC_JOB_RING_SIZE];   /*< Ring of jobs. SEC 3.1 ONLY: The same ring is used for
                                                     input jobs and output jobs because SEC engine writes
                                                     back output indication in input job.
                                                     Size of array is power of 2 to allow fast update of
@@ -158,6 +163,9 @@ struct sec_job_ring_t
     // TODO: Add wrapper macro to make it obvious this is the producer index on the input ring
     volatile uint32_t pidx;                     /*< Producer index for job ring (jobs array) */
 #ifdef SEC_HW_VERSION_4_4
+    volatile uint32_t   hw_pidx;                /*< Index showing the currently enqueued entry for
+                                                    processing by the user to the SEC 4.4 HW.*/
+
     dma_addr_t *input_ring;                     /*< Ring of output descriptors received from SEC.
                                                     Size of array is power of 2 to allow fast update of
                                                     producer/consumer indexes with bitwise operations. */
@@ -165,9 +173,6 @@ struct sec_job_ring_t
     struct sec_outring_entry *output_ring;      /*< Ring of output descriptors received from SEC.
                                                     Size of array is power of 2 to allow fast update of
                                                     producer/consumer indexes with bitwise operations. */
-
-    volatile uint32_t   hw_cidx;                /* TODO: Add comment */
-    volatile uint32_t   hw_pidx;                /* TODO: Add comment */
 #endif // SEC_HW_VERSION_4_4
     uint32_t uio_fd;                            /*< The file descriptor used for polling from user space
                                                     for interrupts notifications */
@@ -181,9 +186,9 @@ struct sec_job_ring_t
                                                     so this member will have the exact same value for all of them. */
     volatile sec_job_ring_state_t jr_state;     /*< The state of this job ring */
     sec_contexts_pool_t ctx_pool;               /*< Pool of SEC contexts */
-#ifdef SEC_HW_VERSION_4_4
-    sec_sg_contexts_pool_t sg_ctx_pool;         /*< Pool of SEC Scatter Gather contexts */
-#endif
+#if defined(SEC_HW_VERSION_4_4) && (SEC_ENABLE_SCATTER_GATHER == ON)
+    sec_sg_context_t sg_ctxs[SEC_JOB_RING_SIZE]; /*< Scatter Gather contexts for this jobring */
+#endif // defined(SEC_HW_VERSION_4_4) && (SEC_ENABLE_SCATTER_GATHER == ON)
 }__CACHELINE_ALIGNED;
 /*==============================================================================
                                  CONSTANTS
@@ -237,8 +242,10 @@ int shutdown_job_ring(struct sec_job_ring_t *job_ring);
  */
 void uio_reset_sec_engine(sec_job_ring_t *job_ring);
 
-/** @brief Request to SEC kernel driver to enable job DONE and
+/** @brief SEC 3.1: Request to SEC kernel driver to enable job DONE and
  *  error interrupts on this job ring.
+ *         SEC 4.4: Request to SEC kernel driver to enable interrupts for
+ *         descriptor finished processing
  *  Use UIO to communicate with SEC kernel driver: write command
  *  value that indicates an IRQ enable action into UIO file descriptor
  *  of this job ring.
@@ -248,19 +255,16 @@ void uio_reset_sec_engine(sec_job_ring_t *job_ring);
 void uio_job_ring_enable_irqs(sec_job_ring_t *job_ring);
 
 #ifdef SEC_HW_VERSION_4_4
-/**
- * TODO: Write something meaningful here
+/** @brief Request to SEC kernel driver to disable interrupts for descriptor
+ * finished processing
+ *  Use UIO to communicate with SEC kernel driver: write command
+ *  value that indicates an IRQ enable action into UIO file descriptor
+ *  of this job ring.
+ *
+ * @param [in]  job_ring     Job ring
  */
 void uio_job_ring_disable_irqs(sec_job_ring_t *job_ring);
 
-#if (SEC_INT_COALESCING_ENABLE == ON)
-/**
- * TODO: Write something meaningful here
- */
-void enable_job_ring_coalescing(sec_job_ring_t *job_ring,
-                                const sec_config_t *sec_config_data);
-
-#endif // SEC_INT_COALESCING_ENABLE == ON
 #endif // SEC_HW_VERSION_4_4
 /*============================================================================*/
 

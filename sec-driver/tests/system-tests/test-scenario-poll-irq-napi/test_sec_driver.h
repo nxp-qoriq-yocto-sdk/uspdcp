@@ -44,7 +44,6 @@
 /******************************************************************************/
 // START OF CONFIGURATION SECTION
 /******************************************************************************/
-#define LOOPBACK_TESTING
 
 //////////////////////////////////////////////////////////////////////////
 // !!!!!!!!!!!!!!!!!       IMPORTANT !!!!!!!!!!!!!!!!
@@ -109,6 +108,11 @@
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_SNOW_F8_AES_CMAC_DEC
 
 
+// Test PDCP control plane decapsulation with SNOW F8 ciphering
+// and NULL authentication
+//#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_SNOW_F8_NULL_DEC
+
+
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -128,7 +132,7 @@
 // This test application will process a random number of packets per context ranging
 // from a #MIN_PACKET_NUMBER_PER_CTX to #MAX_PACKET_NUMBER_PER_CTX value.
 // Higher limit for number of packets per PDCP context
-#define MAX_PACKET_NUMBER_PER_CTX   30
+#define MAX_PACKET_NUMBER_PER_CTX   10
 // Lower limit for number of packets per PDCP context
 #define MIN_PACKET_NUMBER_PER_CTX   1
 
@@ -137,10 +141,10 @@
 //////////////////////////////////////////////////////////////////////////////
 
 // Disable test application logging
-//#define test_printf(format, ...)
+#define test_printf(format, ...)
 
 // Enable test application logging
-#define test_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__)
+//#define test_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__)
 
 /******************************************************************************/
 // END OF CONFIGURATION SECTION
@@ -177,6 +181,7 @@
 #define PDCP_TEST_CTRL_PLANE_AES_CTR_SNOW_F9_DEC    15
 #define PDCP_TEST_CTRL_PLANE_SNOW_F8_AES_CMAC_ENC   16
 #define PDCP_TEST_CTRL_PLANE_SNOW_F8_AES_CMAC_DEC   17
+#define PDCP_TEST_CTRL_PLANE_SNOW_F8_NULL_DEC       18
 /*==============================================================================
                          GLOBAL VARIABLE DECLARATIONS
 ==============================================================================*/

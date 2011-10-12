@@ -38,29 +38,28 @@ extern "C" {
                                         INCLUDE FILES
 ==================================================================================================*/
 #include "sec_contexts.h"
-#ifdef SEC_HW_VERSION_4_4
-#include "sec_sg_contexts.h"
-#endif
 #include "cgreen.h"
 
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
+
+#ifdef SEC_HW_VERSION_4_4
+#include <malloc.h> // memalign...
+#endif
 /*==================================================================================================
                                      LOCAL DEFINES
 ==================================================================================================*/
 #define MAX_SEC_CONTEXTS_PER_POOL   (SEC_MAX_PDCP_CONTEXTS / (MAX_SEC_JOB_RINGS))
-#ifdef SEC_HW_VERSION_4_4
-#if (SEC_ENABLE_SCATTER_GATHER == ON)
-#define MAX_SEC_SG_CONTEXTS_PER_POOL    SEC_JOB_RING_SIZE
-#endif // SEC_ENABLE_SCATTER_GATHER == ON
-#endif // SEC_HW_VERSION_4_4
 #define sec_vtop(virt_address) \
 {\
     /* stub macro*/ \
     return (dma_addr_t)(virt_address); \
 }
-
+#ifdef SEC_HW_VERSION_4_4
+dma_addr_t __dma_virt = 0;
+dma_addr_t __dma_phys = 0;
+#endif
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
 ==================================================================================================*/
@@ -98,7 +97,11 @@ static void test_contexts_pool_init_destroy(void)
 
 #define NO_OF_CONTEXTS 10
 
-    ret = init_contexts_pool(&pool, NO_OF_CONTEXTS, THREAD_UNSAFE_POOL);
+    ret = init_contexts_pool(&pool, NO_OF_CONTEXTS,
+#ifdef SEC_HW_VERSION_4_4
+            &global_dma_mem_free,
+#endif
+            THREAD_UNSAFE_POOL);
 
     assert_equal_with_message(ret, 0,
             "ERROR on init_contexts_pool: ret = %d!", ret);
@@ -113,7 +116,11 @@ static void test_contexts_pool_get_free_contexts(void)
 #define NO_OF_CONTEXTS 10
     sec_context_t* sec_ctxs[NO_OF_CONTEXTS];
 
-    ret = init_contexts_pool(&pool, NO_OF_CONTEXTS, THREAD_UNSAFE_POOL);
+    ret = init_contexts_pool(&pool, NO_OF_CONTEXTS,
+#ifdef SEC_HW_VERSION_4_4
+            &global_dma_mem_free,
+#endif
+            THREAD_UNSAFE_POOL);
 
     assert_equal_with_message(ret, 0,
             "ERROR on init_contexts_pool: ret = %d!", ret);
@@ -145,7 +152,11 @@ static void test_contexts_pool_free_contexts_with_no_packets_in_flight(void)
 #define NO_OF_CONTEXTS 10
     sec_context_t* sec_ctxs[NO_OF_CONTEXTS];
 
-    ret = init_contexts_pool(&pool, NO_OF_CONTEXTS, THREAD_UNSAFE_POOL);
+    ret = init_contexts_pool(&pool, NO_OF_CONTEXTS,
+#ifdef SEC_HW_VERSION_4_4
+            &global_dma_mem_free,
+#endif
+            THREAD_UNSAFE_POOL);
 
     assert_equal_with_message(ret, 0,
             "ERROR on init_contexts_pool: ret = %d!", ret);
@@ -197,7 +208,11 @@ static void test_contexts_pool_free_contexts_with_packets_in_flight(void)
     sec_context_t* sec_ctxs[NO_OF_CONTEXTS];
     sec_context_t* sec_ctx = NULL;
 
-    ret = init_contexts_pool(&pool, NO_OF_CONTEXTS, THREAD_UNSAFE_POOL);
+    ret = init_contexts_pool(&pool, NO_OF_CONTEXTS,
+#ifdef SEC_HW_VERSION_4_4
+            &global_dma_mem_free,
+#endif
+            THREAD_UNSAFE_POOL);
 
     assert_equal_with_message(ret, 0,
             "ERROR on init_contexts_pool: ret = %d!", ret);
@@ -293,103 +308,6 @@ static void test_contexts_pool_free_contexts_with_packets_in_flight(void)
     destroy_contexts_pool(&pool);
 }
 
-#ifdef SEC_HW_VERSION_4_4
-#if (SEC_ENABLE_SCATTER_GATHER == ON)
-static void test_sg_contexts_pool_init_destroy(void)
-{
-    sec_sg_contexts_pool_t sg_pool;
-    int ret = 0;
-
-#define NO_OF_CONTEXTS 10
-
-    ret = init_sg_contexts_pool(&sg_pool, NO_OF_CONTEXTS, &global_dma_mem_free);
-
-    assert_equal_with_message(ret, 0,
-            "ERROR on init_sg_contexts_pool: ret = %d!", ret);
-
-    destroy_sg_contexts_pool(&sg_pool);
-}
-
-static void test_sg_contexts_pool_get_free_contexts(void)
-{
-    sec_sg_contexts_pool_t sg_pool;
-    int ret = 0, i = 0;
-#define NO_OF_CONTEXTS 10
-    sec_sg_context_t* sec_sg_ctxs[NO_OF_CONTEXTS];
-
-    ret = init_sg_contexts_pool(&sg_pool, NO_OF_CONTEXTS, &global_dma_mem_free);
-
-    assert_equal_with_message(ret, 0,
-            "ERROR on init_sg_contexts_pool: ret = %d!", ret);
-
-    // get all the contexts in the pool
-    for (i = 0; i < NO_OF_CONTEXTS; i++)
-    {
-        sec_sg_ctxs[i] = get_free_sg_context(&sg_pool);
-        assert_not_equal_with_message(sec_sg_ctxs[i], 0,
-                "ERROR on get_free_sg_context: no more contexts available and there should be (%d)", i);
-        assert_equal_with_message(sec_sg_ctxs[i]->state, SEC_SG_CONTEXT_USED,
-                "ERROR on get_free_sg_context: invalid state of context!");
-        assert_equal_with_message(sec_sg_ctxs[i]->pool, &sg_pool,
-                "ERROR on get_free_sg_context: invalid pool pointer in context!");
-    }
-    // try and get another context -> we should receive none
-    assert_equal_with_message(get_free_sg_context(&sg_pool), 0,
-            "ERROR on get_free_sg_context: free contexts available and there should be none!");
-
-    destroy_sg_contexts_pool(&sg_pool);
-}
-
-static void test_sg_contexts_pool_free_contexts(void)
-{
-    sec_sg_contexts_pool_t sg_pool;
-    int ret = 0, i = 0;
-#define NO_OF_CONTEXTS 10
-    sec_sg_context_t* sec_sg_ctxs[NO_OF_CONTEXTS];
-
-    ret = init_sg_contexts_pool(&sg_pool, NO_OF_CONTEXTS, &global_dma_mem_free);
-
-    assert_equal_with_message(ret, 0,
-            "ERROR on init_sg_contexts_pool: ret = %d!", ret);
-
-    // get all the contexts in the pool
-    for (i = 0; i < NO_OF_CONTEXTS; i++)
-    {
-        sec_sg_ctxs[i] = get_free_sg_context(&sg_pool);
-    assert_not_equal_with_message(sec_sg_ctxs[i], 0,
-            "ERROR on get_sg_free_context: no more contexts available and there should be (%d)", i);
-    assert_equal_with_message(sec_sg_ctxs[i]->state, SEC_SG_CONTEXT_USED,
-            "ERROR on get_free_sg_context: invalid state of context!");
-    assert_equal_with_message(sec_sg_ctxs[i]->pool, &sg_pool,
-            "ERROR on get_free_sg_context: invalid pool pointer in context!");
-    }
-    // try and get another context -> we should receive none
-    assert_equal_with_message(get_free_sg_context(&sg_pool), 0,
-            "ERROR on get_sg_free_context: free contexts available and there should be none!");
-
-    // free all the contexts -> the contexts have no packets in flight
-    for (i = 0; i < NO_OF_CONTEXTS; i++)
-    {
-        ret = free_sg_context(&sg_pool, sec_sg_ctxs[i]);
-        assert_equal_with_message(ret, SEC_SUCCESS,
-                "ERROR on free_sg_context: ret = (%d)", ret);
-        assert_equal_with_message(sec_sg_ctxs[i]->state, SEC_SG_CONTEXT_UNUSED,
-                "ERROR on free_sg_context: invalid state of context!");
-        assert_equal_with_message(sec_sg_ctxs[i]->pool, &sg_pool,
-                "ERROR on free_sg_context: invalid pool pointer in context!");
-    }
-
-    // try and get one context -> it should work ok because we just freed some
-    sec_sg_ctxs[0] = get_free_sg_context(&sg_pool);
-    assert_not_equal_with_message(sec_sg_ctxs[0], 0,
-            "ERROR on get_free_sg_context: free contexts not available and there should be!");
-
-    destroy_sg_contexts_pool(&sg_pool);
-}
-
-#endif // SEC_ENABLE_SCATTER_GATHER == ON
-#endif // SEC_HW_VERSION_4_4
-
 static TestSuite * contexts_pool_tests()
 {
     /* create test suite */
@@ -404,13 +322,6 @@ static TestSuite * contexts_pool_tests()
     add_test(suite, test_contexts_pool_get_free_contexts);
     add_test(suite, test_contexts_pool_free_contexts_with_no_packets_in_flight);
     add_test(suite, test_contexts_pool_free_contexts_with_packets_in_flight);
-#ifdef SEC_HW_VERSION_4_4
-#if (SEC_ENABLE_SCATTER_GATHER == ON)
-    add_test(suite, test_sg_contexts_pool_init_destroy);
-    add_test(suite, test_sg_contexts_pool_get_free_contexts);
-    add_test(suite, test_sg_contexts_pool_free_contexts);
-#endif // SEC_ENABLE_SCATTER_GATHER == ON
-#endif // SEC_HW_VERSION_4_4
 
     return suite;
 } /* contexts_pool_tests() */
@@ -435,15 +346,12 @@ int main(int argc, char *argv[])
     // plus one more for a global pool.
 #ifdef SEC_HW_VERSION_3_1
     global_dma_mem_free = malloc(sizeof(sec_crypto_pdb_t)* MAX_SEC_CONTEXTS_PER_POOL * (MAX_SEC_JOB_RINGS + 1)  );
-#else // SEC_HW_VERSION_3_1
-#if (SEC_ENABLE_SCATTER_GATHER == ON)
-    global_dma_mem_free = malloc( MAX_SEC_JOB_RINGS * MAX_SEC_SG_CONTEXTS_PER_POOL *
-                                  sizeof(struct sec_sg_tbl_entry) * SEC_MAX_SG_TBL_ENTRIES);
 #else
-#warning "Nobody uses this memory"
-    global_dma_mem_free = malloc(sizeof(uint32_t));
-#endif // SEC_ENABLE_SCATTER_GATHER == ON
-#endif // SEC_HW_VERSION_3_1
+    /* Because I need cacheline aligned mem in init_context_pools, I use memalign, instead of plain malloc
+     *
+     */
+    global_dma_mem_free = memalign(CACHE_LINE_SIZE, sizeof(sec_crypto_pdb_t)* MAX_SEC_CONTEXTS_PER_POOL * (MAX_SEC_JOB_RINGS + 1));
+#endif
     assert(global_dma_mem_free != NULL);
 
     // Remember start address of memory area (for free() )
@@ -459,13 +367,6 @@ int main(int argc, char *argv[])
     run_single_test(suite, "test_contexts_pool_get_free_contexts", reporter);
     run_single_test(suite, "test_contexts_pool_free_contexts_with_no_packets_in_flight", reporter);
     run_single_test(suite, "test_contexts_pool_free_contexts_with_packets_in_flight", reporter);
-#ifdef SEC_HW_VERSION_4_4
-#if (SEC_ENABLE_SCATTER_GATHER == ON)
-    run_single_test(suite, "test_sg_contexts_pool_init_destroy", reporter);
-    run_single_test(suite, "test_sg_contexts_pool_get_free_contexts", reporter);
-    run_single_test(suite, "test_sg_contexts_pool_free_contexts", reporter);
-#endif // SEC_ENABLE_SCATTER_GATHER == ON
-#endif // SEC_HW_VERSION_4_4
 
     destroy_test_suite(suite);
     (*reporter->destroy)(reporter);

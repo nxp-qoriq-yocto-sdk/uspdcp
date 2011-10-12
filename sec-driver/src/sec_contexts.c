@@ -40,7 +40,10 @@ extern "C" {
 #include "list.h"
 #include "sec_contexts.h"
 #include "sec_utils.h"
-
+#ifdef SEC_HW_VERSION_4_4
+// for vtop macro
+#include "external_mem_management.h"
+#endif
 #include <stdlib.h>
 /*==================================================================================================
                                      LOCAL CONSTANTS
@@ -56,7 +59,6 @@ extern "C" {
  * @note: Because the node (list_node_t) is placed right at the beginning of the sec_context_t
  * structure there is no need for subtraction: the node and the associated context have the
  * same address. */
-//#define GET_CONTEXT_FROM_LIST_NODE(list_node) container_of(list_node, sec_context_t, node)
 #define GET_CONTEXT_FROM_LIST_NODE(list_node) ((sec_context_t*)(list_node))
 /*==================================================================================================
                                       LOCAL CONSTANTS
@@ -158,7 +160,6 @@ static void destroy_pool_list(list_t * list)
     {
         node = list->remove_first(list);
         ctx = GET_CONTEXT_FROM_LIST_NODE(node);
-
         memset(ctx, 0, sizeof(sec_context_t));
         ctx->state = SEC_CONTEXT_UNUSED;
     }
@@ -194,11 +195,10 @@ static void free_in_use_context(sec_contexts_pool_t * pool, sec_context_t * ctx)
     ctx->notify_packet_cbk = NULL;
     ctx->jr_handle = NULL;
     ctx->pdcp_crypto_info = NULL;
+#ifdef SEC_HW_VERSION_3_1
     ctx->update_crypto_descriptor = NULL;
     ctx->update_auth_descriptor = NULL;
-#ifdef SEC_HW_VERSION_4_4
-    ctx->sh_desc = NULL;
-#endif
+#endif // SEC_HW_VERSION_3_1
     // add context to free list
     // TODO: maybe add new context to head -> better chance for a cache hit if same element is reused next
     pool->free_list.add_tail(&pool->free_list, &ctx->node);
@@ -276,6 +276,9 @@ static void run_contexts_garbage_colector(sec_contexts_pool_t * pool)
 
 sec_return_code_t init_contexts_pool(sec_contexts_pool_t * pool,
                                      uint32_t number_of_contexts,
+#ifdef SEC_HW_VERSION_4_4
+                                     void **dma_mem,
+#endif // SEC_HW_VERSION_4_4
                                      uint8_t thread_safe)
 {
     int i = 0;
@@ -315,6 +318,21 @@ sec_return_code_t init_contexts_pool(sec_contexts_pool_t * pool,
         ctx->pi = 0;
         ctx->ci = 0;
         ctx->pool = pool;
+#ifdef SEC_HW_VERSION_4_4
+        SEC_ASSERT ((dma_addr_t)*dma_mem % CACHE_LINE_SIZE == 0,
+                      SEC_INVALID_INPUT_PARAM,
+                      "Current memory position is not cacheline aligned."
+                      "Context= %p", ctx);
+        ctx->sh_desc = (struct sec_pdcp_sd_t*)(dma_addr_t)*dma_mem;
+        memset(ctx->sh_desc, 0, SEC_CRYPTO_DESCRIPTOR_SIZE);
+        *dma_mem += SEC_CRYPTO_DESCRIPTOR_SIZE;
+
+        ctx->sh_desc_phys = sec_vtop(ctx->sh_desc);
+
+        SEC_DEBUG("Created shared descriptor @ 0x%04x (phys: 0x%x)",
+                (uint32_t)ctx->sh_desc,
+                ctx->sh_desc_phys);
+#endif // SEC_HW_VERSION_4_4
 
         // initialize validation patterns
         ctx->start_pattern = CONTEXT_VALIDATION_PATTERN;

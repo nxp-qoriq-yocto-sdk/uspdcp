@@ -169,15 +169,15 @@ extern "C" {
  * @note Applies only to data plane packets!*/
 #define PDCP_HEADER_GET_D_C(hdr)((hdr)[0] >> 7)
 #else // SEC_HW_VERSION_3_1
-/** Write something meaningful here
- *
+
+/** Define for use in the array of descriptor creating functions. This is the number of
+ * rows in the array
  */
 #define NUM_CIPHER_ALGS sizeof(sec_crypto_alg_t)
 
-/** Write something meaningful here
- *
+/** Define for use in the array of descriptor creating functions. This is the number of
+ * columns in the array
  */
-
 #define NUM_INT_ALGS sizeof(sec_crypto_alg_t)
 
 #endif // SEC_HW_VERSION_3_1
@@ -191,11 +191,9 @@ extern "C" {
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
 ==================================================================================================*/
 #ifdef SEC_HW_VERSION_4_4
-/** TODO: Write something meaningful here
- *
- */
+/** Typedef for function pointer forcreating a shared descriptor on a context */
 typedef int (*create_desc_fp)(sec_context_t *ctx);
-#endif
+#endif // SEC_HW_VERSION_4_4
 /*==================================================================================================
                                       LOCAL CONSTANTS
 ==================================================================================================*/
@@ -204,17 +202,20 @@ typedef int (*create_desc_fp)(sec_context_t *ctx);
                                       LOCAL VARIABLES
 ==================================================================================================*/
 #ifdef SEC_HW_VERSION_4_4
-/** TODO: Write something meaningful here
- * Forward declaration
- */
+
+ /** Forward declaration of a static array of function pointers
+  * indexed by the encryption algorithms and authentication
+  * algorithms used for PDCP Control Plane.
+  */
 static create_desc_fp c_plane_create_desc[][NUM_INT_ALGS];
 
-/** TODO: Write something meaningful here
- * Forward declaration
+/** Forward declaration of a static array of function pointers
+ * indexed by the encryption algorithms used for
+ * PDCP User Plane.
  */
 static create_desc_fp u_plane_create_desc[];
 
-#endif
+#endif //SEC_HW_VERSION_4_4
 
 /*==================================================================================================
                                      GLOBAL CONSTANTS
@@ -416,35 +417,66 @@ static void sec_pdcp_update_iv_template(sec_crypto_pdb_t *sec_pdb,
                                         sec_status_t *status,
                                         uint8_t iv_offset);
 #else // SEC_HW_VERSION_3_1
-/** TODO: Write something meaningful here
+/** @brief Function for populating a shared descriptor with the
+ * required information for executing a HW supported protocol
+ * acceleration for PDCP Control Plane.
  *
+ * @param [in]      ctx         SEC context
+ *
+ * @Caution     Works only for SNOW3G/AES algorithm suites
  */
 static int create_c_plane_hw_acc_desc(sec_context_t *ctx);
 
-/** TODO: Write something meaningful here
+/** @brief Function for populating a shared descriptor with the
+ * required information for executing a HW supported protocol
+ * acceleration for PDCP User Plane.
  *
+ * @param [in]      ctx         SEC context
+ *
+ * @Caution     Works only for SNOW3G/AES algorithm suites
  */
 static int create_u_plane_hw_acc_desc(sec_context_t *ctx);
 
-/** TODO: Write something meaningful here
+/** @brief Function for populating a shared descriptor with the
+ * required information for executing an accelerated
+ * PDCP Control Plane descriptor with mixed authentication.
+ * and encryption algorithms
  *
+ * @param [in]      ctx         SEC context
+ *
+ * @Caution     Currently not implemented, do not use
  */
-static int create_mixed_desc(sec_context_t *ctx);
+static int create_c_plane_mixed_desc(sec_context_t *ctx);
 
-/** TODO: Write something meaningful here
+/** @brief Function for populating a shared descriptor with the
+ * required information for executing a PDCP Control plane descriptor
+ * performing only authentication and no encryption.
  *
+ * @param [in]      ctx         SEC context
+ *
+ * @Caution     Currently not implemented, do not use
  */
-static int create_auth_only_desc(sec_context_t *ctx);
+static int create_c_plane_auth_only_desc(sec_context_t *ctx);
 
-/** TODO: Write something meaningful here
+/** @brief Function for populating a shared descriptor with the
+ * required information for executing a PDCP Control plane descriptor
+ * performing only encryption and no authentication.
  *
+ * @param [in]      ctx         SEC context
+ *
+ * @Caution     Currently not implemented, do not use
  */
-static int create_cipher_only_desc(sec_context_t *ctx);
+static int create_c_plane_cipher_only_desc(sec_context_t *ctx);
 
-/** TODO: Write something meaningful here
+/** @brief Function for populating a shared descriptor with the
+ * required information for executing a PDCP Control plane descriptor
+ * which performs authentication and/or encryption using NULL algorithm
+ *
+ * @param [in]      ctx         SEC context
+ *
  *
  */
-static int create_copy_desc(sec_context_t *ctx);
+static int create_null_desc(sec_context_t *ctx);
 
 #endif // SEC_HW_VERSION_3_1
 /** @brief Fill PDB with initial data for this context: HFN threshold, HFN mask, etc
@@ -1337,16 +1369,9 @@ static void sec_pdcp_create_pdb(sec_context_t *ctx)
 static int sec_pdcp_context_create_descriptor(sec_context_t *ctx)
 {
     int ret = SEC_SUCCESS;
-    extern void* g_dma_mem_free;
 
     ASSERT(ctx != NULL);
     ASSERT(ctx->pdcp_crypto_info != NULL);
-
-    ctx->sh_desc = (struct sec_pdcp_sd_t*)(dma_addr_t)g_dma_mem_free;
-    memset(ctx->sh_desc, 0, SEC_CRYPTO_DESCRIPTOR_SIZE);
-    g_dma_mem_free += SEC_CRYPTO_DESCRIPTOR_SIZE;
-
-    SEC_DEBUG("Created shared descriptor @ 0x%04x",(uint32_t)ctx->sh_desc);
 
     // Create a Protocol Data Blob (PDB)
     sec_pdcp_create_pdb(ctx);
@@ -1416,7 +1441,7 @@ static int create_u_plane_hw_acc_desc(sec_context_t *ctx)
     return SEC_SUCCESS;
 }
 
-static int create_mixed_desc(sec_context_t *crypto_pdb)
+static int create_c_plane_mixed_desc(sec_context_t *crypto_pdb)
 {
     SEC_INFO(" Called create_mixed_desc");
     ASSERT(0);
@@ -1424,7 +1449,7 @@ static int create_mixed_desc(sec_context_t *crypto_pdb)
     return SEC_SUCCESS;
 }
 
-static int create_auth_only_desc(sec_context_t *crypto_pdb)
+static int create_c_plane_auth_only_desc(sec_context_t *crypto_pdb)
 {
     SEC_INFO(" Called create_auth_only_desc");
     ASSERT(0);
@@ -1432,7 +1457,7 @@ static int create_auth_only_desc(sec_context_t *crypto_pdb)
     return SEC_SUCCESS;
 }
 
-static int create_cipher_only_desc(sec_context_t *crypto_pdb)
+static int create_c_plane_cipher_only_desc(sec_context_t *crypto_pdb)
 {
     SEC_INFO(" Called create_cipher_only_desc");
     ASSERT(0);
@@ -1440,7 +1465,7 @@ static int create_cipher_only_desc(sec_context_t *crypto_pdb)
     return SEC_SUCCESS;
 }
 
-static int create_copy_desc(sec_context_t *ctx)
+static int create_null_desc(sec_context_t *ctx)
 {
     int i = 0;
     SEC_INFO("Creating U-PLANE/C-Plane descriptor with NULL alg.");
@@ -1505,11 +1530,9 @@ int sec_pdcp_context_update_descriptor(sec_context_t *ctx,
     uint32_t    length = 0;
     int ret = SEC_SUCCESS;
 
-    phys_addr = sec_vtop(job->sec_context->sh_desc);
-
     PDCP_INIT_JD(descriptor);
     PDCP_JD_SET_SD(descriptor,
-                   phys_addr,
+                   job->sec_context->sh_desc_phys,
                    SEC_PDCP_GET_DESC_LEN(job->sec_context->sh_desc));
 
 #if (SEC_ENABLE_SCATTER_GATHER == ON)
@@ -1561,16 +1584,24 @@ int sec_pdcp_context_update_descriptor(sec_context_t *ctx,
     return ret;
 }
 
+/** Static array for selection of the function to be used for creating the shared descriptor on a SEC context,
+ * depending on the algorithm selected by the user. This array is used for PDCP Control plane where both
+ * authentication and encryption is required.
+ */
 static create_desc_fp c_plane_create_desc[NUM_CIPHER_ALGS][NUM_INT_ALGS] = {
-        /*              NULL                      SNOW                          AES */
-        /* NULL */{create_copy_desc,        create_cipher_only_desc,       create_cipher_only_desc          },
-        /* SNOW */{create_auth_only_desc,   create_c_plane_hw_acc_desc,    create_mixed_desc                },
-        /* AES  */{create_auth_only_desc,   create_mixed_desc,             create_c_plane_hw_acc_desc       },
+        /*              NULL                                SNOW                                    AES */
+        /* NULL */{create_null_desc,                create_c_plane_cipher_only_desc,    create_c_plane_cipher_only_desc },
+        /* SNOW */{create_c_plane_auth_only_desc,   create_c_plane_hw_acc_desc,         create_c_plane_mixed_desc       },
+        /* AES  */{create_c_plane_auth_only_desc,   create_c_plane_mixed_desc,          create_c_plane_hw_acc_desc      },
 };
 
+/** Static array for selection of the function to be used for creating the shared descriptor on a SEC context,
+ * depending on the algorithm selected by the user. This array is used for PDCP User plane where only
+ * encryption is required.
+ */
 static create_desc_fp u_plane_create_desc[NUM_CIPHER_ALGS] ={
         /*      NULL                   SNOW                     AES */
-        create_copy_desc,   create_u_plane_hw_acc_desc,   create_u_plane_hw_acc_desc
+        create_null_desc,   create_u_plane_hw_acc_desc,   create_u_plane_hw_acc_desc
 };
 
 #endif // SEC_HW_VERSION_3_1

@@ -212,6 +212,9 @@ static void get_free_packet(int packet_idx, sec_packet_t **in_packet, sec_packet
     // Initialize with valid info the input packet
     (*in_packet)->address = &(test_input_packets[packet_idx].buffer[0]);
     (*in_packet)->offset = TEST_PACKET_OFFSET;
+#ifdef SEC_HW_VERSION_3_1
+    (*in_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
+#endif // SEC_HW_VERSION_3_1
     (*in_packet)->length = TEST_PACKET_LENGTH;
     (*in_packet)->total_length = 0;
     (*in_packet)->num_fragments = 0;
@@ -219,6 +222,9 @@ static void get_free_packet(int packet_idx, sec_packet_t **in_packet, sec_packet
     // Initialize with valid info the output packet
     (*out_packet)->address = &(test_output_packets[packet_idx].buffer[0]);
     (*out_packet)->offset = TEST_PACKET_OFFSET;
+#ifdef SEC_HW_VERSION_3_1
+    (*out_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
+#endif
     (*out_packet)->length = TEST_PACKET_LENGTH;
     (*out_packet)->total_length = 0;
     (*out_packet)->num_fragments = 0;
@@ -232,18 +238,35 @@ static void send_packets(sec_context_handle_t ctx, int packet_no, int expected_r
     sec_packet_t *out_packet = NULL;
     int idx = 0;
 
+#ifdef SEC_HW_VERSION_3_1
     assert(packet_no < TEST_PACKETS_NUMBER);
+#endif
     assert(ctx != NULL);
 
     for (idx = 0; idx < packet_no; idx++)
     {
-        get_free_packet(idx, &in_packet, &out_packet);
+        get_free_packet(idx
+#ifdef SEC_HW_VERSION_4_4
+                %TEST_PACKETS_NUMBER
+#endif
+                , &in_packet, &out_packet);
         // Submit one packet on the context
         ret = sec_process_packet(ctx, in_packet, out_packet, (ua_context_handle_t)&ua_data[idx]);
+#ifdef SEC_HW_VERSION_4_4
+        if( ret != expected_ret_code)
+            break;
+#else
         assert_equal_with_message(ret, expected_ret_code,
                 "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
                 expected_ret_code, ret);
+#endif
     }
+
+#ifdef SEC_HW_VERSION_4_4
+    assert_equal_with_message(ret, expected_ret_code,
+                              "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                               expected_ret_code, ret);
+#endif
 }
 
 static void test_setup(void)
