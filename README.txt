@@ -1,22 +1,15 @@
 ----------------------------------------------------------------------------------------------------
 ABOUT THIS FILE
 ----------------------------------------------------------------------------------------------------
-Date:	09 September 2011
+Date:	12 October 2011
 
-This Readme file contains details on SEC user space driver package contents as well ass instructions
+This Readme file contains details on SEC user space driver package contents as well as instructions
 showing how to compile and install SEC user space driver related binaries:
 driver itself, unit-tests and system tests.
 ----------------------------------------------------------------------------------------------------
 SEC USER SPACE DRIVER PACKAGE DETAILS
 ----------------------------------------------------------------------------------------------------
 The package contains:
-	- Kernel components, in folder <kernel-drivers>:
-		-> Update for device tree specification (DTS)
-		-> Freescale Shared Memory Driver, fsl_shmem, which implements
-		   Freescale's custom memory management mechanism.
-		-> Patch for enabling fsl_shmem support
-		-> SEC kernel driver patch for UIO support
-
 	- User space components, in folder <us-drivers>:
 		* Utilitary libraries, in folder <utils>:
 			-> DMA memory library. Enables user-space usage for Freescale's custom memory management mechanism
@@ -66,9 +59,9 @@ The package contains:
 ----------------------------------------------------------------------------------------------------
 HOW TO INSTALL SEC USER SPACE DRIVER
 ----------------------------------------------------------------------------------------------------
-The instructions below assume you already have installed a P1010RDB Freescale SDK with ltib,
-linux kernel tree and u-boot. The folder where Freescale P1010RDB SDK is installed will be
-further reffered to as <p1010-sdk>.
+The instructions below assume you already have installed a PSC9131 RDB Freescale SDK with ltib,
+linux kernel tree and u-boot. The folder where Freescale PSC9131 RDB SDK is installed will be
+further reffered to as <psc9131-sdk>.
 
 * Extract SEC user space driver package in a directory <sec-us-driver-release>. Example:
 
@@ -84,36 +77,9 @@ further reffered to as <p1010-sdk>.
 ----------------------------------------------------------------------------------------------------
 CONFIGURE LINUX KERNEL
 ----------------------------------------------------------------------------------------------------
-* Sec user space driver requires that certain functionality is enabled in Linux kernel.
-
-	cd <p1010-sdk>/ltib
-	[ltib]$ ./ltib --preconfig p1010rdb_min
-	[ltib]$ ./ltib -c
-
-	-> Enable UIO package
-	-> Enable udev
-----------------------------------------------------------------------------------------------------
-HOW TO INSTALL SEC KERNEL DRIVER CHANGES
-----------------------------------------------------------------------------------------------------
-UIO support was added to SEC kernel driver.
-FSL-SHMEM kernel driver was added to implement external, custom and non-supported memory management
-mechanism required for using the SEC user space driver.
-
-* Install sources:
-
-	cd <sec-us-driver-release>/kernel-drivers
-	[kernel-drivers]$ cp patches/* <p1010-sdk>/linux-2.6
-	[kernel-drivers]$ cp dts/p1010.dts <p1010-sdk>/config/platform/SDK/dts
-	[kernel-drivers]$ cd <p1010-sdk>/linux-2.6/
-	[linux-2.6]$ patch -p1 < 0001-Latest-CAAM-driver-code-at-qoriq-dev-linux2.6.git-is.patch
-	[linux-2.6]$ patch -p1 < 0002-crypto-caam-Added-UIO-support-in-CAAM-driver.patch
-	[linux-2.6]$ patch -p1 < fsl_shmem.patch
-
-* Compile and deploy. Recompile only kernel, assuming you already have the SDK compiled with ltib:
-
-	[linux-2.6]$ cd <p1010-sdk>/ltib
-	[ltib]$ ./ltib -m scbuild -p kernel
-	[ltib]$ ./ltib --deploy
+* By default PSC 9131 Kernel has the required functionalities for PDCP SEC Driver enabled by default:
+	-> UIO package
+	-> udev
 
 ----------------------------------------------------------------------------------------------------
 HOW TO COMPILE AND DEPLOY SEC USER SPACE DRIVER
@@ -138,7 +104,7 @@ HOW TO COMPILE AND DEPLOY SEC USER SPACE DRIVER
 	A. To install the sources in the PPC rootfs from the HOST machine,
 	 go to folder <sec-us-driver-release>/us-drivers and run:
 
-	[us-drivers]$ make install DESTDIR=<p1010-sdk>/ltib/rootfs
+	[us-drivers]$ make install DESTDIR=<psc9131-sdk>/ltib/rootfs
 
 	where DESTDIR holds the path to the PPC root filesystem.
 
@@ -156,7 +122,7 @@ HOW TO COMPILE AND DEPLOY SEC USER SPACE DRIVER
 	The executables will be installed in folder <sec-us-driver-release>/us-drivers/test-install/usr/bin.
 	The libraries will be installed in folder <sec-us-driver-release>/us-drivers/test-install/usr/lib.
 
-	NOTE: To deploy the SEC driver binaries on the P1010RDB Linux target use scp or nfs.
+	NOTE: To deploy the SEC driver binaries on the PSC9131 RDB Linux target use scp or nfs.
 
 * Debug makefile
 
@@ -165,31 +131,31 @@ HOW TO COMPILE AND DEPLOY SEC USER SPACE DRIVER
 ----------------------------------------------------------------------------------------------------
 HOW TO RUN TESTS FOR SEC USER SPACE DRIVER
 ----------------------------------------------------------------------------------------------------
-* Deploy the modified binaries on P1010RDB board: uImage, p1010rdb.dtb, rootfs.ext2.gz.uboot.
+* Deploy the modified binaries on PSC9131 RDB board: uImage, psc9131rdb.dtb, rootfs.ext2.gz.uboot.
 
-* Add kernel boot param "mem=768M" when booting kernel.
+* Add kernel boot param "default_hugepagesz=64m hugepagesz=64m hugepages=2" when booting kernel.
 	This is required for using Freescale's custom memory management mechanism.
-	Example: setenv bootargs root=/dev/ram rw console=$consoledev,$baudrate $othbootargs mem=768M;
+	Example: setenv bootargs root=/dev/ram rw console=$consoledev,$baudrate $othbootargs default_hugepagesz=64m hugepagesz=64m hugepages=2;
 
-* Copy system tests from install folder to P1010RDB Linux. More options are available:
+* Copy system tests from install folder to PSC9131RDB Linux. More options are available:
 	A. Copy the binaries with scp or nfs.
-	In this case, run tests using current path where binaries were installed on P1010RDB.
-	B. Install binaries in ltib's rootfs directory and redeploy rootfs on P1010RDB board.
+	In this case, run tests using current path where binaries were installed on PSC9131RDB.
+	B. Install binaries in ltib's rootfs directory and redeploy rootfs on PSC9131RDB board.
 	In this case, run tests using test name.
 
 * Run unit tests:
-	[p1010rdb]./test_api
-	[p1010rdb]./test_contexts_pool
-	[p1010rdb]./test_dma_mem
-	[p1010rdb]./test_lists
-	[p1010rdb]./test_uio_notify
+	[psc9131rdb]./test_api
+	[psc9131rdb]./test_contexts_pool
+	[psc9131rdb]./test_dma_mem
+	[psc9131rdb]./test_lists
+	[psc9131rdb]./test_uio_notify
 
 * Run system tests:
-	[p1010rdb]./test_sec_driver
+	[psc9131rdb]./test_sec_driver
 
 * Run benchmarking tests:
-	[p1010rdb]./test_sec_driver_benchmark
-	[p1010rdb]./test_sec_driver_benchmark_single_th
+	[psc9131rdb]./test_sec_driver_benchmark
+	[psc9131rdb]./test_sec_driver_benchmark_single_th
 
 
 
