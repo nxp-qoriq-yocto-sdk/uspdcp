@@ -143,6 +143,13 @@ HOW TO RUN TESTS FOR SEC USER SPACE DRIVER
 	B. Install binaries in ltib's rootfs directory and redeploy rootfs on PSC9131RDB board.
 	In this case, run tests using test name.
 
+* Before running the tests, one must modify the following kernel parameters:
+	- shmmax : used to define the maximum size (in bytes) for a shared memory segment
+	- shmall : total amount of shared memory (in pages) that can be used at one time on the system
+  The following commands must be issued:
+	[psc9131rdb] echo 268435456 > /proc/sys/kernel/shmmax
+	[psc9131rdb] echo 4194304 > /proc/sys/kernel/shmall
+
 * Run unit tests:
 	[psc9131rdb]./test_api
 	[psc9131rdb]./test_contexts_pool
