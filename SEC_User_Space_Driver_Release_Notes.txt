@@ -1,7 +1,7 @@
 ----------------------------------------------------------------------------------------------------
 ABOUT THIS FILE
 ----------------------------------------------------------------------------------------------------
-Date:	12 October 2011
+Date:	13 October 2011
 SEC User Space Driver version:	2.1
 
 This file contains SEC User Space Driver-related information about versioning, hardware, software,
@@ -14,7 +14,7 @@ Hardware:
 
 Software:
 	- Freescale PSC9131 SDK
-	- Linux kernel 2.6.33
+	- Linux kernel 2.6.33.9 + PREEMPT_RT release 31 (patch from Linux community) + Freescale patches
 
 Tools:
 	- GNU toolchain for Freescale PSC9131 hardware platform: gcc-4.5.55-eglibc-2.11.55
@@ -23,7 +23,7 @@ Tools:
 SEC USER SPACE DRIVER - LIMITATIONS
 ----------------------------------------------------------------------------------------------------
 
-1. 36 bit physical address support is not tested. Standard P1010RDB has only
+1. 36 bit physical address support is not tested. Standard PSC9131 has only
 1GB DDR.
 
 ----------------------------------------------------------------------------------------------------
@@ -39,9 +39,10 @@ Version 2.1
 	- First release of SEC User Space driver on PSC9131 RDB.
 	- Implements PDPC User Plane and control plane with following algorithms: SNOW, AES and NULL.
 	- Scatter Gather support
-	- Interrupt and Poll mode can be used for retrieving packets
+	- Allows verious methods for retrieving processed packets: polling, interrupts and NAPI.
 	- Synchronized ids used for PDCP crypto/integrity algorithms, from enum sec_crypto_alg_t,
 	  with those specified in 3GPP 33.401
+	- Requires an external memory management mechanism.
 
 Version 2.0:
 	- First release of SEC User Space driver on P1010 RDB.

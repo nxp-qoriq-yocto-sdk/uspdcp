@@ -150,6 +150,10 @@ HOW TO RUN TESTS FOR SEC USER SPACE DRIVER
 	[psc9131rdb] echo 268435456 > /proc/sys/kernel/shmmax
 	[psc9131rdb] echo 4194304 > /proc/sys/kernel/shmall
 
+*  Before running the tests, one must init Freescale Linux Heterogeneous manager driver. This is needed
+   for enabling the external memory management. The following command must be issued:
+	[psc9131rdb] create_dev.sh
+
 * Run unit tests:
 	[psc9131rdb]./test_api
 	[psc9131rdb]./test_contexts_pool
