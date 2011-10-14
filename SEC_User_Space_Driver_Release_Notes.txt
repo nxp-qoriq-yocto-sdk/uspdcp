@@ -1,7 +1,7 @@
 ----------------------------------------------------------------------------------------------------
 ABOUT THIS FILE
 ----------------------------------------------------------------------------------------------------
-Date:	13 October 2011
+Date:	14 October 2011
 SEC User Space Driver version:	2.1
 
 This file contains SEC User Space Driver-related information about versioning, hardware, software,
@@ -13,7 +13,7 @@ Hardware:
 	- PSC9131RDB board
 
 Software:
-	- Freescale PSC9131 SDK
+	- Freescale WUSDK Release 0.4
 	- Linux kernel 2.6.33.9 + PREEMPT_RT release 31 (patch from Linux community) + Freescale patches
 
 Tools:
@@ -40,6 +40,7 @@ Version 2.1
 	- Implements PDPC User Plane and control plane with following algorithms: SNOW, AES and NULL.
 	- Scatter Gather support
 	- Allows verious methods for retrieving processed packets: polling, interrupts and NAPI.
+	- Added support for IRQ coalescing.
 	- Synchronized ids used for PDCP crypto/integrity algorithms, from enum sec_crypto_alg_t,
 	  with those specified in 3GPP 33.401
 	- Requires an external memory management mechanism.
