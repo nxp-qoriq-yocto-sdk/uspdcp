@@ -1,7 +1,7 @@
 ----------------------------------------------------------------------------------------------------
 ABOUT THIS FILE
 ----------------------------------------------------------------------------------------------------
-Date:	12 October 2011
+Date:	17 October 2011
 
 This Readme file contains details on SEC user space driver package contents as well as instructions
 showing how to compile and install SEC user space driver related binaries:

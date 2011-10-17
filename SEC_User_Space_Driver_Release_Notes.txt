@@ -1,7 +1,7 @@
 ----------------------------------------------------------------------------------------------------
 ABOUT THIS FILE
 ----------------------------------------------------------------------------------------------------
-Date:	14 October 2011
+Date:	17 October 2011
 SEC User Space Driver version:	2.1
 
 This file contains SEC User Space Driver-related information about versioning, hardware, software,

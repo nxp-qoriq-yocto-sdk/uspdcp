@@ -307,6 +307,8 @@ int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
     uint32_t len = 0;
     uint32_t channel_remap = 0;
     int my_map = 0;
+#else // SEC_HW_VERSION_3_1
+    struct device_node *child_node = NULL;
 #endif // SEC_HW_VERSION_3_1
 
 #if SEC_NOTIFICATION_TYPE == SEC_NOTIFICATION_TYPE_POLL
@@ -352,35 +354,42 @@ int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
         my_map = *prop;
 
         kernel_usr_channel_map = *prop;
-#endif // SEC_HW_VERSION_3_1
+#else // SEC_HW_VERSION_3_1
 
-#ifdef SEC_HW_VERSION_4_4
+    // Initialize of library
+    of_init();
+
     // Get device node for SEC 4.4
-	for_each_compatible_node(dpa_node, NULL, "fsl,p4080-sec4.0")
+    /* Because there is only one SEC available on the whole
+     * platform, if it's disabled then I can safely assume I can
+     * report an error (there is no other device)
+     */
+    dpa_node = of_find_compatible_node(NULL, NULL,"fsl,p4080-sec4.0" );
+    if( of_device_is_available(dpa_node) == false )
     {
-		struct device_node *child_node = NULL;
-		// If device is disabled from DTS, skip
-        if(of_device_is_available(dpa_node) == false)
+        SEC_ERROR("SEC is disabled. Please check the DTS");
+        return SEC_INVALID_INPUT_PARAM;
+    }
+
+    for_each_child_node(dpa_node, child_node)
+    {
+        if( of_device_is_compatible(child_node,"fsl,p4080-sec4.0-job-ring" ) == false)
         {
             continue;
         }
+        prop = of_get_property(child_node,"user-space-ring",NULL);
 
-        for_each_compatible_node(child_node, NULL, "fsl,p4080-sec4.0-job-ring")
+        if( prop == NULL )
         {
-            prop = of_get_property(child_node,"user-space-ring",NULL);
-
-            if( prop == NULL )
-            {
-                /* TODO: This code assumes that the JRs are added in order in DTS.
-                 * The same assumption is done in kernel driver, though it's not
-                 * correct
-                 */
-                kernel_usr_channel_map |= 1 << jr_idx;
-            }
-            jr_idx++;
+            /* TODO: This code assumes that the JRs are added in order in DTS.
+             * The same assumption is done in kernel driver, though it's not
+             * correct
+             */
+            kernel_usr_channel_map |= 1 << jr_idx;
         }
-
-#endif // SEC_HW_VERSION_4_4
+        jr_idx++;
+    }
+#endif // SEC_HW_VERSION_3_1
         /* Kept so that the code is similar between SEC 3.1 and
          * SEC 4.4 architectures
          */
@@ -433,15 +442,11 @@ int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
 
         }while(jr_idx < MAX_SEC_JOB_RINGS);
 #ifdef SEC_HW_VERSION_4_4
-#warning Due to a ahem, problem in of library, you can''t have nested \
-for_each_compatible_node calls. Till this is fixed, the break \
-will remain here.
-		break;
-#endif
+		of_finish();
+#else // SEC_HW_VERSION_4_4
     }
-#ifdef SEC_HW_VERSION_3_1
     SEC_DEBUG("Read from DTS <fsl,channel-kernel-user-space-map> = 0x%x", my_map);
-#endif
+#endif // SEC_HW_VERSION_4_4
     return SEC_SUCCESS;
 }
 

@@ -1256,19 +1256,20 @@ sec_return_code_t sec_init(const sec_config_t *sec_config_data,
 
 #ifdef SEC_HW_VERSION_4_4
     /* Now check if I've overrun the memory 'segment' allocated by the UA
-     * TODO: Add some tests for this*/
-
-    if( (dma_addr_t)g_dma_mem_free - (dma_addr_t)g_dma_mem_start >= DMA_MEM_SEC_DRIVER )
+     * TODO: Add some tests for this
+     */
+    if( ((dma_addr_t)g_dma_mem_free - (dma_addr_t)g_dma_mem_start) < DMA_MEM_SEC_DRIVER )
     {
-        SEC_ERROR("Overrun the memory allocated for SEC driver! (allocated: %lu KB, requested %u KB)",
-                    DMA_MEM_SEC_DRIVER/1024,
-                    ((dma_addr_t)g_dma_mem_free - (dma_addr_t)g_dma_mem_start)/1024);
+        SEC_INFO("Allocated %u KB for SEC driver, remaining free %lu KB",
+                ((dma_addr_t)g_dma_mem_free - (dma_addr_t)g_dma_mem_start)/1024,
+                (DMA_MEM_SEC_DRIVER - ((dma_addr_t)(dma_addr_t)g_dma_mem_free - (dma_addr_t)g_dma_mem_start))/1024);
     }
     else
     {
-        SEC_INFO("Allocated %u KB for SEC driver, remaining free %ul KB",
-                DMA_MEM_SEC_DRIVER/1024,
-                ((dma_addr_t)g_dma_mem_free - (dma_addr_t)g_dma_mem_start)/1024);
+        SEC_ERROR("Overrun the memory allocated for SEC driver! (requested: %lu KB, configured %u KB)",
+                  ((dma_addr_t)g_dma_mem_free - (dma_addr_t)g_dma_mem_start)/1024,
+                  DMA_MEM_SEC_DRIVER/1024);
+
     }
 #endif // SEC_HW_VERSION_4_4
     // Remember initial work mode

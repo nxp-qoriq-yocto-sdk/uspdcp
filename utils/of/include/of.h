@@ -43,27 +43,35 @@ extern "C"{
 /*==================================================================================================
                                          INCLUDE FILES
 ==================================================================================================*/
+#include <compat_of.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <limits.h>	/* PATH_MAX */
 #include <string.h>	/* strcmp(), strcasecmp() */
 
+#ifndef OF_INIT_DEFAULT_PATH
+#define OF_INIT_DEFAULT_PATH "/proc/device-tree"
+#endif
+
 /*==================================================================================================
                                        DEFINES AND MACROS
 ==================================================================================================*/
-
-#define of_prop_cmp	strcmp
-#define of_compat_cmp	strncasecmp
-
 
 #define likely(x)       __builtin_expect(!!(x), 1)
 #define unlikely(x)     __builtin_expect(!!(x), 0)
 #define __always_unused	__attribute__((unused))
 
 #define for_each_compatible_node(dev_node, type, compatible)			\
-    for (dev_node = of_find_compatible_node(NULL, type, compatible, 1);	\
-            dev_node != NULL;							\
-            dev_node = of_find_compatible_node(NULL, type, compatible, 0))
+    for (dev_node = of_find_compatible_node(NULL, type, compatible);	\
+            dev_node != NULL;							                \
+            dev_node = of_find_compatible_node(NULL, type, compatible))
+
+#define for_each_child_node(parent, child) \
+    for (child = of_get_next_child(parent, NULL); child != NULL; \
+            child = of_get_next_child(parent, child))
+
+//#define WARN_ON(cond,msg)   (cond) ? test_printf(msg) : 0
+#define WARN_ON(cond,msg)   (cond) ? printf(msg) : 0
 
 /*==================================================================================================
                                              ENUMS
@@ -73,11 +81,9 @@ extern "C"{
                                  STRUCTURES AND OTHER TYPEDEFS
 ==================================================================================================*/
 
-typedef int		phandle;
-
 struct device_node
 {
-    char	*name;
+    char	name[NAME_MAX];
     char	 full_name[PATH_MAX];
 
     uint8_t	 _property[64];
@@ -95,30 +101,48 @@ struct device_node
                                      FUNCTION PROTOTYPES
 ==================================================================================================*/
 
-struct device_node *of_get_parent(const struct device_node *dev_node);
+const struct device_node *of_find_compatible_node(
+                    const struct device_node *from,
+                    const char *type __always_unused,
+                    const char *compatible)
+    __attribute__((nonnull(3)));
 
-void *of_get_property(struct device_node *from, const char *name, size_t *lenp) __attribute__((nonnull(2)));
+const void *of_get_property(const struct device_node *from, const char *name,
+                size_t *lenp) __attribute__((nonnull(2)));
+bool of_device_is_available(const struct device_node *dev_node);
+
+const struct device_node *of_find_node_by_phandle(phandle ph);
+
+const struct device_node *of_get_parent(const struct device_node *dev_node);
+
+const struct device_node *of_get_next_child(const struct device_node *dev_node,
+                        const struct device_node *prev);
 
 uint32_t of_n_addr_cells(const struct device_node *dev_node);
 uint32_t of_n_size_cells(const struct device_node *dev_node);
 
-const uint32_t *of_get_address(struct device_node	*dev_node,
-        size_t			 index,
-        uint64_t			*size,
-        uint32_t			*flags);
+const uint32_t *of_get_address(const struct device_node *dev_node, size_t idx,
+                uint64_t *size, uint32_t *flags);
 
-uint64_t of_translate_address(struct device_node *dev_node, const uint32_t *addr)
-    __attribute__((nonnull));
+uint64_t of_translate_address(const struct device_node *dev_node,
+                const u32 *addr) __attribute__((nonnull));
 
-struct device_node *of_find_compatible_node(const struct device_node	*from,
-        const char			*type,
-        const char			*compatible,
-        uint8_t             reset) __attribute__((nonnull(3)));
+bool of_device_is_compatible(const struct device_node *dev_node,
+                const char *compatible);
 
+/* of_init() must be called prior to initialisation or use of any driver
+ * subsystem that is device-tree-dependent. Eg. Qman/Bman, config layers, etc.
+ * The path is should usually be "/proc/device-tree". */
+int of_init_path(const char *dt_path);
 
-struct device_node *of_find_node_by_phandle(phandle ph);
+/* Use of this wrapper is recommended. */
+static inline int of_init(void)
+{
+    return of_init_path(OF_INIT_DEFAULT_PATH);
+}
 
-bool of_device_is_available(struct device_node *dev_node);
-bool of_device_is_compatible(struct device_node *dev_node, const char *compatible);
+/* of_finish() allows a controlled tear-down of the device-tree layer, eg. if a
+ * full USDPAA reload is desired without a process exit. */
+void of_finish(void);
 
 #endif	/*  __OF_H */
