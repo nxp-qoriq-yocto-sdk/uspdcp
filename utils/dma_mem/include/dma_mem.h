@@ -60,12 +60,25 @@ enum dma_data_direction {
 };
 
 #ifdef SEC_HW_VERSION_4_4
-typedef struct {
-        dma_addr_t phys_addr;
-        void    *vaddr;
-        uint32_t size;
-}range_t;
-#endif
+typedef struct shm_seg {
+        void *vaddr;
+        void *paddr;
+        u32 size;
+} shm_seg_t;
+
+typedef struct alloc_req {
+        void *paddr;
+        size_t size;
+} alloc_req_t;
+
+typedef struct memalign_req {
+        void *paddr;
+        unsigned long align;
+        size_t size;
+} memalign_req_t;
+
+#endif // SEC_HW_VERSION_4_4
+
 /* For an efficient conversion between user-space virtual address map(s) and bus
  * addresses required by hardware for DMA, we use a single contiguous mmap() on
  * the /dev/mem device, a pre-arranged physical base address (and

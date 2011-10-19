@@ -1266,7 +1266,7 @@ sec_return_code_t sec_init(const sec_config_t *sec_config_data,
     }
     else
     {
-        SEC_ERROR("Overrun the memory allocated for SEC driver! (requested: %lu KB, configured %u KB)",
+        SEC_ERROR("Overrun the memory allocated for SEC driver! (requested: %u KB, configured %lu KB)",
                   ((dma_addr_t)g_dma_mem_free - (dma_addr_t)g_dma_mem_start)/1024,
                   DMA_MEM_SEC_DRIVER/1024);
 

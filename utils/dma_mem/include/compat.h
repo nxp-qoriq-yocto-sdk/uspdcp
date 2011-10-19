@@ -306,10 +306,12 @@ typedef uint32_t	irqreturn_t; /* as per hwi.h */
 #define irq_set_affinity(x,y)	0
 
 #ifdef SEC_HW_VERSION_4_4
-/* V2P from Het Manager */
 
-#define IOCTL_HET_MGR_V2P               _IOR(HET_MGR_MAGIC, 2, range_t *)
-#define HET_MGR_MAGIC   'S'
+#define FSL_MM_MAGIC    'F'
+#define IOCTL_FSL_SHM_INIT      _IOWR(FSL_MM_MAGIC, 1, shm_seg_t *)
+#define IOCTL_FSL_SHM_ALLOC     _IOWR(FSL_MM_MAGIC, 2, alloc_req_t *)
+#define IOCTL_FSL_SHM_MEMALIGN  _IOWR(FSL_MM_MAGIC, 3, memalign_req_t *)
+#define IOCTL_FSL_SHM_FREE      _IOR(FSL_MM_MAGIC, 4, void *)
 
 #endif // SEC_HW_VERSION_4_4
 

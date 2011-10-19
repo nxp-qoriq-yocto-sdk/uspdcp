@@ -65,8 +65,9 @@ extern "C" {
  *   memory area (DMA_MEM_SIZE) remember to update the TLB kernel hack also!!!
  *   Update function update_mmu_cache() from file arch/powerpc/mm/mem.c accordingly.
  */
-#ifdef SEC_HW_VERSION_3_1
+
 #define DMA_MEM_PATH	"/dev/fsl-shmem"
+#ifdef SEC_HW_VERSION_3_1
 #define DMA_MEM_PHYS	    0x30000000 /* 0.75G - The start address of the physical memory reserved
                                           for user space application.*/
 #define DMA_MEM_SIZE	    0x10000000 /* 256M - The size of the physical memory area reserved for
@@ -74,7 +75,6 @@ extern "C" {
 #define DMA_MEM_SEC_DRIVER	0x08000000 /* First 128M reserved for SEC driver internal memory.
                                           The rest of 128M are used for buffer allocation. */
 #else // SEC_HW_VERSION_3_1
-#define DMA_MEM_PATH        "/dev/het_mgr"
 #define DMA_MEM_PHYS        (__dma_phys)        /* For PSC 9131, this is retrieved at runtime.*/
 #define DMA_MEM_SIZE        (64UL*1024*1024)    /* 64M - The size of the physical memory area reserved for
                                                    user space application. */

@@ -128,7 +128,7 @@ int dma_mem_release(void)
 int dma_mem_setup(void)
 {
         int ret = -ENODEV;
-        range_t r;
+        shm_seg_t seg;
 
         test_printf("Trying to open %s\n",DMA_MEM_PATH);
 
@@ -148,27 +148,26 @@ int dma_mem_setup(void)
         }
 
         test_printf("HugeTLB shmid: 0x%x\n", shmid);
-        r.vaddr = shmat(shmid, 0, 0);
+        seg.vaddr = shmat(shmid, 0, 0);
 
-        if (r.vaddr == (char *)-1) {
+        if (seg.vaddr == (char *)-1) {
                 perror("Shared memory attach failure");
                 shmctl(shmid, IPC_RMID, NULL);
                 return -1;
         }
 
         test_printf("Clearing the memory");
-        memset(r.vaddr, 0, 4); //try with 4 bytes
+        memset(seg.vaddr, 0, 4); //try with 4 bytes
 
-        // Get phyisical address
-        ret = ioctl(fd, IOCTL_HET_MGR_V2P, &r);
+        seg.size = DMA_MEM_SIZE;
+        // Get physical address
+        ret = ioctl(fd, IOCTL_FSL_SHM_INIT, &seg);
         test_printf("Ret ioctl = %d\n",ret);
-        test_printf("V2P %x %x \n", (uint32_t)r.vaddr, r.phys_addr);
+        test_printf("V2P %x %x \n", (uint32_t)seg.vaddr, seg.paddr);
 
-
-        virt = r.vaddr;
+        virt = seg.vaddr;
         __dma_virt = (dma_addr_t)virt;
-
-        __dma_phys = (dma_addr_t)r.phys_addr;
+        __dma_phys = (dma_addr_t)seg.paddr;
 
         /* dma_mem is used for ad-hoc allocations. */
         ret = dma_mem_alloc_init(virt + DMA_MEM_SEC_DRIVER, DMA_MEM_SIZE - DMA_MEM_SEC_DRIVER);
