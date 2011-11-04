@@ -35,6 +35,15 @@ include ./Makefile.config
 # All "Makefile.am"s found beneath these directories are processed;
 DIRS := sec-driver utils
 
+# Test if required directories are set
+ifeq ($(BSP_RELEASE_DIR),)
+	$(error You must set BSP_RELEASE_DIR in Makefile.config)
+endif
+
+ifeq ($(shell if [ ! -d  $(BSP_RELEASE_DIR) ]; then echo $(BSP_RELEASE_DIR); fi), $(BSP_RELEASE_DIR))
+	$(error BSP directory $(BSP_RELEASE_DIR) does not exist)
+endif
+
 # ----=[ Arch specific definitions ]=----
 ifneq (distclean,$(MAKECMDGOALS))
  ifeq (powerpc,$(ARCH))
@@ -46,14 +55,14 @@ ifneq (distclean,$(MAKECMDGOALS))
    $(ARCH)_SPEC_LDFLAGS	:= -pthread
  else
    ifeq (i686, $(ARCH))
-     CROSS_COMPILE	:=
-     $(ARCH)_SPEC_DEFINE	:=
-     $(ARCH)_SPEC_INC_PATH:=
-     $(ARCH)_SPEC_LIB_PATH:=
-     $(ARCH)_SPEC_CFLAGS	:= -pthread -O2 -Wall -Wshadow
-     $(ARCH)_SPEC_LDFLAGS	:= -pthread
+	 CROSS_COMPILE	:=
+	 $(ARCH)_SPEC_DEFINE	:=
+	 $(ARCH)_SPEC_INC_PATH:=
+	 $(ARCH)_SPEC_LIB_PATH:=
+	 $(ARCH)_SPEC_CFLAGS	:= -pthread -O2 -Wall -Wshadow
+	 $(ARCH)_SPEC_LDFLAGS	:= -pthread
    else
-     $(error "ARCH not defined.")
+	 $(error "ARCH not defined.")
    endif
  endif
 endif
@@ -61,7 +70,7 @@ endif
 # ----[ Tools ]----
 MAKE		?= make
 INSTALL		?= install
-CC		:= $(CROSS_COMPILE)gcc -g
+CC		:= $(CROSS_COMPILE)gcc
 LD		:= $(CROSS_COMPILE)ld
 AR		:= $(CROSS_COMPILE)ar
 
@@ -142,23 +151,23 @@ define pre_process_target
   $(eval $(1)_pref := $(myprefix))
   $(eval $(1)_objs := $(foreach s,$(filter %.c,$($(1)_SOURCES)),$(myprefix)$(basename $(s)).o))
   ifneq (none,$(myinstall))
-    ifeq (,$(myinstall))
-      $(1)_install_to := $(5)
-    else
-      $(1)_install_to := $(myinstall)
-    endif
-    ifeq (,$(strip $(6)))
-      $(1)_install_from := $(strip $(2))
-    else
-      $(1)_install_from := $(strip $(6))
-    endif
-    ifeq (,$(myiflags))
-      $(1)_install_flags := $(7)
-    else
-      $(1)_install_flags := $(myiflags)
-    endif
-    $(eval $(1)_install_name := $(4))
-    $(eval TO_INSTALL += $(1))
+	ifeq (,$(myinstall))
+	  $(1)_install_to := $(5)
+	else
+	  $(1)_install_to := $(myinstall)
+	endif
+	ifeq (,$(strip $(6)))
+	  $(1)_install_from := $(strip $(2))
+	else
+	  $(1)_install_from := $(strip $(6))
+	endif
+	ifeq (,$(myiflags))
+	  $(1)_install_flags := $(7)
+	else
+	  $(1)_install_flags := $(myiflags)
+	endif
+	$(eval $(1)_install_name := $(4))
+	$(eval TO_INSTALL += $(1))
   endif
 endef
 
@@ -196,7 +205,7 @@ define process_makefile
   $(foreach B,$(bin_PROGRAMS),$(eval $(call process_bin,$(B),$(thisdir),$(cflags))))
   $(foreach L,$(lib_LIBRARIES),$(eval $(call process_lib,$(L),$(thisdir),$(cflags))))
   $(foreach x,$(dist_DATA),$(eval $(call pre_process_target,$(x),$(thisdir),\
-  	$(cflags),$(x),$(INSTALL_OTHER),,$(INSTALL_OTHER_FLAGS))))
+	$(cflags),$(x),$(INSTALL_OTHER),,$(INSTALL_OTHER_FLAGS))))
   BINS += $(bin_PROGRAMS)
   LIBS += $(lib_LIBRARIES)
   bin_PROGRAMS :=
@@ -254,6 +263,6 @@ distclean:
 	$(Q)find -name \*.o | xargs $(RM)
 	$(Q)find -name \*.d | xargs $(RM)
 
-# ----=[ Include auto-generated dependencies ]=---- 
+# ----=[ Include auto-generated dependencies ]=----
 -include $(foreach lib,$(LIBS),$(patsubst %.o,%.d,$($(lib)_objs)))
 -include $(foreach bin,$(BINS),$(patsubst %.o,%.d,$($(bin)_objs)))
