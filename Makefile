@@ -37,11 +37,11 @@ DIRS := sec-driver utils
 
 # Test if required directories are set
 ifeq ($(BSP_RELEASE_DIR),)
-	$(error You must set BSP_RELEASE_DIR in Makefile.config)
+    $(error You must set BSP_RELEASE_DIR in Makefile.config)
 endif
 
 ifeq ($(shell if [ ! -d  $(BSP_RELEASE_DIR) ]; then echo $(BSP_RELEASE_DIR); fi), $(BSP_RELEASE_DIR))
-	$(error BSP directory $(BSP_RELEASE_DIR) does not exist)
+    $(error BSP directory $(BSP_RELEASE_DIR) does not exist)
 endif
 
 # ----=[ Arch specific definitions ]=----
