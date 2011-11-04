@@ -30,11 +30,12 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 lib_LIBRARIES = dma_mem
-dist_DATA = create_dev.sh
 
-create_dev.sh_install := $(INSTALL_BIN)
-create_dev.sh_install_flags := $(INSTALL_BIN_FLAGS)
+AM_CFLAGS := -I$(TOP_LEVEL)/utils/dma_mem/include
+AM_CFLAGS += -I${BSP_RELEASE_DIR}/src/linux-2.6/drivers/misc
+AM_CFLAGS += -I${BSP_RELEASE_DIR}/src/ipc/ipc/include
+AM_CFLAGS += -I${BSP_RELEASE_DIR}/src/ipc/fsl_shm/lib
 
-AM_CFLAGS := -I$(TOP_LEVEL)/utils/dma_mem/include/
+dma_mem_SOURCES := src/setup.c src/allocator.c src/fsl_usmmgr.c src/lg_shm.c
 
-dma_mem_SOURCES := src/setup.c src/allocator.c
+dma_mem_LDADD := fsl_usmmgr lg_shm

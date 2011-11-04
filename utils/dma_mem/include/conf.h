@@ -76,12 +76,6 @@ extern "C" {
                                           The rest of 128M are used for buffer allocation. */
 #else // SEC_HW_VERSION_3_1
 #define DMA_MEM_PHYS        (__dma_phys)        /* For PSC 9131, this is retrieved at runtime.*/
-#define DMA_MEM_SIZE        (64UL*1024*1024)    /* 64M - The size of the physical memory area reserved for
-                                                   user space application. */
-#define DMA_MEM_SEC_DRIVER  (1UL*1024*1024)   /* First MB reserved for SEC driver internal memory.
-                                                 The rest are used for buffer allocation. */
-
-#define DMA_MEM_KEY         0x2                 /* Key for shmget */
 
 #endif // SEC_HW_VERSION_3_1
 /* support for BUG_ON()s, might_sleep()s, etc */

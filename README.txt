@@ -1,7 +1,7 @@
 ----------------------------------------------------------------------------------------------------
 ABOUT THIS FILE
 ----------------------------------------------------------------------------------------------------
-Date:	17 October 2011
+Date:	01 November 2011
 
 This Readme file contains details on SEC user space driver package contents as well as instructions
 showing how to compile and install SEC user space driver related binaries:
@@ -73,6 +73,8 @@ further reffered to as <psc9131-sdk>.
 	-> PowerPC Cross compiler path. The SEC driver was tested with gcc-4.5.55-eglibc-2.11.55,
 	  which is the GNU toolchain installed by default with ltib for Freescale SDK 1.0.
 
+	-> WUSDK BSP release path. This depends on the location of the release.
+
 	-> SEC device version. Configured for SEC 4.4 now.
 ----------------------------------------------------------------------------------------------------
 CONFIGURE LINUX KERNEL
@@ -133,10 +135,6 @@ HOW TO RUN TESTS FOR SEC USER SPACE DRIVER
 ----------------------------------------------------------------------------------------------------
 * Deploy the modified binaries on PSC9131 RDB board: uImage, psc9131rdb.dtb, rootfs.ext2.gz.uboot.
 
-* Add kernel boot param "default_hugepagesz=64m hugepagesz=64m hugepages=2" when booting kernel.
-	This is required for using Freescale's custom memory management mechanism.
-	Example: setenv bootargs root=/dev/ram rw console=$consoledev,$baudrate $othbootargs default_hugepagesz=64m hugepagesz=64m hugepages=2;
-
 * Copy system tests from install folder to PSC9131RDB Linux. More options are available:
 	A. Copy the binaries with scp or nfs.
 	In this case, run tests using current path where binaries were installed on PSC9131RDB.
@@ -147,26 +145,22 @@ HOW TO RUN TESTS FOR SEC USER SPACE DRIVER
 	- shmmax : used to define the maximum size (in bytes) for a shared memory segment
 	- shmall : total amount of shared memory (in pages) that can be used at one time on the system
   The following commands must be issued:
-	[psc9131rdb] echo 268435456 > /proc/sys/kernel/shmmax
-	[psc9131rdb] echo 4194304 > /proc/sys/kernel/shmall
-
-*  Before running the tests, one must init Freescale Linux Heterogeneous manager driver. This is needed
-   for enabling the external memory management. The following command must be issued:
-	[psc9131rdb] create_dev.sh
+	[psc9131rdb]~ echo 268435456 > /proc/sys/kernel/shmmax
+	[psc9131rdb]~ echo 4194304 > /proc/sys/kernel/shmall
 
 * Run unit tests:
-	[psc9131rdb]./test_api
-	[psc9131rdb]./test_contexts_pool
-	[psc9131rdb]./test_dma_mem
-	[psc9131rdb]./test_lists
-	[psc9131rdb]./test_uio_notify
+	[psc9131rdb]~ ./test_api
+	[psc9131rdb]~ ./test_contexts_pool
+	[psc9131rdb]~ ./test_dma_mem
+	[psc9131rdb]~ ./test_lists
+	[psc9131rdb]~ ./test_uio_notify
 
 * Run system tests:
-	[psc9131rdb]./test_sec_driver
+	[psc9131rdb]~ ./test_sec_driver
 
 * Run benchmarking tests:
-	[psc9131rdb]./test_sec_driver_benchmark
-	[psc9131rdb]./test_sec_driver_benchmark_single_th
+	[psc9131rdb]~ ./test_sec_driver_benchmark
+	[psc9131rdb]~ ./test_sec_driver_benchmark_single_th
 
 
 

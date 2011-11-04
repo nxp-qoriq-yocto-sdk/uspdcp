@@ -68,6 +68,10 @@ extern "C" {
 // Maximum number of IRQs to be generated in a test
 #define MAX_IRQ     50
 
+#ifdef SEC_HW_VERSION_4_4
+/** Size in bytes of a cacheline. */
+#define CACHE_LINE_SIZE  32
+#endif
 /*==================================================================================================
                                       LOCAL VARIABLES
 ==================================================================================================*/
@@ -99,15 +103,16 @@ static void test_setup(void)
 {
     int ret = 0;
 
-    sec_config_data.memory_area = malloc (SEC_DMA_MEMORY_SIZE);
-    assert(sec_config_data.memory_area != NULL);
-
     // map the physical memory
+#ifdef SEC_HW_VERSION_4_4
+    ret = dma_mem_setup(SEC_DMA_MEMORY_SIZE, CACHE_LINE_SIZE);
+#else
     ret = dma_mem_setup();
+#endif
     assert_equal_with_message(ret, 0, "ERROR on dma_mem_setup: ret = %d", ret);
 
     // Fill SEC driver configuration data
-    sec_config_data.memory_area = (void*)__dma_virt;
+    sec_config_data.memory_area = (void *)__dma_virt;
     sec_config_data.work_mode = SEC_STARTUP_POLLING_MODE;
 
     // Init sec driver
@@ -118,7 +123,7 @@ static void test_setup(void)
 static void test_teardown()
 {
     int ret = 0;
-    
+
     // release sec driver
     ret = sec_release();
 	assert_equal_with_message(ret, SEC_SUCCESS, "ERROR on sec_release: ret = %d", ret);
@@ -163,16 +168,16 @@ static void test_one_jr_generate_all_irq_read_all_irq(void)
         assert_equal_with_message(ret, 4, "Error on writing IRQ control word in UIO device file");
     }
     assert_equal_with_message(counter, MAX_IRQ, "Error generating all %d IRQs", MAX_IRQ);
-    
+
     // Read number of IRQs generated so far for this job ring
-    ret = read(job_ring_descriptors[job_ring_id].job_ring_irq_fd, 
+    ret = read(job_ring_descriptors[job_ring_id].job_ring_irq_fd,
                &irq_count,
                4); // size of irq counter = sizeof(int)
     assert_equal_with_message(ret, 4, "Error on reading IRQ counter word from UIO device file");
-    assert_equal_with_message(irq_count - old_irq_count, 
+    assert_equal_with_message(irq_count - old_irq_count,
                               MAX_IRQ, "Error. Number of received IRQs(%d) does not match number "
-                              "of generated IRQs(%d)", 
-                              irq_count - old_irq_count, 
+                              "of generated IRQs(%d)",
+                              irq_count - old_irq_count,
                               MAX_IRQ);
     test_teardown();
 }
@@ -213,7 +218,7 @@ static void test_one_jr_alternate_irq_gen_irq_read(void)
         }
         else
         {
-            assert_equal_with_message(irq_count - old_irq_count, 
+            assert_equal_with_message(irq_count - old_irq_count,
                                       1,
                                       "Error: number of not handled IRQs should be 1");
             new_irq_count++;

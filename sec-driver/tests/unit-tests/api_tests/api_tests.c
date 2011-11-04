@@ -76,8 +76,10 @@ extern "C" {
 // Max length in bytes for a confidentiality /integrity key.
 #define MAX_KEY_LENGTH    32
 
+#ifdef SEC_HW_VERSION_4_4
 /** Size in bytes of a cacheline. */
 #define CACHE_LINE_SIZE  32
+#endif
 
 // Sizeof sec_context_t struct as defined in driver.
 // @note this has to be defined to have exactly the value of sizeof(struct sec_context_t)!
@@ -274,7 +276,11 @@ static void test_setup(void)
     int ret = 0;
 
     // map the physical memory
+#ifdef SEC_HW_VERSION_4_4
+    ret = dma_mem_setup(SEC_DMA_MEMORY_SIZE, CACHE_LINE_SIZE);
+#else
     ret = dma_mem_setup();
+#endif
     assert_equal_with_message(ret, 0, "ERROR on dma_mem_setup: ret = %d", ret);
 
     // Fill SEC driver configuration data
@@ -327,9 +333,9 @@ static void test_teardown()
 {
     int ret = 0;
 
-	// unmap the physical memory
-	ret = dma_mem_release();
-	assert_equal_with_message(ret, 0, "ERROR on dma_mem_release: ret = %d", ret);
+    // unmap the physical memory
+    ret = dma_mem_release();
+    assert_equal_with_message(ret, 0, "ERROR on dma_mem_release: ret = %d", ret);
 
     dma_mem_free(cipher_key, MAX_KEY_LENGTH);
     dma_mem_free(integrity_key, MAX_KEY_LENGTH);

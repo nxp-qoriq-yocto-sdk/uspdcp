@@ -112,6 +112,11 @@ extern "C" {
 // Read ATBL(Alternate Time Base Lower) Register
 #define GET_ATBL() \
     mfspr(SPR_ATBL)
+
+#ifdef SEC_HW_VERSION_4_4
+/** Size in bytes of a cacheline. */
+#define CACHE_LINE_SIZE  32
+#endif //SEC_HW_VERSION_4_4
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
 ==================================================================================================*/
@@ -1786,13 +1791,18 @@ static int setup_sec_environment(void)
     memset (pdcp_ul_contexts, 0, sizeof(pdcp_context_t) * PDCP_CONTEXT_NUMBER);
 
     // map the physical memory
+#ifdef SEC_HW_VERSION_4_4
+    ret_code = dma_mem_setup(SEC_DMA_MEMORY_SIZE, CACHE_LINE_SIZE);
+#else
     ret_code = dma_mem_setup();
+#endif // SEC_HW_VERSION_4_4
     if (ret_code != 0)
     {
         test_printf("dma_mem_setup failed with ret_code = %d\n", ret_code);
         return 1;
     }
-	test_printf("dma_mem_setup: mapped virtual mem 0x%x to physical mem 0x%x\n", __dma_virt, DMA_MEM_PHYS);
+
+    test_printf("dma_mem_setup: mapped virtual mem 0x%x to physical mem 0x%x\n", __dma_virt, DMA_MEM_PHYS);
 
     for (i = 0; i < PDCP_CONTEXT_NUMBER; i++)
     {
@@ -1815,12 +1825,12 @@ static int setup_sec_environment(void)
         assert (pdcp_dl_contexts[i].output_buffers != NULL);
         assert (pdcp_dl_contexts[i].pdcp_ctx_cfg_data.cipher_key != NULL);
         assert (pdcp_dl_contexts[i].pdcp_ctx_cfg_data.integrity_key != NULL);
-
+#ifdef SEC_HW_VERSION_3_1
         assert((dma_addr_t)pdcp_dl_contexts[i].input_buffers >= DMA_MEM_SEC_DRIVER);
         assert((dma_addr_t)pdcp_dl_contexts[i].output_buffers >= DMA_MEM_SEC_DRIVER);
         assert((dma_addr_t)pdcp_dl_contexts[i].pdcp_ctx_cfg_data.cipher_key >= DMA_MEM_SEC_DRIVER);
         assert((dma_addr_t)pdcp_dl_contexts[i].pdcp_ctx_cfg_data.integrity_key >= DMA_MEM_SEC_DRIVER);
-
+#endif // SEC_HW_VERSION_3_1
         memset(pdcp_dl_contexts[i].input_buffers, 0, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_DL);
         memset(pdcp_dl_contexts[i].output_buffers, 0, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_DL);
 
@@ -1843,12 +1853,12 @@ static int setup_sec_environment(void)
         assert (pdcp_ul_contexts[i].output_buffers != NULL);
         assert (pdcp_ul_contexts[i].pdcp_ctx_cfg_data.cipher_key != NULL);
         assert (pdcp_ul_contexts[i].pdcp_ctx_cfg_data.integrity_key != NULL);
-
+#ifdef SEC_HW_VERSION_3_1
         assert((dma_addr_t)pdcp_ul_contexts[i].input_buffers >= DMA_MEM_SEC_DRIVER);
         assert((dma_addr_t)pdcp_ul_contexts[i].output_buffers >= DMA_MEM_SEC_DRIVER);
         assert((dma_addr_t)pdcp_ul_contexts[i].pdcp_ctx_cfg_data.cipher_key >= DMA_MEM_SEC_DRIVER);
         assert((dma_addr_t)pdcp_ul_contexts[i].pdcp_ctx_cfg_data.integrity_key >= DMA_MEM_SEC_DRIVER);
-
+#endif // SEC_HW_VERSION_3_1
 
         memset(pdcp_ul_contexts[i].input_buffers, 0, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_UL);
         memset(pdcp_ul_contexts[i].output_buffers, 0, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_UL);

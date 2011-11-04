@@ -63,7 +63,6 @@
  * required by interfaces shared with linux drivers (ie. for "single-source"
  * purposes).
  */
-
 /* Tracing - #define WANT_MARKPOINTS before including this file */
 #ifdef WANT_MARKPOINTS
 static inline void markpoint(const uint32_t markid) {
@@ -103,7 +102,7 @@ typedef int		phandle;
 #define module_init(fn) int m_##fn(void) { return fn(); }
 #define module_exit(fn) void m_##fn(void) { fn(); }
 #define GFP_KERNEL	0
-#define __KERNEL__
+//#define __KERNEL__
 #define __init
 #define lower_32_bits(x) ((u32)(x))
 #define upper_32_bits(x) ((u32)(((x) >> 16) >> 16))

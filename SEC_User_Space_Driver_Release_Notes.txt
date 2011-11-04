@@ -1,8 +1,8 @@
 ----------------------------------------------------------------------------------------------------
 ABOUT THIS FILE
 ----------------------------------------------------------------------------------------------------
-Date:	19 October 2011
-SEC User Space Driver version:	2.1
+Date:	01 November 2011
+SEC User Space Driver version:	2.2
 
 This file contains SEC User Space Driver-related information about versioning, hardware, software,
 and tools dependencies, as well as known issues and a history of changes.
@@ -13,7 +13,7 @@ Hardware:
 	- PSC9131RDB board
 
 Software:
-	- Freescale WUSDK Release 0.4
+	- Freescale WUSDK Release 0.5
 	- Linux kernel 2.6.33.9 + PREEMPT_RT release 31 (patch from Linux community) + Freescale patches
 
 Tools:
@@ -35,6 +35,9 @@ SEC USER SPACE DRIVER - ERRATA
 ----------------------------------------------------------------------------------------------------
 SEC USER SPACE DRIVER - CHANGELOG
 ----------------------------------------------------------------------------------------------------
+Version 2.2
+	- Updated memory management mechanism to take advantage of User space memory
+	  manager (USMMGR) feature from WUSDK Release 0.5
 Version 2.1
 	- First release of SEC User Space driver on PSC9131 RDB.
 	- Implements PDPC User Plane and control plane with following algorithms: SNOW, AES and NULL.
