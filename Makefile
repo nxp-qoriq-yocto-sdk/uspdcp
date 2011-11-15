@@ -36,12 +36,20 @@ include ./Makefile.config
 DIRS := sec-driver utils
 
 # Test if required directories are set
-ifeq ($(BSP_RELEASE_DIR),)
-    $(error You must set BSP_RELEASE_DIR in Makefile.config)
+ifeq ($(KERNEL_DIR),)
+	$(error You must set KERNEL_DIR in Makefile.config)
 endif
 
-ifeq ($(shell if [ ! -d  $(BSP_RELEASE_DIR) ]; then echo $(BSP_RELEASE_DIR); fi), $(BSP_RELEASE_DIR))
-    $(error BSP directory $(BSP_RELEASE_DIR) does not exist)
+ifeq ($(shell if [ ! -d  $(KERNEL_DIR) ]; then echo $(KERNEL_DIR); fi), $(KERNEL_DIR))
+	$(error Kernel directory $(KERNEL_DIR) does not exist)
+endif
+
+ifeq ($(IPC_DIR),)
+	$(error You must set IPC_DIR in Makefile.config)
+endif
+
+ifeq ($(shell if [ ! -d  $(IPC_DIR) ]; then echo $(IPC_DIR); fi), $(IPC_DIR))
+	$(error IPC directory $(IPC_DIR) does not exist)
 endif
 
 # ----=[ Arch specific definitions ]=----
