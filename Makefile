@@ -37,19 +37,19 @@ DIRS := sec-driver utils
 
 # Test if required directories are set
 ifeq ($(KERNEL_DIR),)
-	$(error You must set KERNEL_DIR in Makefile.config)
+    $(error You must set KERNEL_DIR in Makefile.config)
 endif
 
 ifeq ($(shell if [ ! -d  $(KERNEL_DIR) ]; then echo $(KERNEL_DIR); fi), $(KERNEL_DIR))
-	$(error Kernel directory $(KERNEL_DIR) does not exist)
+    $(error Kernel directory $(KERNEL_DIR) does not exist)
 endif
 
 ifeq ($(IPC_DIR),)
-	$(error You must set IPC_DIR in Makefile.config)
+    $(error You must set IPC_DIR in Makefile.config)
 endif
 
 ifeq ($(shell if [ ! -d  $(IPC_DIR) ]; then echo $(IPC_DIR); fi), $(IPC_DIR))
-	$(error IPC directory $(IPC_DIR) does not exist)
+    $(error IPC directory $(IPC_DIR) does not exist)
 endif
 
 # ----=[ Arch specific definitions ]=----
