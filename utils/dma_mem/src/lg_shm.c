@@ -27,8 +27,10 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <sys/shm.h>
+#include <sys/ioctl.h>
 #include<linux/fs.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "lg_shm.h"
 
@@ -129,16 +131,14 @@ void shm_free(void *ptr)
 }
 
 /*
- * shm_init - Initializses Application for using Shared Memory Allocator.
+ * fsl_shm_init - Initializses Application for using Shared Memory Allocator.
  * dsp_shared_size[in] - dsp shared area size.
  * Returns - On sucess, virtual address of shared memory.
  *           On failure, NULL.
  */
-void *shm_init(size_t dsp_shared_size)
+void *fsl_shm_init(size_t dsp_shared_size)
 {
 	int shmid;
-	unsigned long i;
-	char *shmaddr;
 
 	fd = open(DEV_FILE, O_RDONLY);
 	if (fd < 0) {

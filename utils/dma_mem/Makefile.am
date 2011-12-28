@@ -34,6 +34,7 @@ lib_LIBRARIES = dma_mem
 AM_CFLAGS := -I$(TOP_LEVEL)/utils/dma_mem/include
 AM_CFLAGS += -I${KERNEL_DIR}/drivers/misc
 AM_CFLAGS += -I${IPC_DIR}/ipc/include
+AM_CFLAGS += -I${IPC_DIR}/fsl_shm/include
 AM_CFLAGS += -I${IPC_DIR}/fsl_shm/lib
 
 dma_mem_SOURCES := src/setup.c src/allocator.c src/fsl_usmmgr.c src/lg_shm.c

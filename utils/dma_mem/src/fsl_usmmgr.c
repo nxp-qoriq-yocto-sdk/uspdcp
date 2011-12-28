@@ -37,6 +37,7 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/shm.h>
+#include <sys/ioctl.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
@@ -45,7 +46,7 @@
 #include "fsl_types.h"
 #include "fsl_het_mgr.h"
 #include "fsl_usmmgr.h"
-#include "fsl_shm.h"
+#include "fsl_ipc_shm.h"
 #include "logdefs.h"
 #include "fsl_ipc_errorcodes.h"
 #include "psc913x_heterogeneous.h"
@@ -116,54 +117,6 @@ void fsl_usmmgr_free(range_t *r, fsl_usmmgr_t usmmgr)
 	shm_free(r->vaddr);
 }
 
-fsl_usmmgr_t fsl_usmmgr_init(void)
-{
-	int ret;
-	void *ptr_ret;
-	ENTER();
-
-	ret = ERR_SUCCESS;
-	usmmgr_priv *priv = malloc(sizeof(usmmgr_priv));
-
-	if (!priv)
-		goto end;
-
-	priv->mapidx = 0;
-	priv->dev_het_mgr = 0;
-	priv->dev_mem = 0;
-
-	memset(&priv->shared_area, 0, sizeof(range_t));
-	memset(&priv->dsp_ccsr, 0, sizeof(range_t));
-	memset(&priv->pa_ccsr, 0, sizeof(range_t));
-	memset(priv->map, 0, MAX_MAP_NUM*sizeof(range_t));
-	memset(&priv->het_sys_map, 0, sizeof(sys_map_t));
-
-	ptr_ret = shm_init(0);
-	if (!ptr_ret)
-		goto end;
-
-	ret = init_het_mgr(priv);
-	if (ret)
-		goto end;
-
-	ret = init_dev_mem(priv);
-	if (ret)
-		goto end;
-
-	ret = map_shared_mem(priv);
-	if (ret)
-		goto end;
-end:
-	if (ret) {
-		cleanup(priv);
-		free(priv);
-		priv = NULL;
-	}
-
-	EXIT(ret);
-	return priv;
-}
-
 void cleanup(usmmgr_priv *priv)
 {
 	if (priv->dev_het_mgr != -1)
@@ -204,7 +157,6 @@ int map_shared_mem(usmmgr_priv *priv)
 {
 	int ret = ERR_SUCCESS;
 	void *vaddr;
-	range_t r;
 
 	ENTER();
 	/* open /dev/mem
@@ -245,6 +197,54 @@ int map_shared_mem(usmmgr_priv *priv)
 end:
 	EXIT(ret);
 	return ret;
+}
+
+fsl_usmmgr_t fsl_usmmgr_init(void)
+{
+	int ret;
+	void *ptr_ret;
+	ENTER();
+
+	ret = ERR_SUCCESS;
+	usmmgr_priv *priv = malloc(sizeof(usmmgr_priv));
+
+	if (!priv)
+		goto end;
+
+	priv->mapidx = 0;
+	priv->dev_het_mgr = 0;
+	priv->dev_mem = 0;
+
+	memset(&priv->shared_area, 0, sizeof(range_t));
+	memset(&priv->dsp_ccsr, 0, sizeof(range_t));
+	memset(&priv->pa_ccsr, 0, sizeof(range_t));
+	memset(priv->map, 0, MAX_MAP_NUM*sizeof(range_t));
+	memset(&priv->het_sys_map, 0, sizeof(sys_map_t));
+
+	ptr_ret = fsl_shm_init(0);
+	if (!ptr_ret)
+		goto end;
+
+	ret = init_het_mgr(priv);
+	if (ret)
+		goto end;
+
+	ret = init_dev_mem(priv);
+	if (ret)
+		goto end;
+
+	ret = map_shared_mem(priv);
+	if (ret)
+		goto end;
+end:
+	if (ret) {
+		cleanup(priv);
+		free(priv);
+		priv = NULL;
+	}
+
+	EXIT(ret);
+	return priv;
 }
 
 int get_shared_ctrl_area(range_t *r, fsl_usmmgr_t usmmgr)
@@ -344,7 +344,7 @@ phys_addr_t fsl_usmmgr_v2p(void *vaddr, fsl_usmmgr_t usmmgr)
 
 void *fsl_usmmgr_p2v(phys_addr_t phys_addr, fsl_usmmgr_t usmmgr)
 {
-	int i, j;
+	int i;
 	void *vaddr = NULL;
 	ENTER();
 
