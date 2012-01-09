@@ -75,7 +75,7 @@
 
 // Test control plane PDCP with NULL-crypto(EEA0)
 // and NULL-authentication(EIA0) algorithms set
-#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_NULL_ALGO
+//#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_NULL_ALGO
 
 // Test PDCP control plane encapsulation with SNOW F8 ciphering
 // and SNOW F9 authentication
@@ -107,12 +107,29 @@
 // and AES CMAC authentication
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_SNOW_F8_AES_CMAC_DEC
 
+// Test PDCP control plane encapsulation with SNOW F8 ciphering
+// and NULL authentication
+//#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_SNOW_F8_NULL_ENC
 
 // Test PDCP control plane decapsulation with SNOW F8 ciphering
 // and NULL authentication
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_SNOW_F8_NULL_DEC
 
+// Test PDCP control plane encapsulation with AES-CTR ciphering
+// and NULL authentication
+#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_AES_CTR_NULL_ENC
 
+// Test PDCP control plane dencpsulation with AES-CTR ciphering
+// and NULL authentication
+//#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_AES_CTR_NULL_DEC
+
+// Test PDCP control plane encapsulation with NULL ciphering
+// and AES-CMAC authentication
+//#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_NULL_AES_CMAC_ENC
+
+// Test PDCP control plane decapsulation with NULL ciphering
+// and AES-CMAC authentication
+//#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_NULL_AES_CMAC_DEC
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -141,10 +158,10 @@
 //////////////////////////////////////////////////////////////////////////////
 
 // Disable test application logging
-#define test_printf(format, ...)
+//#define test_printf(format, ...)
 
 // Enable test application logging
-//#define test_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__)
+#define test_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__)
 
 /******************************************************************************/
 // END OF CONFIGURATION SECTION
@@ -181,7 +198,18 @@
 #define PDCP_TEST_CTRL_PLANE_AES_CTR_SNOW_F9_DEC    15
 #define PDCP_TEST_CTRL_PLANE_SNOW_F8_AES_CMAC_ENC   16
 #define PDCP_TEST_CTRL_PLANE_SNOW_F8_AES_CMAC_DEC   17
-#define PDCP_TEST_CTRL_PLANE_SNOW_F8_NULL_DEC       18
+
+#define PDCP_TEST_CTRL_PLANE_SNOW_F8_NULL_ENC       18
+#define PDCP_TEST_CTRL_PLANE_SNOW_F8_NULL_DEC       19
+
+#define PDCP_TEST_CTRL_PLANE_AES_CTR_NULL_ENC       20
+#define PDCP_TEST_CTRL_PLANE_AES_CTR_NULL_DEC       21
+
+#define PDCP_TEST_CTRL_PLANE_NULL_AES_CMAC_ENC      22
+#define PDCP_TEST_CTRL_PLANE_NULL_AES_CMAC_DEC      23
+
+
+
 /*==============================================================================
                          GLOBAL VARIABLE DECLARATIONS
 ==============================================================================*/

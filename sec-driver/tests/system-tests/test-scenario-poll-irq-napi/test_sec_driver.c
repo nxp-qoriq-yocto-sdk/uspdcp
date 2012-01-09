@@ -614,7 +614,7 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
     int test_failed = 0;
     // Check if packet is valid
     test_failed = !is_packet_valid(pdcp_context, in_packet, out_packet, status);
-
+test_printf("out packet lenght: %d\n",out_packet->length);
     if(test_failed)
     {
         test_printf("\nthread #%d:consumer: out packet INCORRECT!."

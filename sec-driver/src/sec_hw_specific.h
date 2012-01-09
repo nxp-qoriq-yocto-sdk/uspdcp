@@ -517,6 +517,10 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 #define CMD_PROTO_DECAP                         0x06
 #define CMD_PROTO_ENCAP                         0x07
 
+#define CMD_ALGORITHM_ICV                       0x02
+
+#define CMD_ALGORITHM_ENCRYPT                   0x01
+
 #define PDCP_SD_KEY_LEN     0x4
 
 
@@ -793,8 +797,8 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
             __i++)                                                          \
         {                                                                   \
             SEC_DEBUG("0x%08x: 0x%08x",                                     \
-                    (uint32_t)(((uint32_t*)(descriptor)) + __i),            \
-                    *(((uint32_t*)(descriptor)) + __i));                    \
+                     (uint32_t)(((uint32_t*)(descriptor)) + __i),           \
+                     *(((uint32_t*)(descriptor)) + __i));                   \
         }                                                                   \
 }
 
@@ -1102,11 +1106,13 @@ typedef struct sec_crypto_pdb_s
 struct sec_pdcp_sd_t{
     struct descriptor_header_s  deschdr;
     sec_crypto_pdb_t            pdb;
+
     struct key_command_s        key2_cmd;
     uint32_t                    key2[PDCP_SD_KEY_LEN];
     struct key_command_s        key1_cmd;
     uint32_t                    key1[PDCP_SD_KEY_LEN];
     struct protocol_operation_command_s protocol;
+
 } PACKED;
 
 /** Structure encompassing a job descriptor which processes
