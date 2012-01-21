@@ -1477,6 +1477,8 @@ static int create_c_plane_auth_only_desc(sec_context_t *ctx)
             *((uint32_t*)ctx->sh_desc + i++) = 0xa8412208;     // or Math2 w/Math1, put result in Math2
             *((uint32_t*)ctx->sh_desc + i++) = 0x78680008;     // move math2 to class1 input fifo(IV=64bits)
 
+            *((uint32_t*)ctx->sh_desc + i++) = 0x78480001;     // move math0 to class1 input fifo
+
             if( ctx->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION )
             {
                 // outbound
@@ -1487,6 +1489,7 @@ static int create_c_plane_auth_only_desc(sec_context_t *ctx)
                 *((uint32_t*)ctx->sh_desc + i++) = 0xa8284104;  // M1 = SIL-0x04 (ICV size)
                 *((uint32_t*)ctx->sh_desc + i++) = 0x00000004;  // 4
             }
+
             *((uint32_t*)ctx->sh_desc + i++) = 0xa821fa04;     // VSIL = M1-0x00
             *((uint32_t*)ctx->sh_desc + i++) = 0xa821fb04;     // VSOL = M1-0x00
 
@@ -1496,7 +1499,7 @@ static int create_c_plane_auth_only_desc(sec_context_t *ctx)
             }
             else
             {
-                *((uint32_t*)ctx->sh_desc + i++) = 0x2f100000;  // seq fifo load, class1, class2, vlf
+                *((uint32_t*)ctx->sh_desc + i++) = 0x2f170000;  // seq fifo load, class1, class2, vlf
                 *((uint32_t*)ctx->sh_desc + i++) = 0x2e3f0004;  // seq fifo load, class1, class2, len = 4
             }
 
@@ -1506,7 +1509,11 @@ static int create_c_plane_auth_only_desc(sec_context_t *ctx)
             *((uint32_t*)ctx->sh_desc + i++) = 0x70920001;     // move from C2 align block to Output fifo, len = M1 = VSIL
             *((uint32_t*)ctx->sh_desc + i++) = 0x5e080001;     // seq store, class 3, length = 1, src=m0 ( header )
             *((uint32_t*)ctx->sh_desc + i++) = 0x69300000;     // seq fifo store, vlf
-            *((uint32_t*)ctx->sh_desc + i++) = 0x5a200004;     // seqstr: ctx1 len=4 offs=0
+
+            if( ctx->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION )
+            {
+                *((uint32_t*)ctx->sh_desc + i++) = 0x5a200004;     // seqstr: ctx1 len=4 offs=0
+            }
 
             // update descriptor length
             ctx->sh_desc->deschdr.command.sd.desclen = i;
@@ -1547,8 +1554,8 @@ static int create_c_plane_cipher_only_desc(sec_context_t *ctx)
             *((uint32_t*)ctx->sh_desc + i++) = 0xa8412208;      // or Math2 w/Math1, put result in Math2
             *((uint32_t*)ctx->sh_desc + i++) = 0x5e080001;      // seq store, class 3, length = 1, src=m0
             *((uint32_t*)ctx->sh_desc + i++) = 0x79600008;      // load, class1 ctx, math2, wc = 1, len 8, offset 0
-            *((uint32_t*)ctx->sh_desc + i++) = 0xa808fa04;      // VSIL=SIL (VSIL=SIL+0x00)
-            *((uint32_t*)ctx->sh_desc + i++) = 0xa809fb04;      // VSOL=SOL (VSOL=SOL+0x00)
+            *((uint32_t*)ctx->sh_desc + i++) = 0xa828fa04;      // VSIL=SIL-0x00
+            *((uint32_t*)ctx->sh_desc + i++) = 0xa828fb04;      // VSOL=SOL-0x00
             *((uint32_t*)ctx->sh_desc + i++) = 0x2b170000;      // seq fifo load, class1, vlf, LC1,LC2
             *((uint32_t*)ctx->sh_desc + i++) = 0x69300000;      // SEQ FIFO STORE, vlf
             *((uint32_t*)ctx->sh_desc + i++) = 0x82600c0c| \
@@ -1579,11 +1586,11 @@ static int create_c_plane_cipher_only_desc(sec_context_t *ctx)
             *((uint32_t*)ctx->sh_desc + i++) = 0xa8412208;  // or Math2 w/Math1, put result in Math2
             *((uint32_t*)ctx->sh_desc + i++) = 0x5e080001;  // seq store, class 3, length = 1, src=m0
             *((uint32_t*)ctx->sh_desc + i++) = 0x79601010;  // load, class1 ctx, math2, wc = 1, len 16, offset 16
-            *((uint32_t*)ctx->sh_desc + i++) = 0xa808fa04;  // VSIL=SIL (VSIL=SIL+0x00)
-            *((uint32_t*)ctx->sh_desc + i++) = 0xa809fb04;  // VSOL=SOL (VSOL=SOL+0x00)
+            *((uint32_t*)ctx->sh_desc + i++) = 0xa828fa04;  // VSIL=SIL-0x00
+            *((uint32_t*)ctx->sh_desc + i++) = 0xa828fb04;  // VSOL=SIL-0x00
             *((uint32_t*)ctx->sh_desc + i++) = 0x2b170000;  // seq fifo load, class1, vlf, LC1,LC2
             *((uint32_t*)ctx->sh_desc + i++) = 0x69300000;  // SEQ FIFO STORE, vlf
-            *((uint32_t*)ctx->sh_desc + i++) = 0x8210000d | \
+            *((uint32_t*)ctx->sh_desc + i++) = 0x8210000c | \
                     ( (ctx->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION) ? \
                        CMD_ALGORITHM_ENCRYPT : 0 );  // operation: optype = 2 (class 1), alg = 0x10 (aes), aai = 0x00 (ctr), as = 11 (int/fin), icv = 0, enc = 1
 

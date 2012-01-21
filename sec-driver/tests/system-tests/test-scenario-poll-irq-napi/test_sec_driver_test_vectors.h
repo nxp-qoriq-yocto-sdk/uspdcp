@@ -626,12 +626,12 @@ static uint8_t aes_ctr_cmac_dec_pdcp_hdr[] = {0x8B};
 
 // PDCP payload + MAC-I both encrypted
 static uint8_t aes_ctr_cmac_dec_data_in[] = {0xa1,0x05,0xfb,0xfe,0xa4,0x8d,0x74,0x3d,
-                                              0x29,0x53,0x27,0x33,0xd9,0xba,0x91,
-                                              // The MAC-I from packet
-                                              0x89,0x46,0x96,0xd6};
+                                             0x29,0x53,0x27,0x33,0xd9,0xba,0x91,
+                                             // The MAC-I from packet
+                                             0x89,0x46,0x96,0xd6};
 // PDCP payload not encrypted
 static uint8_t aes_ctr_cmac_dec_data_out[] = {0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,
-                                         0x57,0xA4,0x9D,0x42,0x14,0x07,0xE8};
+                                              0x57,0xA4,0x9D,0x42,0x14,0x07,0xE8};
 // Radio bearer id
 static uint8_t aes_ctr_cmac_dec_bearer = 0x3;
 
@@ -885,39 +885,39 @@ static uint32_t snow_f8_null_dec_hfn_threshold = 0xFA557;
 #elif PDCP_TEST_SCENARIO == PDCP_TEST_CTRL_PLANE_AES_CTR_NULL_ENC
 
 #define PDCP_TEST_SCENARIO_NAME "PDCP_TEST_CTRL_PLANE_AES_CTR_NULL_ENC"
-// ETSI TS 133 401  V9.6.0 (2011-01)
-// EEA2 - Test set 1
+// WE HAVE NO PDCP CONTROL-PLANE TEST VECTORS AVAILABLE!
+// Output data was obtained by running encapsulation test.
+// Then the reverse, decapsulation test was done to obtain back the original data.
+// This is the method used for validating to some extent the PDCP control-plane algorithms.
 
 // Length of PDCP header
 #define PDCP_HEADER_LENGTH 1
 
 
-static uint8_t aes_ctr_null_enc_key[] = {0xd3, 0xc5, 0xd5, 0x92, 0x32, 0x7f, 0xb1, 0x1c,
-                                    0x40, 0x35, 0xc6, 0x68, 0x0a, 0xf8, 0xc6, 0xd1};
+static uint8_t aes_ctr_null_enc_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
+                                         0x4E,0xA5,0xF1,0x45,0x10,0x10,0xD8,0x52};
 
 // PDCP header
-static uint8_t aes_ctr_null_enc_pdcp_hdr[] = {0xB4};
+static uint8_t aes_ctr_null_enc_pdcp_hdr[] = {0x8B};
 
 // PDCP payload not encrypted
-static uint8_t aes_ctr_null_enc_data_in[] = {0x98, 0x1b, 0xa6, 0x82, 0x4c, 0x1b, 0xfb, 0x1a,
-                                        0xb4, 0x85, 0x47, 0x20, 0x29, 0xb7, 0x1d, 0x80,
-                                        0x8c, 0xe3, 0x3e, 0x2c, 0xc3, 0xc0, 0xb5, 0xfc,
-                                        0x1f, 0x3d, 0xe8, 0xa6, 0xdc, 0x66, 0xb1, 0xf0};
-
+static uint8_t aes_ctr_null_enc_data_in[] = {0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,
+                                             0x57,0xA4,0x9D,0x42,0x14,0x07,0xE8, /* payload */
+                                             0x1b, 0xd1, 0x65, 0x33 /* MAC-I */};
 
 // PDCP payload encrypted
-static uint8_t aes_ctr_null_enc_data_out[] = {0xe9, 0xfe, 0xd8, 0xa6, 0x3d, 0x15, 0x53, 0x04,
-                                         0xd7, 0x1d, 0xf2, 0x0b, 0xf3, 0xe8, 0x22, 0x14,
-                                         0xb2, 0x0e, 0xd7, 0xda, 0xd2, 0xf2, 0x33, 0xdc,
-                                         0x3c, 0x22, 0xd7, 0xbd, 0xee, 0xed, 0x8e, 0x78};
+static uint8_t aes_ctr_null_enc_data_out[] = {0xa1,0x05,0xfb,0xfe,0xa4,0x8d,0x74,0x3d,
+                                              0x29,0x53,0x27,0x33,0xd9,0xba,0x91,
+                                              // The MAC-I from packet
+                                              0x89,0x46,0x96,0xd6};
 // Radio bearer id
-static uint8_t aes_ctr_null_enc_bearer = 0x15;
+static uint8_t aes_ctr_null_enc_bearer = 0x03;
 // Start HFN
-//static uint32_t aes_ctr_enc_hfn = 0x398A5;
-static uint32_t aes_ctr_null_enc_hfn = 0x1CC52CD;
+
+static uint32_t aes_ctr_null_enc_hfn = 0xFA556;
 
 // HFN threshold
-static uint32_t aes_ctr_null_enc_hfn_threshold = 0x398A6;
+static uint32_t aes_ctr_null_enc_hfn_threshold = 0xFF00000;
 
 //////////////////////////////////////////////////////////////////////////////
 // PDCP_TEST_CTRL_PLANE_AES_CTR_NULL_DEC
@@ -925,39 +925,40 @@ static uint32_t aes_ctr_null_enc_hfn_threshold = 0x398A6;
 #elif PDCP_TEST_SCENARIO == PDCP_TEST_CTRL_PLANE_AES_CTR_NULL_DEC
 
 #define PDCP_TEST_SCENARIO_NAME "PDCP_TEST_CTRL_PLANE_AES_CTR_NULL_DEC"
-// ETSI TS 133 401  V9.6.0 (2011-01)
-// EEA2 - Test set 1
+// WE HAVE NO PDCP CONTROL-PLANE TEST VECTORS AVAILABLE!
+// Output data was obtained by running encapsulation test.
+// Then the reverse, decapsulation test was done to obtain back the original data.
+// This is the method used for validating to some extent the PDCP control-plane algorithms.
 
 // Length of PDCP header
 #define PDCP_HEADER_LENGTH 1
 
 
-static uint8_t aes_ctr_null_dec_key[] = {0xd3, 0xc5, 0xd5, 0x92, 0x32, 0x7f, 0xb1, 0x1c,
-                                    0x40, 0x35, 0xc6, 0x68, 0x0a, 0xf8, 0xc6, 0xd1};
+static uint8_t aes_ctr_null_dec_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
+                                         0x4E,0xA5,0xF1,0x45,0x10,0x10,0xD8,0x52};
 
 // PDCP header
-static uint8_t aes_ctr_null_dec_pdcp_hdr[] = {0xB4};
+static uint8_t aes_ctr_null_dec_pdcp_hdr[] = {0x8B};
 
 // PDCP payload not encrypted
-static uint8_t aes_ctr_null_dec_data_out[] = {0x98, 0x1b, 0xa6, 0x82, 0x4c, 0x1b, 0xfb, 0x1a,
-                                        0xb4, 0x85, 0x47, 0x20, 0x29, 0xb7, 0x1d, 0x80,
-                                        0x8c, 0xe3, 0x3e, 0x2c, 0xc3, 0xc0, 0xb5, 0xfc,
-                                        0x1f, 0x3d, 0xe8, 0xa6, 0xdc, 0x66, 0xb1, 0xf0};
+static uint8_t aes_ctr_null_dec_data_out[] = {0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,
+                                              0x57,0xA4,0x9D,0x42,0x14,0x07,0xE8,
+                                              0x1b, 0xd1, 0x65, 0x33 /* MAC-I */};
 
 
 // PDCP payload encrypted
-static uint8_t aes_ctr_null_dec_data_in[] = {0xe9, 0xfe, 0xd8, 0xa6, 0x3d, 0x15, 0x53, 0x04,
-                                         0xd7, 0x1d, 0xf2, 0x0b, 0xf3, 0xe8, 0x22, 0x14,
-                                         0xb2, 0x0e, 0xd7, 0xda, 0xd2, 0xf2, 0x33, 0xdc,
-                                         0x3c, 0x22, 0xd7, 0xbd, 0xee, 0xed, 0x8e, 0x78};
+static uint8_t aes_ctr_null_dec_data_in[] = {0xa1,0x05,0xfb,0xfe,0xa4,0x8d,0x74,0x3d,
+                                             0x29,0x53,0x27,0x33,0xd9,0xba,0x91,
+                                             // The MAC-I from packet
+                                             0x89,0x46,0x96,0xd6};
 // Radio bearer id
-static uint8_t aes_ctr_null_dec_bearer = 0x15;
+static uint8_t aes_ctr_null_dec_bearer = 0x03;
 
 // Start HFN
-static uint32_t aes_ctr_null_dec_hfn = 0x1CC52CD;
+static uint32_t aes_ctr_null_dec_hfn = 0xFA556;
 
 // HFN threshold
-static uint32_t aes_ctr_null_dec_hfn_threshold = 0x398A6;
+static uint32_t aes_ctr_null_dec_hfn_threshold = 0xFF00000;
 
 //////////////////////////////////////////////////////////////////////////////
 // PDCP_TEST_CTRL_PLANE_NUL_AES_CMAC_NULL_ENC
@@ -965,32 +966,35 @@ static uint32_t aes_ctr_null_dec_hfn_threshold = 0x398A6;
 #elif PDCP_TEST_SCENARIO == PDCP_TEST_CTRL_PLANE_NULL_AES_CMAC_ENC
 
 #define PDCP_TEST_SCENARIO_NAME "PDCP_TEST_CTRL_PLANE_NULL_AES_CMAC_ENC"
-// ETSI TS 133 401  V9.6.0 (2011-01)
-// EIA2 - Test set 2
+// WE HAVE NO PDCP CONTROL-PLANE TEST VECTORS AVAILABLE!
+// Output data was obtained by running encapsulation test.
+// Then the reverse, decapsulation test was done to obtain back the original data.
+// This is the method used for validating to some extent the PDCP control-plane algorithms.
 
 // Length of PDCP header
 #define PDCP_HEADER_LENGTH 1
 
 // PDCP header
-static uint8_t null_aes_cmac_enc_pdcp_hdr[] = {0x14};
+static uint8_t null_aes_cmac_enc_pdcp_hdr[] = {0x8B};
 
-static uint8_t null_aes_cmac_enc_key[] = {0xd3, 0xc5, 0xd5, 0x92, 0x32, 0x7f, 0xb1, 0x1c,
-                                          0x40, 0x35, 0xc6, 0x68, 0x0a, 0xf8, 0xc6, 0xd1};
-
+static uint8_t null_aes_cmac_enc_auth_key[] = {0xC7,0x36,0xC6,0xAA,0xB2,0x2B,0xFF,0xF9,
+                                               0x1E,0x26,0x98,0xD2,0xE2,0x2A,0xD5,0x7E};
 
 // PDCP payload not encrypted
-static uint8_t null_aes_cmac_enc_data_out[] = {0x48, 0x45,0x83,0xd5,0xaf,0xe0,0x82,0xae, /* payload */
-                                               0xb9,0x37,0x87,0xe6 /* ICV */ };
-
+static uint8_t null_aes_cmac_enc_data_out[] = {0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,
+                                               0x57,0xA4,0x9D,0x42,0x14,0x07,0xE8,
+                                               // The MAC-I from packet
+                                               0x1b, 0xd1, 0x65, 0x33 };
 
 // PDCP payload encrypted
-static uint8_t null_aes_cmac_enc_data_in[] = {0x48, 0x45,0x83,0xd5,0xaf,0xe0,0x82,0xae};
+static uint8_t null_aes_cmac_enc_data_in[] = {0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,
+                                              0x57,0xA4,0x9D,0x42,0x14,0x07,0xE8};
 
 // Radio bearer id
-static uint8_t null_aes_cmac_enc_bearer = 0x1a;
+static uint8_t null_aes_cmac_enc_bearer = 0x3;
 
 // Start HFN
-static uint32_t null_aes_cmac_enc_hfn = 0x1CC52CD;
+static uint32_t null_aes_cmac_enc_hfn = 0xFA556;
 
 // HFN threshold
 static uint32_t null_aes_cmac_enc_hfn_threshold = 0xFF00000;
@@ -1001,33 +1005,34 @@ static uint32_t null_aes_cmac_enc_hfn_threshold = 0xFF00000;
 #elif PDCP_TEST_SCENARIO == PDCP_TEST_CTRL_PLANE_NULL_AES_CMAC_DEC
 
 #define PDCP_TEST_SCENARIO_NAME "PDCP_TEST_CTRL_PLANE_NULL_AES_CMAC_DEC"
-// ETSI TS 133 401  V9.6.0 (2011-01)
-// EIA2 - Test set 2
+// WE HAVE NO PDCP CONTROL-PLANE TEST VECTORS AVAILABLE!
+// Output data was obtained by running encapsulation test.
+// Then the reverse, decapsulation test was done to obtain back the original data.
+// This is the method used for validating to some extent the PDCP control-plane algorithms.
 
 // Length of PDCP header
 #define PDCP_HEADER_LENGTH 1
 
 // PDCP header
-static uint8_t null_aes_cmac_dec_pdcp_hdr[] = {0x14};
+static uint8_t null_aes_cmac_dec_pdcp_hdr[] = {0x8B};
 
-static uint8_t null_aes_cmac_dec_key[] = {0xd3, 0xc5, 0xd5, 0x92, 0x32, 0x7f, 0xb1, 0x1c,
-                                    0x40, 0x35, 0xc6, 0x68, 0x0a, 0xf8, 0xc6, 0xd1};
-
+static uint8_t null_aes_cmac_dec_auth_key[] = {0xC7,0x36,0xC6,0xAA,0xB2,0x2B,0xFF,0xF9,
+                                               0x1E,0x26,0x98,0xD2,0xE2,0x2A,0xD5,0x7E};
 
 // PDCP payload not encrypted
-static uint8_t null_aes_cmac_dec_data_in[] = { 0x48, 0x45,0x83,0xd5,0xaf,0xe0,0x82,0xae, /* payload */
-                                               0xb9,0x37,0x87,0xe6 /* ICV */ };
-
+static uint8_t null_aes_cmac_dec_data_in[] = { 0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,
+                                               0x57,0xA4,0x9D,0x42,0x14,0x07,0xE8,
+                                               // The MAC-I from packet
+                                               0x1b, 0xd1, 0x65, 0x33 };
 
 // PDCP payload encrypted
-static uint8_t null_aes_cmac_dec_data_out[] = {0x48, 0x45,0x83,0xd5,0xaf,0xe0,0x82,0xae, /* payload */
-                                               0xb9,0x37,0x87,0xe6 /* ICV */};
-
+static uint8_t null_aes_cmac_dec_data_out[] = {0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,
+                                               0x57,0xA4,0x9D,0x42,0x14,0x07,0xE8 /* payload */};
 // Radio bearer id
-static uint8_t null_aes_cmac_dec_bearer = 0x1a;
+static uint8_t null_aes_cmac_dec_bearer = 0x3;
 
 // Start HFN
-static uint32_t null_aes_cmac_dec_hfn = 0x1CC52CD;
+static uint32_t null_aes_cmac_dec_hfn = 0xFA556;
 
 // HFN threshold
 static uint32_t null_aes_cmac_dec_hfn_threshold = 0xFF00000;
@@ -1659,8 +1664,8 @@ static uint32_t null_aes_cmac_dec_hfn_threshold = 0xFF00000;
 #define test_crypto_key         NULL
 #define test_crypto_key_len     0
 
-#define test_auth_key           null_aes_cmac_enc_key
-#define test_auth_key_len       sizeof(null_aes_cmac_enc_key)
+#define test_auth_key           null_aes_cmac_enc_auth_key
+#define test_auth_key_len       sizeof(null_aes_cmac_enc_auth_key)
 
 #define test_data_in            null_aes_cmac_enc_data_in
 #define test_data_out           null_aes_cmac_enc_data_out
@@ -1685,8 +1690,8 @@ static uint32_t null_aes_cmac_dec_hfn_threshold = 0xFF00000;
 #define test_crypto_key         NULL
 #define test_crypto_key_len     0
 
-#define test_auth_key           null_aes_cmac_dec_key
-#define test_auth_key_len       sizeof(null_aes_cmac_dec_key)
+#define test_auth_key           null_aes_cmac_dec_auth_key
+#define test_auth_key_len       sizeof(null_aes_cmac_dec_auth_key)
 
 #define test_data_in            null_aes_cmac_dec_data_in
 #define test_data_out           null_aes_cmac_dec_data_out

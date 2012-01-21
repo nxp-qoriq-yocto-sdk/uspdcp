@@ -87,7 +87,7 @@
 
 // Test PDCP control plane encapsulation with AES CTR ciphering
 // and AES CMAC authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_AES_CTR_AES_CMAC_ENC
+#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_AES_CTR_AES_CMAC_ENC
 // Test PDCP control plane decapsulation with AES CTR ciphering
 // and AES CMAC authentication
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_AES_CTR_AES_CMAC_DEC
@@ -117,9 +117,9 @@
 
 // Test PDCP control plane encapsulation with AES-CTR ciphering
 // and NULL authentication
-#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_AES_CTR_NULL_ENC
+//#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_AES_CTR_NULL_ENC
 
-// Test PDCP control plane dencpsulation with AES-CTR ciphering
+// Test PDCP control plane decapsulation with AES-CTR ciphering
 // and NULL authentication
 //#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_AES_CTR_NULL_DEC
 
