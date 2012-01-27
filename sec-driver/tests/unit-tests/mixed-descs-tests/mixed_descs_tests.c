@@ -41,6 +41,7 @@
  *            msg->dec(msg)->auth_check(dec(auth(msg)))  \
  *                                                        |=> compare the two, fail if they don't match
  *                                    auth_check_dec(msg) /
+ * The same scenarios are repetead for SNOW algorithm
  */
 
 #ifdef _cplusplus
@@ -156,21 +157,32 @@ static uint8_t test_crypto_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
 static uint8_t test_auth_key[] = {0xC7,0x36,0xC6,0xAA,0xB2,0x2B,0xFF,0xF9,
                                   0x1E,0x26,0x98,0xD2,0xE2,0x2A,0xD5,0x7E};
 
-// Input test vector, used in encap packets
+// Input test vector for both AES and SNOW suites, used in encap packets
 static uint8_t test_data_in_encap[] = { 0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,
                                   0x57,0xA4,0x9D,0x42,0x14,0x07,0xE8 };
 
-// Output test vector, used in decap packets for downlink
-static uint8_t test_data_in_decap_dl[] = {0xa1,0x05,0xfb,0xfe,0xa4,0x8d,0x74,0x3d,
+// Output test vector for AES suite, used in decap packets for downlink
+static uint8_t test_data_in_decap_aes_dl[] = {0xa1,0x05,0xfb,0xfe,0xa4,0x8d,0x74,0x3d,
                                   0x29,0x53,0x27,0x33,0xd9,0xba,0x91,
                                   // The MAC-I from packet
                                   0x89,0x46,0x96,0xd6};
 
-// Output test vector, used in decap packets for downlink
-static uint8_t test_data_in_decap_ul[] = {0x1f,0x75,0x2f,0x84,0xec,0x10,0x97,0xb8,
+// Output test vector for AES suite, used in decap packets for uplink
+static uint8_t test_data_in_decap_aes_ul[] = {0x1f,0x75,0x2f,0x84,0xec,0x10,0x97,0xb8,
                                 0x3a,0x2e,0x89,0xe8,0x6f,0x81,0x21,
                                 // The MAC-I from packet
                                 0x6d,0x69,0x42,0x95};
+
+// Output test vector for SNOW suite used in decap packets for downlink
+static uint8_t test_data_in_decap_snow_dl[] = {0x20,0xd9,0x97,0x63,0x60,0x68,0x2d,0x55,0x0e,0x8d,
+                                           0x50,0x0a,0xc7,0xfc,0x5e,
+                                           // The MAC-I from packet
+                                           0x17,0xe3,0xe5,0xd7};
+
+// Output test vector for SNOW suite used in decap packets for uplink
+static uint8_t test_data_in_decap_snow_ul[] = {0x9d,0xdc,0xfd,0xae,0xf1,0x9c,0x35,0x2c,0x3c,0x71,0x4f,0x08,0xbb,0x5f,0xbf,
+                                                // The MAC-I from packet
+                                               0xd1,0x1f,0x42,0x21};
 
 static uint8_t  test_pdcp_hdr = 0x8B;
 
@@ -213,9 +225,9 @@ static int handle_packet_from_sec(const sec_packet_t *in_packet,
 static int get_pkt(sec_packet_t **pkt,uint8_t *data, int pkt_len)
 {
     int packet_idx;
-    
+
     *pkt = NULL;
-    
+
     if( pkt_len == 0)
         return -1;
 
@@ -225,15 +237,15 @@ static int get_pkt(sec_packet_t **pkt,uint8_t *data, int pkt_len)
         {
             /* found it */
             test_packets[packet_idx].state = STATE_USED;
-            
+
             *pkt = &test_packets[packet_idx].pdcp_packet;
-            
+
             (*pkt)->address = &(test_packets[packet_idx].buffer[0]);
             (*pkt)->offset = TEST_PACKET_OFFSET;
             (*pkt)->total_length = 0;
             (*pkt)->num_fragments = 0;
             (*pkt)->length = pkt_len + PDCP_HEADER_LENGTH;
-            
+
             if( data != NULL )
             {
                 // copy PDCP header
@@ -252,7 +264,7 @@ static int get_pkt(sec_packet_t **pkt,uint8_t *data, int pkt_len)
             break;
         }
     }
-    
+
     return 0;
 }
 
@@ -279,7 +291,7 @@ static int put_pkt(sec_packet_t **pkt)
             break;
         }
     }
-    
+
     return 0;
 }
 
@@ -289,7 +301,11 @@ static void test_setup(void)
     int ret = 0;
 
     // map the physical memory
+#ifdef SEC_HW_VERSION_4_4
     ret = dma_mem_setup(SEC_DMA_MEMORY_SIZE, CACHE_LINE_SIZE);
+#else
+    ret = dma_mem_setup();
+#endif // SEC_HW_VERSION_4_4
     assert_equal_with_message(ret, 0, "ERROR on dma_mem_setup: ret = %d", ret);
 
     // Fill SEC driver configuration data
@@ -328,7 +344,7 @@ static void test_teardown()
     dma_mem_free(test_packets, sizeof(buffer_t) * TEST_PACKETS_NUMBER);
 }
 
-static void test_c_plane_mixed_downlink_encap(void)
+static void test_c_plane_mixed_downlink_aes_encap(void)
 {
     int ret = 0;
     int limit = SEC_JOB_RING_SIZE  - 1;
@@ -412,15 +428,15 @@ static void test_c_plane_mixed_downlink_encap(void)
     jr_handle_0 = job_ring_descriptors[0].job_ring_handle;
     jr_handle_1 = job_ring_descriptors[1].job_ring_handle;
 
-    ctx_info[0].packet_direction = 
-    ctx_info[1].packet_direction = 
+    ctx_info[0].packet_direction =
+    ctx_info[1].packet_direction =
     ctx_info[2].packet_direction = PDCP_DOWNLINK;
-    
-    ctx_info[0].protocol_direction = 
-    ctx_info[1].protocol_direction = 
+
+    ctx_info[0].protocol_direction =
+    ctx_info[1].protocol_direction =
     ctx_info[2].protocol_direction = PDCP_ENCAPSULATION;
 
-    ////////////////////////////////////    
+    ////////////////////////////////////
     ////////////////////////////////////
 
     // Create one context and affine it to first job ring.
@@ -434,7 +450,7 @@ static void test_c_plane_mixed_downlink_encap(void)
     assert_equal_with_message(ret, SEC_SUCCESS,
             "ERROR on sec_create_pdcp_context: expected ret[%d]. actual ret[%d]",
             SEC_SUCCESS, ret);
-            
+
     // Create another context and affine it to the second job ring.
     ret = sec_create_pdcp_context(jr_handle_1, &ctx_info[2], &ctx_handle_2);
     assert_equal_with_message(ret, SEC_SUCCESS,
@@ -443,16 +459,16 @@ static void test_c_plane_mixed_downlink_encap(void)
 
     ////////////////////////////////////
     ////////////////////////////////////
-    
+
     // How many packets to send and receive to/from SEC
     packets_handled = 1;
-    
+
     // Get one packet to be used as input for both procedures
     ret = get_pkt(&in_pkt,test_data_in_encap,sizeof(test_data_in_encap));
     assert_equal_with_message(ret, 0,
             "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
             0, ret);
-            
+
     // Get one packet to be used for auth output
     ret = get_pkt(&auth_only_pkt,NULL,sizeof(test_data_in_encap) + 4 /* ICV size */);
     assert_equal_with_message(ret, 0,
@@ -474,13 +490,13 @@ static void test_c_plane_mixed_downlink_encap(void)
                               "ERROR on sec_poll: expected packets notified[%d]."
                               "actual packets notified[%d]",
                               packets_handled, packets_out);
-    
+
     // Get one packet to be used for auth+enc output in dbl pass
     ret = get_pkt(&auth_ciphered_pkt_dbl_pass,NULL,sizeof(test_data_in_encap) + 4 /* ICV size */);
     assert_equal_with_message(ret, 0,
                 "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
                 0, ret);
-    
+
     // Submit one packet on the second context for ciphering
     ret = sec_process_packet(ctx_handle_1, auth_only_pkt, auth_ciphered_pkt_dbl_pass, NULL);
     assert_equal_with_message(ret, SEC_SUCCESS,
@@ -488,7 +504,7 @@ static void test_c_plane_mixed_downlink_encap(void)
                     SEC_SUCCESS, ret);
     usleep(1000);
     ret = sec_poll_job_ring(jr_handle_0, limit, &packets_out);
-        
+
     assert_equal_with_message(ret, SEC_SUCCESS,
                               "ERROR on sec_poll: expected ret[%d]. actual ret[%d]",
                               SEC_SUCCESS, ret);
@@ -503,7 +519,7 @@ static void test_c_plane_mixed_downlink_encap(void)
     assert_equal_with_message(ret, 0,
                 "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
                 0, ret);
-    
+
     // Submit one packet on the third context for ciphering and authentication in one pass
     ret = sec_process_packet(ctx_handle_2, in_pkt, auth_ciphered_pkt, NULL);
     assert_equal_with_message(ret, SEC_SUCCESS,
@@ -520,7 +536,7 @@ static void test_c_plane_mixed_downlink_encap(void)
                               "ERROR on sec_poll: expected packets notified[%d]."
                               "actual packets notified[%d]",
                               packets_handled, packets_out);
-                              
+
     // assert that the pkts obtained through the two methods are bit-exact
     memcmp_res = memcmp(auth_ciphered_pkt_dbl_pass->address + auth_ciphered_pkt_dbl_pass->offset,
                         auth_ciphered_pkt->address + auth_ciphered_pkt->offset,
@@ -536,7 +552,7 @@ static void test_c_plane_mixed_downlink_encap(void)
 
     assert_equal_with_message(memcmp_res, 0,
                               "ERROR on checking packet contents: header is different!");
-                        
+
     memcmp_res = memcmp(auth_ciphered_pkt_dbl_pass->address + auth_ciphered_pkt_dbl_pass->offset + PDCP_HEADER_LENGTH,
                         auth_ciphered_pkt->address + auth_ciphered_pkt->offset + PDCP_HEADER_LENGTH,
                         auth_ciphered_pkt->length - PDCP_HEADER_LENGTH);
@@ -564,10 +580,10 @@ static void test_c_plane_mixed_downlink_encap(void)
     // release sec driver
     ret = sec_release();
     assert_equal_with_message(ret, SEC_SUCCESS, "ERROR on sec_release: ret = %d", ret);
-    
+
 }
 
-static void test_c_plane_mixed_downlink_decap(void)
+static void test_c_plane_mixed_downlink_aes_decap(void)
 {
     int ret = 0;
     int limit = SEC_JOB_RING_SIZE  - 1;
@@ -686,13 +702,13 @@ static void test_c_plane_mixed_downlink_decap(void)
     // How many packets to send and receive to/from SEC
     packets_handled = 1;
 
-    ret = get_pkt(&in_pkt,test_data_in_decap_dl,sizeof(test_data_in_decap_dl));
+    ret = get_pkt(&in_pkt,test_data_in_decap_aes_dl,sizeof(test_data_in_decap_aes_dl));
     assert_equal_with_message(ret, 0,
                 "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
                 0, ret);
 
     // Get one packet to be used for auth output
-    ret = get_pkt(&auth_only_pkt,NULL,sizeof(test_data_in_decap_dl));
+    ret = get_pkt(&auth_only_pkt,NULL,sizeof(test_data_in_decap_aes_dl));
     assert_equal_with_message(ret, 0,
                 "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
                 0, ret);
@@ -715,7 +731,7 @@ static void test_c_plane_mixed_downlink_decap(void)
                               "actual packets notified[%d]",
                               packets_handled, packets_out);
 
-    ret = get_pkt(&auth_ciphered_pkt_dbl_pass,NULL,sizeof(test_data_in_decap_dl) - 4 /* ICV size */);
+    ret = get_pkt(&auth_ciphered_pkt_dbl_pass,NULL,sizeof(test_data_in_decap_aes_dl) - 4 /* ICV size */);
     assert_equal_with_message(ret, 0,
                     "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
                     0, ret);
@@ -738,7 +754,7 @@ static void test_c_plane_mixed_downlink_decap(void)
                               "actual packets notified[%d]",
                               packets_handled, packets_out);
 
-    ret = get_pkt(&auth_ciphered_pkt,NULL,sizeof(test_data_in_decap_dl) - 4 /* ICV size */);
+    ret = get_pkt(&auth_ciphered_pkt,NULL,sizeof(test_data_in_decap_aes_dl) - 4 /* ICV size */);
     assert_equal_with_message(ret, 0,
                     "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
                     0, ret);
@@ -807,7 +823,7 @@ static void test_c_plane_mixed_downlink_decap(void)
 
 }
 
-static void test_c_plane_mixed_uplink_encap(void)
+static void test_c_plane_mixed_uplink_aes_encap(void)
 {
     int ret = 0;
     int limit = SEC_JOB_RING_SIZE  - 1;
@@ -1044,7 +1060,7 @@ static void test_c_plane_mixed_uplink_encap(void)
     assert_equal_with_message(ret, SEC_SUCCESS, "ERROR on sec_release: ret = %d", ret);
 
 }
-static void test_c_plane_mixed_uplink_decap(void)
+static void test_c_plane_mixed_uplink_aes_decap(void)
 {
     int ret = 0;
     int limit = SEC_JOB_RING_SIZE  - 1;
@@ -1163,13 +1179,13 @@ static void test_c_plane_mixed_uplink_decap(void)
     // How many packets to send and receive to/from SEC
     packets_handled = 1;
 
-    ret = get_pkt(&in_pkt,test_data_in_decap_ul,sizeof(test_data_in_decap_ul));
+    ret = get_pkt(&in_pkt,test_data_in_decap_aes_ul,sizeof(test_data_in_decap_aes_ul));
     assert_equal_with_message(ret, 0,
                 "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
                 0, ret);
 
     // Get one packet to be used for auth output
-    ret = get_pkt(&auth_only_pkt,NULL,sizeof(test_data_in_decap_ul));
+    ret = get_pkt(&auth_only_pkt,NULL,sizeof(test_data_in_decap_aes_ul));
     assert_equal_with_message(ret, 0,
                 "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
                 0, ret);
@@ -1192,7 +1208,7 @@ static void test_c_plane_mixed_uplink_decap(void)
                               "actual packets notified[%d]",
                               packets_handled, packets_out);
 
-    ret = get_pkt(&auth_ciphered_pkt_dbl_pass,NULL,sizeof(test_data_in_decap_ul) - 4 /* ICV size */);
+    ret = get_pkt(&auth_ciphered_pkt_dbl_pass,NULL,sizeof(test_data_in_decap_aes_ul) - 4 /* ICV size */);
     assert_equal_with_message(ret, 0,
                     "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
                     0, ret);
@@ -1215,7 +1231,963 @@ static void test_c_plane_mixed_uplink_decap(void)
                               "actual packets notified[%d]",
                               packets_handled, packets_out);
 
-    ret = get_pkt(&auth_ciphered_pkt,NULL,sizeof(test_data_in_decap_ul) - 4 /* ICV size */);
+    ret = get_pkt(&auth_ciphered_pkt,NULL,sizeof(test_data_in_decap_aes_ul) - 4 /* ICV size */);
+    assert_equal_with_message(ret, 0,
+                    "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
+                    0, ret);
+
+    // Submit one packet on the third context for ciphering and authentication in one pass
+    ret = sec_process_packet(ctx_handle_2, in_pkt, auth_ciphered_pkt, NULL);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                    "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                    SEC_SUCCESS, ret);
+
+    usleep(1000);
+    ret = sec_poll_job_ring(jr_handle_1, limit, &packets_out);
+
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                              "ERROR on sec_poll: expected ret[%d]. actual ret[%d]",
+                              SEC_SUCCESS, ret);
+    // <packets_handled> packets should be retrieved from SEC
+    assert_equal_with_message(packets_out, packets_handled,
+                              "ERROR on sec_poll: expected packets notified[%d]."
+                              "actual packets notified[%d]",
+                              packets_handled, packets_out);
+
+    // assert that the pkts obtained through the two methods are bit-exact
+    memcmp_res = memcmp(auth_ciphered_pkt_dbl_pass->address + auth_ciphered_pkt_dbl_pass->offset,
+                        auth_ciphered_pkt->address + auth_ciphered_pkt->offset,
+                        PDCP_HEADER_LENGTH);
+    if ( memcmp_res != 0 )
+    {
+        printf("Error comparing headers:\n");
+    }
+    printf("Double pass header  |  Single Pass header\n");
+    printf("0x%02x                |                0x%02x\n",
+            *(uint8_t*)(auth_ciphered_pkt_dbl_pass->address + auth_ciphered_pkt_dbl_pass->offset),
+            *(uint8_t*)(auth_ciphered_pkt->address + auth_ciphered_pkt->offset) );
+
+    assert_equal_with_message(memcmp_res, 0,
+                              "ERROR on checking packet contents: header is different!");
+
+    memcmp_res = memcmp(auth_ciphered_pkt_dbl_pass->address + auth_ciphered_pkt_dbl_pass->offset + PDCP_HEADER_LENGTH,
+                        auth_ciphered_pkt->address + auth_ciphered_pkt->offset + PDCP_HEADER_LENGTH,
+                        auth_ciphered_pkt->length - PDCP_HEADER_LENGTH);
+    if (memcmp_res != 0)
+    {
+        printf("Error comparing contents:\n");
+    }
+
+    printf("Double pass content |  Single Pass content\n");
+    for( i = 0; i < auth_ciphered_pkt->length - PDCP_HEADER_LENGTH; i++)
+    {
+        printf("0x%02x                |                0x%02x\n",
+                *(uint8_t*)(auth_ciphered_pkt_dbl_pass->address + auth_ciphered_pkt_dbl_pass->offset + PDCP_HEADER_LENGTH + i),
+                *(uint8_t*)(auth_ciphered_pkt->address + auth_ciphered_pkt->offset + PDCP_HEADER_LENGTH + i) );
+    }
+
+    assert_equal_with_message(memcmp_res, 0,
+                              "ERROR on checking packet contents: content is different!");
+
+    put_pkt(&in_pkt);
+    put_pkt(&auth_only_pkt);
+    put_pkt(&auth_ciphered_pkt_dbl_pass);
+    put_pkt(&auth_ciphered_pkt);
+
+    // release sec driver
+    ret = sec_release();
+    assert_equal_with_message(ret, SEC_SUCCESS, "ERROR on sec_release: ret = %d", ret);
+
+}
+
+static void test_c_plane_mixed_downlink_snow_encap(void)
+{
+    int ret = 0;
+    int limit = SEC_JOB_RING_SIZE  - 1;
+    int i = 0;
+    uint32_t packets_out = 0;
+    uint32_t packets_handled = 0;
+    sec_job_ring_handle_t jr_handle_0;
+    sec_job_ring_handle_t jr_handle_1;
+    sec_context_handle_t ctx_handle_0 = NULL;
+    sec_context_handle_t ctx_handle_1 = NULL;
+    sec_context_handle_t ctx_handle_2 = NULL;
+    sec_packet_t *in_pkt = NULL, *auth_ciphered_pkt_dbl_pass = NULL,*auth_ciphered_pkt=NULL, *auth_only_pkt = NULL;
+    int memcmp_res = 0;
+    // configuration data for a PDCP context
+    sec_pdcp_context_info_t ctx_info[3] = {
+        /* auth-only */
+        {
+            .cipher_algorithm       = SEC_ALG_NULL,
+            .cipher_key             = cipher_key,
+            .cipher_key_len         = sizeof(test_crypto_key),
+            .integrity_algorithm    = SEC_ALG_SNOW,
+            .integrity_key          = integrity_key,
+            .integrity_key_len      = sizeof(test_auth_key),
+            .notify_packet          = &handle_packet_from_sec,
+            .sn_size                = SEC_PDCP_SN_SIZE_5,
+            .bearer                 = test_bearer,
+            .user_plane             = PDCP_CONTROL_PLANE,
+            //.packet_direction       = test_pkt_dir;
+            //.protocol_direction     = test_proto_dir;
+            .hfn                    = test_hfn,
+            .hfn_threshold          = test_hfn_threshold
+        },
+        /* cipher-only */
+        {
+            .cipher_algorithm       = SEC_ALG_SNOW,
+            .cipher_key             = cipher_key,
+            .cipher_key_len         = sizeof(test_crypto_key),
+            .integrity_algorithm    = SEC_ALG_NULL,
+            .integrity_key          = integrity_key,
+            .integrity_key_len      = sizeof(test_auth_key),
+            .notify_packet          = &handle_packet_from_sec,
+            .sn_size                = SEC_PDCP_SN_SIZE_5,
+            .bearer                 = test_bearer,
+            .user_plane             = PDCP_CONTROL_PLANE,
+            //.packet_direction       = test_pkt_dir;
+            //.protocol_direction     = test_proto_dir;
+            .hfn                    = test_hfn,
+            .hfn_threshold          = test_hfn_threshold
+        },
+        /* auth+cipher */
+        {
+            .cipher_algorithm       = SEC_ALG_SNOW,
+            .cipher_key             = cipher_key,
+            .cipher_key_len         = sizeof(test_crypto_key),
+            .integrity_algorithm    = SEC_ALG_SNOW,
+            .integrity_key          = integrity_key,
+            .integrity_key_len      = sizeof(test_auth_key),
+            .notify_packet          = &handle_packet_from_sec,
+            .sn_size                = SEC_PDCP_SN_SIZE_5,
+            .bearer                 = test_bearer,
+            .user_plane             = PDCP_CONTROL_PLANE,
+            //.packet_direction       = test_pkt_dir;
+            //.protocol_direction     = test_proto_dir;
+            .hfn                    = test_hfn,
+            .hfn_threshold          = test_hfn_threshold
+        }
+    };
+
+
+    printf("Running test %s\n", __FUNCTION__);
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Init sec driver. No invalid param.
+    ret = sec_init(&sec_config_data, JOB_RING_NUMBER, &job_ring_descriptors);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                              "ERROR on sec_init: expected ret[%d]. actual ret[%d]",
+                              SEC_SUCCESS, ret);
+
+    jr_handle_0 = job_ring_descriptors[0].job_ring_handle;
+    jr_handle_1 = job_ring_descriptors[1].job_ring_handle;
+
+    ctx_info[0].packet_direction =
+    ctx_info[1].packet_direction =
+    ctx_info[2].packet_direction = PDCP_DOWNLINK;
+
+    ctx_info[0].protocol_direction =
+    ctx_info[1].protocol_direction =
+    ctx_info[2].protocol_direction = PDCP_ENCAPSULATION;
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Create one context and affine it to first job ring.
+    ret = sec_create_pdcp_context(jr_handle_0, &ctx_info[0], &ctx_handle_0);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+            "ERROR on sec_create_pdcp_context: expected ret[%d]. actual ret[%d]",
+            SEC_SUCCESS, ret);
+
+    // Create another context and affine it to the first job ring.
+    ret = sec_create_pdcp_context(jr_handle_0, &ctx_info[1], &ctx_handle_1);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+            "ERROR on sec_create_pdcp_context: expected ret[%d]. actual ret[%d]",
+            SEC_SUCCESS, ret);
+
+    // Create another context and affine it to the second job ring.
+    ret = sec_create_pdcp_context(jr_handle_1, &ctx_info[2], &ctx_handle_2);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+            "ERROR on sec_create_pdcp_context: expected ret[%d]. actual ret[%d]",
+            SEC_SUCCESS, ret);
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // How many packets to send and receive to/from SEC
+    packets_handled = 1;
+
+    // Get one packet to be used as input for both procedures
+    ret = get_pkt(&in_pkt,test_data_in_encap,sizeof(test_data_in_encap));
+    assert_equal_with_message(ret, 0,
+            "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
+            0, ret);
+
+    // Get one packet to be used for auth output
+    ret = get_pkt(&auth_only_pkt,NULL,sizeof(test_data_in_encap) + 4 /* ICV size */);
+    assert_equal_with_message(ret, 0,
+            "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
+            0, ret);
+
+    // Submit one packet on the first context for authentication
+    ret = sec_process_packet(ctx_handle_0, in_pkt, auth_only_pkt, NULL);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                    "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                    SEC_SUCCESS, ret);
+    usleep(1000);
+    ret = sec_poll_job_ring(jr_handle_0, limit, &packets_out);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                              "ERROR on sec_poll: expected ret[%d]. actual ret[%d]",
+                              SEC_SUCCESS, ret);
+    // <packets_handled> packets should be retrieved from SEC
+    assert_equal_with_message(packets_out, packets_handled,
+                              "ERROR on sec_poll: expected packets notified[%d]."
+                              "actual packets notified[%d]",
+                              packets_handled, packets_out);
+
+    // Get one packet to be used for auth+enc output in dbl pass
+    ret = get_pkt(&auth_ciphered_pkt_dbl_pass,NULL,sizeof(test_data_in_encap) + 4 /* ICV size */);
+    assert_equal_with_message(ret, 0,
+                "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
+                0, ret);
+
+    // Submit one packet on the second context for ciphering
+    ret = sec_process_packet(ctx_handle_1, auth_only_pkt, auth_ciphered_pkt_dbl_pass, NULL);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                    "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                    SEC_SUCCESS, ret);
+    usleep(1000);
+    ret = sec_poll_job_ring(jr_handle_0, limit, &packets_out);
+
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                              "ERROR on sec_poll: expected ret[%d]. actual ret[%d]",
+                              SEC_SUCCESS, ret);
+    // <packets_handled> packets should be retrieved from SEC
+    assert_equal_with_message(packets_out, packets_handled,
+                              "ERROR on sec_poll: expected packets notified[%d]."
+                              "actual packets notified[%d]",
+                              packets_handled, packets_out);
+
+    // Get one packet to be used for auth+enc output in one pass
+    ret = get_pkt(&auth_ciphered_pkt,NULL,sizeof(test_data_in_encap) + 4 /* ICV size */);
+    assert_equal_with_message(ret, 0,
+                "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
+                0, ret);
+
+    // Submit one packet on the third context for ciphering and authentication in one pass
+    ret = sec_process_packet(ctx_handle_2, in_pkt, auth_ciphered_pkt, NULL);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                    "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                    SEC_SUCCESS, ret);
+    usleep(1000);
+    ret = sec_poll_job_ring(jr_handle_1, limit, &packets_out);
+
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                              "ERROR on sec_poll: expected ret[%d]. actual ret[%d]",
+                              SEC_SUCCESS, ret);
+    // <packets_handled> packets should be retrieved from SEC
+    assert_equal_with_message(packets_out, packets_handled,
+                              "ERROR on sec_poll: expected packets notified[%d]."
+                              "actual packets notified[%d]",
+                              packets_handled, packets_out);
+
+    // assert that the pkts obtained through the two methods are bit-exact
+    memcmp_res = memcmp(auth_ciphered_pkt_dbl_pass->address + auth_ciphered_pkt_dbl_pass->offset,
+                        auth_ciphered_pkt->address + auth_ciphered_pkt->offset,
+                        PDCP_HEADER_LENGTH);
+    if ( memcmp_res != 0 )
+    {
+        printf("Error comparing headers:\n");
+    }
+    printf("Double pass header  |  Single Pass header\n");
+    printf("0x%02x                |                0x%02x\n",
+            *(uint8_t*)(auth_ciphered_pkt_dbl_pass->address + auth_ciphered_pkt_dbl_pass->offset),
+            *(uint8_t*)(auth_ciphered_pkt->address + auth_ciphered_pkt->offset) );
+
+    assert_equal_with_message(memcmp_res, 0,
+                              "ERROR on checking packet contents: header is different!");
+
+    memcmp_res = memcmp(auth_ciphered_pkt_dbl_pass->address + auth_ciphered_pkt_dbl_pass->offset + PDCP_HEADER_LENGTH,
+                        auth_ciphered_pkt->address + auth_ciphered_pkt->offset + PDCP_HEADER_LENGTH,
+                        auth_ciphered_pkt->length - PDCP_HEADER_LENGTH);
+    if (memcmp_res != 0)
+    {
+        printf("Error comparing contents:\n");
+    }
+
+    printf("Double pass content |  Single Pass content\n");
+    for( i = 0; i < auth_ciphered_pkt->length - PDCP_HEADER_LENGTH; i++)
+    {
+        printf("0x%02x                |                0x%02x\n",
+                *(uint8_t*)(auth_ciphered_pkt_dbl_pass->address + auth_ciphered_pkt_dbl_pass->offset + PDCP_HEADER_LENGTH + i),
+                *(uint8_t*)(auth_ciphered_pkt->address + auth_ciphered_pkt->offset + PDCP_HEADER_LENGTH + i) );
+    }
+
+    assert_equal_with_message(memcmp_res, 0,
+                              "ERROR on checking packet contents: content is different!");
+
+    put_pkt(&in_pkt);
+    put_pkt(&auth_only_pkt);
+    put_pkt(&auth_ciphered_pkt_dbl_pass);
+    put_pkt(&auth_ciphered_pkt);
+
+    // release sec driver
+    ret = sec_release();
+    assert_equal_with_message(ret, SEC_SUCCESS, "ERROR on sec_release: ret = %d", ret);
+
+}
+
+static void test_c_plane_mixed_downlink_snow_decap(void)
+{
+    int ret = 0;
+    int limit = SEC_JOB_RING_SIZE  - 1;
+    int i = 0;
+    uint32_t packets_out = 0;
+    uint32_t packets_handled = 0;
+    sec_job_ring_handle_t jr_handle_0;
+    sec_job_ring_handle_t jr_handle_1;
+    sec_context_handle_t ctx_handle_0 = NULL;
+    sec_context_handle_t ctx_handle_1 = NULL;
+    sec_context_handle_t ctx_handle_2 = NULL;
+    sec_packet_t *in_pkt = NULL, *auth_ciphered_pkt_dbl_pass = NULL,*auth_ciphered_pkt=NULL, *auth_only_pkt = NULL;
+    int memcmp_res = 0;
+    // configuration data for a PDCP context
+    sec_pdcp_context_info_t ctx_info[3] = {
+        /* cipher-only */
+        {
+            .cipher_algorithm       = SEC_ALG_SNOW,
+            .cipher_key             = cipher_key,
+            .cipher_key_len         = sizeof(test_crypto_key),
+            .integrity_algorithm    = SEC_ALG_NULL,
+            .integrity_key          = integrity_key,
+            .integrity_key_len      = sizeof(test_auth_key),
+            .notify_packet          = &handle_packet_from_sec,
+            .sn_size                = SEC_PDCP_SN_SIZE_5,
+            .bearer                 = test_bearer,
+            .user_plane             = PDCP_CONTROL_PLANE,
+            //.packet_direction       = test_pkt_dir;
+            //.protocol_direction     = test_proto_dir;
+            .hfn                    = test_hfn,
+            .hfn_threshold          = test_hfn_threshold
+        },
+        /* auth-only */
+        {
+            .cipher_algorithm       = SEC_ALG_NULL,
+            .cipher_key             = cipher_key,
+            .cipher_key_len         = sizeof(test_crypto_key),
+            .integrity_algorithm    = SEC_ALG_SNOW,
+            .integrity_key          = integrity_key,
+            .integrity_key_len      = sizeof(test_auth_key),
+            .notify_packet          = &handle_packet_from_sec,
+            .sn_size                = SEC_PDCP_SN_SIZE_5,
+            .bearer                 = test_bearer,
+            .user_plane             = PDCP_CONTROL_PLANE,
+            //.packet_direction       = test_pkt_dir;
+            //.protocol_direction     = test_proto_dir;
+            .hfn                    = test_hfn,
+            .hfn_threshold          = test_hfn_threshold
+        },
+        /* auth+cipher */
+        {
+            .cipher_algorithm       = SEC_ALG_SNOW,
+            .cipher_key             = cipher_key,
+            .cipher_key_len         = sizeof(test_crypto_key),
+            .integrity_algorithm    = SEC_ALG_SNOW,
+            .integrity_key          = integrity_key,
+            .integrity_key_len      = sizeof(test_auth_key),
+            .notify_packet          = &handle_packet_from_sec,
+            .sn_size                = SEC_PDCP_SN_SIZE_5,
+            .bearer                 = test_bearer,
+            .user_plane             = PDCP_CONTROL_PLANE,
+            //.packet_direction       = test_pkt_dir;
+            //.protocol_direction     = test_proto_dir;
+            .hfn                    = test_hfn,
+            .hfn_threshold          = test_hfn_threshold
+        }
+    };
+
+
+    printf("Running test %s\n", __FUNCTION__);
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Init sec driver. No invalid param.
+    ret = sec_init(&sec_config_data, JOB_RING_NUMBER, &job_ring_descriptors);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                              "ERROR on sec_init: expected ret[%d]. actual ret[%d]",
+                              SEC_SUCCESS, ret);
+
+    jr_handle_0 = job_ring_descriptors[0].job_ring_handle;
+    jr_handle_1 = job_ring_descriptors[1].job_ring_handle;
+
+    ctx_info[0].packet_direction =
+    ctx_info[1].packet_direction =
+    ctx_info[2].packet_direction = PDCP_DOWNLINK;
+
+    ctx_info[0].protocol_direction =
+    ctx_info[1].protocol_direction =
+    ctx_info[2].protocol_direction = PDCP_DECAPSULATION;
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Create one context and affine it to first job ring.
+    ret = sec_create_pdcp_context(jr_handle_0, &ctx_info[0], &ctx_handle_0);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+            "ERROR on sec_create_pdcp_context: expected ret[%d]. actual ret[%d]",
+            SEC_SUCCESS, ret);
+
+    // Create another context and affine it to the first job ring.
+    ret = sec_create_pdcp_context(jr_handle_0, &ctx_info[1], &ctx_handle_1);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+            "ERROR on sec_create_pdcp_context: expected ret[%d]. actual ret[%d]",
+            SEC_SUCCESS, ret);
+
+    // Create another context and affine it to the second job ring.
+    ret = sec_create_pdcp_context(jr_handle_1, &ctx_info[2], &ctx_handle_2);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+            "ERROR on sec_create_pdcp_context: expected ret[%d]. actual ret[%d]",
+            SEC_SUCCESS, ret);
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // How many packets to send and receive to/from SEC
+    packets_handled = 1;
+
+    ret = get_pkt(&in_pkt,test_data_in_decap_snow_dl,sizeof(test_data_in_decap_snow_dl));
+    assert_equal_with_message(ret, 0,
+                "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
+                0, ret);
+
+    // Get one packet to be used for auth output
+    ret = get_pkt(&auth_only_pkt,NULL,sizeof(test_data_in_decap_snow_dl));
+    assert_equal_with_message(ret, 0,
+                "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
+                0, ret);
+
+    // Submit one packet on the first context for decryption
+    ret = sec_process_packet(ctx_handle_0, in_pkt, auth_only_pkt, NULL);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                    "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                    SEC_SUCCESS, ret);
+
+    usleep(1000);
+    ret = sec_poll_job_ring(jr_handle_0, limit, &packets_out);
+
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                              "ERROR on sec_poll: expected ret[%d]. actual ret[%d]",
+                              SEC_SUCCESS, ret);
+    // <packets_handled> packets should be retrieved from SEC
+    assert_equal_with_message(packets_out, packets_handled,
+                              "ERROR on sec_poll: expected packets notified[%d]."
+                              "actual packets notified[%d]",
+                              packets_handled, packets_out);
+
+    ret = get_pkt(&auth_ciphered_pkt_dbl_pass,NULL,sizeof(test_data_in_decap_aes_dl) - 4 /* ICV size */);
+    assert_equal_with_message(ret, 0,
+                    "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
+                    0, ret);
+
+    // Submit one packet on the second context for ciphering
+    ret = sec_process_packet(ctx_handle_1, auth_only_pkt, auth_ciphered_pkt_dbl_pass, NULL);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                    "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                    SEC_SUCCESS, ret);
+
+    usleep(1000);
+    ret = sec_poll_job_ring(jr_handle_0, limit, &packets_out);
+
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                              "ERROR on sec_poll: expected ret[%d]. actual ret[%d]",
+                              SEC_SUCCESS, ret);
+    // <packets_handled> packets should be retrieved from SEC
+    assert_equal_with_message(packets_out, packets_handled,
+                              "ERROR on sec_poll: expected packets notified[%d]."
+                              "actual packets notified[%d]",
+                              packets_handled, packets_out);
+
+    ret = get_pkt(&auth_ciphered_pkt,NULL,sizeof(test_data_in_decap_snow_dl) - 4 /* ICV size */);
+    assert_equal_with_message(ret, 0,
+                    "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
+                    0, ret);
+
+    // Submit one packet on the third context for ciphering and authentication in one pass
+    ret = sec_process_packet(ctx_handle_2, in_pkt, auth_ciphered_pkt, NULL);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                    "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                    SEC_SUCCESS, ret);
+
+    usleep(1000);
+    ret = sec_poll_job_ring(jr_handle_1, limit, &packets_out);
+
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                              "ERROR on sec_poll: expected ret[%d]. actual ret[%d]",
+                              SEC_SUCCESS, ret);
+    // <packets_handled> packets should be retrieved from SEC
+    assert_equal_with_message(packets_out, packets_handled,
+                              "ERROR on sec_poll: expected packets notified[%d]."
+                              "actual packets notified[%d]",
+                              packets_handled, packets_out);
+
+    // assert that the pkts obtained through the two methods are bit-exact
+    memcmp_res = memcmp(auth_ciphered_pkt_dbl_pass->address + auth_ciphered_pkt_dbl_pass->offset,
+                        auth_ciphered_pkt->address + auth_ciphered_pkt->offset,
+                        PDCP_HEADER_LENGTH);
+    if ( memcmp_res != 0 )
+    {
+        printf("Error comparing headers:\n");
+    }
+    printf("Double pass header  |  Single Pass header\n");
+    printf("0x%02x                |                0x%02x\n",
+            *(uint8_t*)(auth_ciphered_pkt_dbl_pass->address + auth_ciphered_pkt_dbl_pass->offset),
+            *(uint8_t*)(auth_ciphered_pkt->address + auth_ciphered_pkt->offset) );
+
+    assert_equal_with_message(memcmp_res, 0,
+                              "ERROR on checking packet contents: header is different!");
+
+    memcmp_res = memcmp(auth_ciphered_pkt_dbl_pass->address + auth_ciphered_pkt_dbl_pass->offset + PDCP_HEADER_LENGTH,
+                        auth_ciphered_pkt->address + auth_ciphered_pkt->offset + PDCP_HEADER_LENGTH,
+                        auth_ciphered_pkt->length - PDCP_HEADER_LENGTH);
+    if (memcmp_res != 0)
+    {
+        printf("Error comparing contents:\n");
+    }
+
+    printf("Double pass content |  Single Pass content\n");
+    for( i = 0; i < auth_ciphered_pkt->length - PDCP_HEADER_LENGTH; i++)
+    {
+        printf("0x%02x                |                0x%02x\n",
+                *(uint8_t*)(auth_ciphered_pkt_dbl_pass->address + auth_ciphered_pkt_dbl_pass->offset + PDCP_HEADER_LENGTH + i),
+                *(uint8_t*)(auth_ciphered_pkt->address + auth_ciphered_pkt->offset + PDCP_HEADER_LENGTH + i) );
+    }
+
+    assert_equal_with_message(memcmp_res, 0,
+                              "ERROR on checking packet contents: content is different!");
+
+    put_pkt(&in_pkt);
+    put_pkt(&auth_only_pkt);
+    put_pkt(&auth_ciphered_pkt_dbl_pass);
+    put_pkt(&auth_ciphered_pkt);
+
+    // release sec driver
+    ret = sec_release();
+    assert_equal_with_message(ret, SEC_SUCCESS, "ERROR on sec_release: ret = %d", ret);
+
+}
+
+static void test_c_plane_mixed_uplink_snow_encap(void)
+{
+    int ret = 0;
+    int limit = SEC_JOB_RING_SIZE  - 1;
+    int i = 0;
+    uint32_t packets_out = 0;
+    uint32_t packets_handled = 0;
+    sec_job_ring_handle_t jr_handle_0;
+    sec_job_ring_handle_t jr_handle_1;
+    sec_context_handle_t ctx_handle_0 = NULL;
+    sec_context_handle_t ctx_handle_1 = NULL;
+    sec_context_handle_t ctx_handle_2 = NULL;
+    sec_packet_t *in_pkt = NULL,*auth_ciphered_pkt_dbl_pass = NULL,*auth_ciphered_pkt=NULL, *auth_only_pkt = NULL;
+    int memcmp_res = 0;
+    // configuration data for a PDCP context
+    sec_pdcp_context_info_t ctx_info[3] = {
+        /* auth-only */
+        {
+            .cipher_algorithm       = SEC_ALG_NULL,
+            .cipher_key             = cipher_key,
+            .cipher_key_len         = sizeof(test_crypto_key),
+            .integrity_algorithm    = SEC_ALG_SNOW,
+            .integrity_key          = integrity_key,
+            .integrity_key_len      = sizeof(test_auth_key),
+            .notify_packet          = &handle_packet_from_sec,
+            .sn_size                = SEC_PDCP_SN_SIZE_5,
+            .bearer                 = test_bearer,
+            .user_plane             = PDCP_CONTROL_PLANE,
+            //.packet_direction       = test_pkt_dir;
+            //.protocol_direction     = test_proto_dir;
+            .hfn                    = test_hfn,
+            .hfn_threshold          = test_hfn_threshold
+        },
+        /* cipher-only */
+        {
+            .cipher_algorithm       = SEC_ALG_SNOW,
+            .cipher_key             = cipher_key,
+            .cipher_key_len         = sizeof(test_crypto_key),
+            .integrity_algorithm    = SEC_ALG_NULL,
+            .integrity_key          = integrity_key,
+            .integrity_key_len      = sizeof(test_auth_key),
+            .notify_packet          = &handle_packet_from_sec,
+            .sn_size                = SEC_PDCP_SN_SIZE_5,
+            .bearer                 = test_bearer,
+            .user_plane             = PDCP_CONTROL_PLANE,
+            //.packet_direction       = test_pkt_dir;
+            //.protocol_direction     = test_proto_dir;
+            .hfn                    = test_hfn,
+            .hfn_threshold          = test_hfn_threshold
+        },
+        /* auth+cipher */
+        {
+            .cipher_algorithm       = SEC_ALG_SNOW,
+            .cipher_key             = cipher_key,
+            .cipher_key_len         = sizeof(test_crypto_key),
+            .integrity_algorithm    = SEC_ALG_SNOW,
+            .integrity_key          = integrity_key,
+            .integrity_key_len      = sizeof(test_auth_key),
+            .notify_packet          = &handle_packet_from_sec,
+            .sn_size                = SEC_PDCP_SN_SIZE_5,
+            .bearer                 = test_bearer,
+            .user_plane             = PDCP_CONTROL_PLANE,
+            //.packet_direction       = test_pkt_dir;
+            //.protocol_direction     = test_proto_dir;
+            .hfn                    = test_hfn,
+            .hfn_threshold          = test_hfn_threshold
+        }
+    };
+
+
+    printf("Running test %s\n", __FUNCTION__);
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Init sec driver. No invalid param.
+    ret = sec_init(&sec_config_data, JOB_RING_NUMBER, &job_ring_descriptors);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                              "ERROR on sec_init: expected ret[%d]. actual ret[%d]",
+                              SEC_SUCCESS, ret);
+
+    jr_handle_0 = job_ring_descriptors[0].job_ring_handle;
+    jr_handle_1 = job_ring_descriptors[1].job_ring_handle;
+
+    ctx_info[0].packet_direction =
+    ctx_info[1].packet_direction =
+    ctx_info[2].packet_direction = PDCP_UPLINK;
+
+    ctx_info[0].protocol_direction =
+    ctx_info[1].protocol_direction =
+    ctx_info[2].protocol_direction = PDCP_ENCAPSULATION;
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Create one context and affine it to first job ring.
+    ret = sec_create_pdcp_context(jr_handle_0, &ctx_info[0], &ctx_handle_0);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+            "ERROR on sec_create_pdcp_context: expected ret[%d]. actual ret[%d]",
+            SEC_SUCCESS, ret);
+
+    // Create another context and affine it to the first job ring.
+    ret = sec_create_pdcp_context(jr_handle_0, &ctx_info[1], &ctx_handle_1);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+            "ERROR on sec_create_pdcp_context: expected ret[%d]. actual ret[%d]",
+            SEC_SUCCESS, ret);
+
+    // Create another context and affine it to the second job ring.
+    ret = sec_create_pdcp_context(jr_handle_1, &ctx_info[2], &ctx_handle_2);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+            "ERROR on sec_create_pdcp_context: expected ret[%d]. actual ret[%d]",
+            SEC_SUCCESS, ret);
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // How many packets to send and receive to/from SEC
+    packets_handled = 1;
+
+    ret = get_pkt(&in_pkt,test_data_in_encap,sizeof(test_data_in_encap));
+    assert_equal_with_message(ret, 0,
+                "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
+                0, ret);
+
+    // Get one packet to be used for auth output
+    ret = get_pkt(&auth_only_pkt,NULL,sizeof(test_data_in_encap) + 4 /* ICV size */);
+    assert_equal_with_message(ret, 0,
+                "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
+                0, ret);
+
+    // Submit one packet on the first context for authentication
+    ret = sec_process_packet(ctx_handle_0, in_pkt, auth_only_pkt, NULL);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                    "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                    SEC_SUCCESS, ret);
+    usleep(1000);
+    ret = sec_poll_job_ring(jr_handle_0, limit, &packets_out);
+
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                              "ERROR on sec_poll: expected ret[%d]. actual ret[%d]",
+                              SEC_SUCCESS, ret);
+    // <packets_handled> packets should be retrieved from SEC
+    assert_equal_with_message(packets_out, packets_handled,
+                              "ERROR on sec_poll: expected packets notified[%d]."
+                              "actual packets notified[%d]",
+                              packets_handled, packets_out);
+
+    ret = get_pkt(&auth_ciphered_pkt_dbl_pass,NULL,sizeof(test_data_in_encap) + 4 /* ICV size */);
+    assert_equal_with_message(ret, 0,
+                    "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
+                    0, ret);
+
+    // Submit one packet on the second context for ciphering
+    ret = sec_process_packet(ctx_handle_1, auth_only_pkt, auth_ciphered_pkt_dbl_pass, NULL);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                    "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                    SEC_SUCCESS, ret);
+
+    usleep(1000);
+    ret = sec_poll_job_ring(jr_handle_0, limit, &packets_out);
+
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                              "ERROR on sec_poll: expected ret[%d]. actual ret[%d]",
+                              SEC_SUCCESS, ret);
+    // <packets_handled> packets should be retrieved from SEC
+    assert_equal_with_message(packets_out, packets_handled,
+                              "ERROR on sec_poll: expected packets notified[%d]."
+                              "actual packets notified[%d]",
+                              packets_handled, packets_out);
+
+    ret = get_pkt(&auth_ciphered_pkt,NULL,sizeof(test_data_in_encap) + 4 /* ICV size */);
+    assert_equal_with_message(ret, 0,
+                    "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
+                    0, ret);
+
+    // Submit one packet on the third context for ciphering and authentication in one pass
+    ret = sec_process_packet(ctx_handle_2, in_pkt, auth_ciphered_pkt, NULL);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                    "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                    SEC_SUCCESS, ret);
+    usleep(1000);
+    ret = sec_poll_job_ring(jr_handle_1, limit, &packets_out);
+
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                              "ERROR on sec_poll: expected ret[%d]. actual ret[%d]",
+                              SEC_SUCCESS, ret);
+    // <packets_handled> packets should be retrieved from SEC
+    assert_equal_with_message(packets_out, packets_handled,
+                              "ERROR on sec_poll: expected packets notified[%d]."
+                              "actual packets notified[%d]",
+                              packets_handled, packets_out);
+
+    // assert that the pkts obtained through the two methods are bit-exact
+    memcmp_res = memcmp(auth_ciphered_pkt_dbl_pass->address + auth_ciphered_pkt_dbl_pass->offset,
+                        auth_ciphered_pkt->address + auth_ciphered_pkt->offset,
+                        PDCP_HEADER_LENGTH);
+    if ( memcmp_res != 0 )
+    {
+        printf("Error comparing headers:\n");
+    }
+    printf("Double pass header  |  Single Pass header\n");
+    printf("0x%02x                |                0x%02x\n",
+            *(uint8_t*)(auth_ciphered_pkt_dbl_pass->address + auth_ciphered_pkt_dbl_pass->offset),
+            *(uint8_t*)(auth_ciphered_pkt->address + auth_ciphered_pkt->offset) );
+
+    assert_equal_with_message(memcmp_res, 0,
+                              "ERROR on checking packet contents: header is different!");
+
+    memcmp_res = memcmp(auth_ciphered_pkt_dbl_pass->address + auth_ciphered_pkt_dbl_pass->offset + PDCP_HEADER_LENGTH,
+                        auth_ciphered_pkt->address + auth_ciphered_pkt->offset + PDCP_HEADER_LENGTH,
+                        auth_ciphered_pkt->length - PDCP_HEADER_LENGTH);
+    if (memcmp_res != 0)
+    {
+        printf("Error comparing contents:\n");
+    }
+
+    printf("Double pass content |  Single Pass content\n");
+    for( i = 0; i < auth_ciphered_pkt->length - PDCP_HEADER_LENGTH; i++)
+    {
+        printf("0x%02x                |                0x%02x\n",
+                *(uint8_t*)(auth_ciphered_pkt_dbl_pass->address + auth_ciphered_pkt_dbl_pass->offset + PDCP_HEADER_LENGTH + i),
+                *(uint8_t*)(auth_ciphered_pkt->address + auth_ciphered_pkt->offset + PDCP_HEADER_LENGTH + i) );
+    }
+
+    assert_equal_with_message(memcmp_res, 0,
+                              "ERROR on checking packet contents: content is different!");
+
+    put_pkt(&in_pkt);
+    put_pkt(&auth_only_pkt);
+    put_pkt(&auth_ciphered_pkt_dbl_pass);
+    put_pkt(&auth_ciphered_pkt);
+
+    // release sec driver
+    ret = sec_release();
+    assert_equal_with_message(ret, SEC_SUCCESS, "ERROR on sec_release: ret = %d", ret);
+
+}
+static void test_c_plane_mixed_uplink_snow_decap(void)
+{
+    int ret = 0;
+    int limit = SEC_JOB_RING_SIZE  - 1;
+    int i = 0;
+    uint32_t packets_out = 0;
+    uint32_t packets_handled = 0;
+    sec_job_ring_handle_t jr_handle_0;
+    sec_job_ring_handle_t jr_handle_1;
+    sec_context_handle_t ctx_handle_0 = NULL;
+    sec_context_handle_t ctx_handle_1 = NULL;
+    sec_context_handle_t ctx_handle_2 = NULL;
+    sec_packet_t *in_pkt = NULL, *auth_ciphered_pkt_dbl_pass = NULL,*auth_ciphered_pkt=NULL, *auth_only_pkt = NULL;
+    int memcmp_res = 0;
+    // configuration data for a PDCP context
+    sec_pdcp_context_info_t ctx_info[3] = {
+        /* cipher-only */
+        {
+            .cipher_algorithm       = SEC_ALG_SNOW,
+            .cipher_key             = cipher_key,
+            .cipher_key_len         = sizeof(test_crypto_key),
+            .integrity_algorithm    = SEC_ALG_NULL,
+            .integrity_key          = integrity_key,
+            .integrity_key_len      = sizeof(test_auth_key),
+            .notify_packet          = &handle_packet_from_sec,
+            .sn_size                = SEC_PDCP_SN_SIZE_5,
+            .bearer                 = test_bearer,
+            .user_plane             = PDCP_CONTROL_PLANE,
+            //.packet_direction       = test_pkt_dir;
+            //.protocol_direction     = test_proto_dir;
+            .hfn                    = test_hfn,
+            .hfn_threshold          = test_hfn_threshold
+        },
+        /* auth-only */
+        {
+            .cipher_algorithm       = SEC_ALG_NULL,
+            .cipher_key             = cipher_key,
+            .cipher_key_len         = sizeof(test_crypto_key),
+            .integrity_algorithm    = SEC_ALG_SNOW,
+            .integrity_key          = integrity_key,
+            .integrity_key_len      = sizeof(test_auth_key),
+            .notify_packet          = &handle_packet_from_sec,
+            .sn_size                = SEC_PDCP_SN_SIZE_5,
+            .bearer                 = test_bearer,
+            .user_plane             = PDCP_CONTROL_PLANE,
+            //.packet_direction       = test_pkt_dir;
+            //.protocol_direction     = test_proto_dir;
+            .hfn                    = test_hfn,
+            .hfn_threshold          = test_hfn_threshold
+        },
+        /* auth+cipher */
+        {
+            .cipher_algorithm       = SEC_ALG_SNOW,
+            .cipher_key             = cipher_key,
+            .cipher_key_len         = sizeof(test_crypto_key),
+            .integrity_algorithm    = SEC_ALG_SNOW,
+            .integrity_key          = integrity_key,
+            .integrity_key_len      = sizeof(test_auth_key),
+            .notify_packet          = &handle_packet_from_sec,
+            .sn_size                = SEC_PDCP_SN_SIZE_5,
+            .bearer                 = test_bearer,
+            .user_plane             = PDCP_CONTROL_PLANE,
+            //.packet_direction       = test_pkt_dir;
+            //.protocol_direction     = test_proto_dir;
+            .hfn                    = test_hfn,
+            .hfn_threshold          = test_hfn_threshold
+        }
+    };
+
+
+    printf("Running test %s\n", __FUNCTION__);
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Init sec driver. No invalid param.
+    ret = sec_init(&sec_config_data, JOB_RING_NUMBER, &job_ring_descriptors);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                              "ERROR on sec_init: expected ret[%d]. actual ret[%d]",
+                              SEC_SUCCESS, ret);
+
+    jr_handle_0 = job_ring_descriptors[0].job_ring_handle;
+    jr_handle_1 = job_ring_descriptors[1].job_ring_handle;
+
+    ctx_info[0].packet_direction =
+    ctx_info[1].packet_direction =
+    ctx_info[2].packet_direction = PDCP_UPLINK;
+
+    ctx_info[0].protocol_direction =
+    ctx_info[1].protocol_direction =
+    ctx_info[2].protocol_direction = PDCP_DECAPSULATION;
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Create one context and affine it to first job ring.
+    ret = sec_create_pdcp_context(jr_handle_0, &ctx_info[0], &ctx_handle_0);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+            "ERROR on sec_create_pdcp_context: expected ret[%d]. actual ret[%d]",
+            SEC_SUCCESS, ret);
+
+    // Create another context and affine it to the first job ring.
+    ret = sec_create_pdcp_context(jr_handle_0, &ctx_info[1], &ctx_handle_1);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+            "ERROR on sec_create_pdcp_context: expected ret[%d]. actual ret[%d]",
+            SEC_SUCCESS, ret);
+
+    // Create another context and affine it to the second job ring.
+    ret = sec_create_pdcp_context(jr_handle_1, &ctx_info[2], &ctx_handle_2);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+            "ERROR on sec_create_pdcp_context: expected ret[%d]. actual ret[%d]",
+            SEC_SUCCESS, ret);
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // How many packets to send and receive to/from SEC
+    packets_handled = 1;
+
+    ret = get_pkt(&in_pkt,test_data_in_decap_snow_ul,sizeof(test_data_in_decap_snow_ul));
+    assert_equal_with_message(ret, 0,
+                "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
+                0, ret);
+
+    // Get one packet to be used for auth output
+    ret = get_pkt(&auth_only_pkt,NULL,sizeof(test_data_in_decap_snow_ul));
+    assert_equal_with_message(ret, 0,
+                "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
+                0, ret);
+
+    // Submit one packet on the first context for decryption
+    ret = sec_process_packet(ctx_handle_0, in_pkt, auth_only_pkt, NULL);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                    "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                    SEC_SUCCESS, ret);
+
+    usleep(1000);
+    ret = sec_poll_job_ring(jr_handle_0, limit, &packets_out);
+
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                              "ERROR on sec_poll: expected ret[%d]. actual ret[%d]",
+                              SEC_SUCCESS, ret);
+    // <packets_handled> packets should be retrieved from SEC
+    assert_equal_with_message(packets_out, packets_handled,
+                              "ERROR on sec_poll: expected packets notified[%d]."
+                              "actual packets notified[%d]",
+                              packets_handled, packets_out);
+
+    ret = get_pkt(&auth_ciphered_pkt_dbl_pass,NULL,sizeof(test_data_in_decap_snow_ul) - 4 /* ICV size */);
+    assert_equal_with_message(ret, 0,
+                    "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
+                    0, ret);
+
+    // Submit one packet on the second context for ciphering
+    ret = sec_process_packet(ctx_handle_1, auth_only_pkt, auth_ciphered_pkt_dbl_pass, NULL);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                    "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                    SEC_SUCCESS, ret);
+
+    usleep(1000);
+    ret = sec_poll_job_ring(jr_handle_0, limit, &packets_out);
+
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                              "ERROR on sec_poll: expected ret[%d]. actual ret[%d]",
+                              SEC_SUCCESS, ret);
+    // <packets_handled> packets should be retrieved from SEC
+    assert_equal_with_message(packets_out, packets_handled,
+                              "ERROR on sec_poll: expected packets notified[%d]."
+                              "actual packets notified[%d]",
+                              packets_handled, packets_out);
+
+    ret = get_pkt(&auth_ciphered_pkt,NULL,sizeof(test_data_in_decap_snow_ul) - 4 /* ICV size */);
     assert_equal_with_message(ret, 0,
                     "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
                     0, ret);
@@ -1294,10 +2266,15 @@ static TestSuite * mixed_descs_tests()
     teardown(suite, test_teardown);
 
     /* start adding unit tests */
-    add_test(suite, test_c_plane_mixed_downlink_encap);
-    add_test(suite, test_c_plane_mixed_uplink_encap);
-    add_test(suite, test_c_plane_mixed_downlink_decap);
-    add_test(suite, test_c_plane_mixed_uplink_decap);
+    add_test(suite, test_c_plane_mixed_downlink_aes_encap);
+    add_test(suite, test_c_plane_mixed_uplink_aes_encap);
+    add_test(suite, test_c_plane_mixed_downlink_aes_decap);
+    add_test(suite, test_c_plane_mixed_uplink_aes_decap);
+
+    add_test(suite, test_c_plane_mixed_downlink_snow_encap);
+    add_test(suite, test_c_plane_mixed_uplink_snow_encap);
+    add_test(suite, test_c_plane_mixed_downlink_snow_decap);
+    add_test(suite, test_c_plane_mixed_uplink_snow_decap);
 
     return suite;
 }
@@ -1324,10 +2301,15 @@ int main(int argc, char *argv[])
 
     /* Run tests */
 
-    run_single_test(suite, "test_c_plane_mixed_downlink_encap", reporter);
-    run_single_test(suite, "test_c_plane_mixed_uplink_encap", reporter);
-    run_single_test(suite, "test_c_plane_mixed_downlink_decap", reporter);
-    run_single_test(suite, "test_c_plane_mixed_uplink_decap", reporter);
+    run_single_test(suite, "test_c_plane_mixed_downlink_aes_encap", reporter);
+    run_single_test(suite, "test_c_plane_mixed_uplink_aes_encap", reporter);
+    run_single_test(suite, "test_c_plane_mixed_downlink_aes_decap", reporter);
+    run_single_test(suite, "test_c_plane_mixed_uplink_aes_decap", reporter);
+
+    run_single_test(suite, "test_c_plane_mixed_downlink_snow_encap", reporter);
+    run_single_test(suite, "test_c_plane_mixed_uplink_snow_encap", reporter);
+    run_single_test(suite, "test_c_plane_mixed_downlink_snow_decap", reporter);
+    run_single_test(suite, "test_c_plane_mixed_uplink_snow_decap", reporter);
 
     destroy_test_suite(suite);
     (*reporter->destroy)(reporter);

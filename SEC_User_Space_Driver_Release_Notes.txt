@@ -1,8 +1,8 @@
 ----------------------------------------------------------------------------------------------------
 ABOUT THIS FILE
 ----------------------------------------------------------------------------------------------------
-Date:	01 November 2011
-SEC User Space Driver version:	2.2
+Date:	26 January 2011
+SEC User Space Driver version:	2.3
 
 This file contains SEC User Space Driver-related information about versioning, hardware, software,
 and tools dependencies, as well as known issues and a history of changes.
@@ -35,9 +35,15 @@ SEC USER SPACE DRIVER - ERRATA
 ----------------------------------------------------------------------------------------------------
 SEC USER SPACE DRIVER - CHANGELOG
 ----------------------------------------------------------------------------------------------------
+Version 2.3
+    - Added support for the following algorithm combinations for PDCP Control Plane
+        - AES-CTR encryption + NULL authentication
+        - SNOW f8 encryption + NULL authentication
+        - AES-CMAC authentication + NULL encryption
+        - SNOW f9 authentication + NULL encryption
 Version 2.2
-	- Updated memory management mechanism to take advantage of User space memory
-	  manager (USMMGR) feature from WUSDK Release 0.5
+    - Updated memory management mechanism to take advantage of User space memory
+      manager (USMMGR) feature from WUSDK Release 0.5
 Version 2.1
 	- First release of SEC User Space driver on PSC9131 RDB.
 	- Implements PDPC User Plane and control plane with following algorithms: SNOW, AES and NULL.

@@ -678,27 +678,27 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
          * Start Index = 5, in order to jump over PDB
          * ZRO,CIF,SC = 0
          * PD = 0, SHARE = Defer (use value from JD)
-         * Descriptor Length = 16
+         * Descriptor Length = 10
          */                                                     \
-        (descriptor)->deschdr.command.word  = 0xBA850210;       \
+        (descriptor)->deschdr.command.word  = 0xBA85020A;       \
         /* CTYPE = Key
          * Class = 2 (authentication)
          * SGF = 0
-         * IMM = 1 (key immediately after command)
+         * IMM = 0 (key ptr after command)
          * ENC, NWB, EKT, KDEST = 0
          * TK = 0
          * Length = 0 (to be completed at runtime)
          */                                                     \
-        (descriptor)->key2_cmd.command.word = 0x04800000;       \
+        (descriptor)->key2_cmd.command.word = 0x04000000;       \
         /* CTYPE = Key
          * Class = 1 (encryption)
          * SGF = 0
-         * IMM = 1 (key immediately after command)
+         * IMM = 0 (key ptr after command)
          * ENC, NWB, EKT, KDEST = 0
          * TK = 0
          * Length = 0 (to be completed at runtime)
          */                                                     \
-        (descriptor)->key1_cmd.command.word = 0x02800000;       \
+        (descriptor)->key1_cmd.command.word = 0x02000000;       \
         /* CTYPE = Protocol operation
          * OpType = 0 (to be completed @ runtime)
          * Protocol ID = PDCP - C-Plane
@@ -716,27 +716,27 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
          *                  key2 command
          * ZRO,CIF,SC = 0
          * PD = 0, SHARE = Defer (use value from JD)
-         * Descriptor Length = 16
+         * Descriptor Length = 10
          */                                                     \
-        (descriptor)->deschdr.command.word  = 0xBA8A0210;       \
+        (descriptor)->deschdr.command.word  = 0xBA8A020A;       \
         /* CTYPE = Key
          * Class = 2 (authentication)
          * SGF = 0
-         * IMM = 1 (key immediately after command)
+         * IMM = 0 (key ptr after command)
          * ENC, NWB, EKT, KDEST = 0
          * TK = 0
          * Length = 0 (to be completed at runtime)
          */                                                     \
-        (descriptor)->key2_cmd.command.word = 0x04800000;       \
+        (descriptor)->key2_cmd.command.word = 0x04000000;       \
         /* CTYPE = Key
          * Class = 1 (encryption)
          * SGF = 0
-         * IMM = 1 (key immediately after command)
+         * IMM = 0 (key after command)
          * ENC, NWB, EKT, KDEST = 0
          * TK = 0
          * Length = 0 (to be completed at runtime)
          */                                                     \
-        (descriptor)->key1_cmd.command.word = 0x02800000;       \
+        (descriptor)->key1_cmd.command.word = 0x02000000;       \
         /* CTYPE = Protocol operation
          * OpType = 0 (to be completed @ runtime)
          * Protocol ID = PDCP - C-Plane
@@ -745,22 +745,14 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
         (descriptor)->protocol.command.word = 0x80420000;       \
 }
 
-#define SEC_PDCP_SD_COPY_KEY(key_dst,key_src,len)    {              \
-        int __cnt;                                                  \
-        for(__cnt = 0; __cnt < (len)/sizeof(uint32_t); __cnt++)     \
-        {                                                           \
-            (key_dst)[__cnt] = *(((uint32_t*)(key_src))+__cnt);     \
-        }                                                           \
-}
-
 #define SEC_PDCP_SD_SET_KEY1(descriptor,key,len) {              \
         (descriptor)->key1_cmd.command.field.length = (len);    \
-        SEC_PDCP_SD_COPY_KEY((descriptor)->key1,(key),(len));   \
+        (descriptor)->key1_ptr = sec_vtop((key));               \
 }
 
 #define SEC_PDCP_SD_SET_KEY2(descriptor,key,len) {              \
         (descriptor)->key2_cmd.command.field.length = (len);    \
-        SEC_PDCP_SD_COPY_KEY((descriptor)->key2,(key),(len));   \
+        (descriptor)->key2_ptr = sec_vtop((key));               \
 }
 
 #define PDCP_JD_SET_IN_PTR(descriptor,phys_addr,offset,length) {    \
@@ -1106,11 +1098,12 @@ typedef struct sec_crypto_pdb_s
 struct sec_pdcp_sd_t{
     struct descriptor_header_s  deschdr;
     sec_crypto_pdb_t            pdb;
-
     struct key_command_s        key2_cmd;
-    uint32_t                    key2[PDCP_SD_KEY_LEN];
+#warning "Update for 36 bits addresses"
+    dma_addr_t                  key2_ptr;
     struct key_command_s        key1_cmd;
-    uint32_t                    key1[PDCP_SD_KEY_LEN];
+#warning "Update for 36 bits addresses"
+    dma_addr_t                  key1_ptr;
     struct protocol_operation_command_s protocol;
 
 } PACKED;

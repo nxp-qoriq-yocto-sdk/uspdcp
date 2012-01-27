@@ -1,7 +1,7 @@
 ----------------------------------------------------------------------------------------------------
 ABOUT THIS FILE
 ----------------------------------------------------------------------------------------------------
-Date:	01 November 2011
+Date:	26 January 2012
 
 This Readme file contains details on SEC user space driver package contents as well as instructions
 showing how to compile and install SEC user space driver related binaries:
@@ -73,7 +73,9 @@ further reffered to as <psc9131-sdk>.
 	-> PowerPC Cross compiler path. The SEC driver was tested with gcc-4.5.55-eglibc-2.11.55,
 	  which is the GNU toolchain installed by default with ltib for Freescale SDK 1.0.
 
-	-> WUSDK BSP release path. This depends on the location of the release.
+    -> WUSDK Kernel source path. Usually found under <WUSDK BSP release path>/src/linux-2.6
+
+    -> WUSDK IPC source path. Usually found under <WUSDK BSP release path>/src/ipc
 
 	-> SEC device version. Configured for SEC 4.4 now.
 ----------------------------------------------------------------------------------------------------
@@ -154,6 +156,7 @@ HOW TO RUN TESTS FOR SEC USER SPACE DRIVER
 	[psc9131rdb]~ ./test_dma_mem
 	[psc9131rdb]~ ./test_lists
 	[psc9131rdb]~ ./test_uio_notify
+    [psc9131rdb]~ ./mixed_descs_tests
 
 * Run system tests:
 	[psc9131rdb]~ ./test_sec_driver
