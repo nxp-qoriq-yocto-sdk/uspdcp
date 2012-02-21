@@ -1,8 +1,8 @@
 ----------------------------------------------------------------------------------------------------
 ABOUT THIS FILE
 ----------------------------------------------------------------------------------------------------
-Date:	01 November 2011
-SEC User Space Driver version:	2.2
+Date:	21 February 2012
+SEC User Space Driver version:	2.3
 
 This file contains SEC User Space Driver-related information about versioning, hardware, software,
 and tools dependencies, as well as known issues and a history of changes.
@@ -13,7 +13,7 @@ Hardware:
 	- PSC9131RDB board
 
 Software:
-	- Freescale WUSDK Release 0.5
+	- Freescale WUSDK Release 0.10
 	- Linux kernel 2.6.33.9 + PREEMPT_RT release 31 (patch from Linux community) + Freescale patches
 
 Tools:
@@ -30,14 +30,31 @@ SEC USER SPACE DRIVER - LIMITATIONS
 SEC USER SPACE DRIVER - ERRATA
 ----------------------------------------------------------------------------------------------------
 
-1. Mixed algorithm combinations for PDCP Control Plane are not supported
+1. The following mixed algorithm combinations for PDCP Control Plane are not supported:
+	- AES-CTR encryption + SNOW f9 integrity
+	- SNOW f8 encryption + AES-CMAC integrity
+
+2. The following mixed algorithm combinations for PDCP Control Plane are supported:
+
+	- AES-CTR encryption + NULL integrity
+	- SNOW f8 encryption + NULL integrity
+	- AES-CMAC integrity + NULL encryption
+	- SNOW f9 integrity + NULL encryption
+
+but there is no support for HFN management according to ETSI TS 136 323, section 5.1.2.1.2
 
 ----------------------------------------------------------------------------------------------------
 SEC USER SPACE DRIVER - CHANGELOG
 ----------------------------------------------------------------------------------------------------
+Version 2.3
+    - Added support for the following algorithm combinations for PDCP Control Plane
+        - AES-CTR encryption + NULL integrity
+        - SNOW f8 encryption + NULL integrity
+        - AES-CMAC integrity + NULL encryption
+        - SNOW f9 integrity + NULL encryption
 Version 2.2
-	- Updated memory management mechanism to take advantage of User space memory
-	  manager (USMMGR) feature from WUSDK Release 0.5
+    - Updated memory management mechanism to take advantage of User space memory
+      manager (USMMGR) feature from WUSDK Release 0.5
 Version 2.1
 	- First release of SEC User Space driver on PSC9131 RDB.
 	- Implements PDPC User Plane and control plane with following algorithms: SNOW, AES and NULL.

@@ -1262,7 +1262,7 @@ sec_return_code_t sec_init(const sec_config_t *sec_config_data,
     {
         SEC_INFO("Allocated %u KB for SEC driver, remaining free %lu KB",
                 ((dma_addr_t)g_dma_mem_free - (dma_addr_t)g_dma_mem_start)/1024,
-                (DMA_MEM_SEC_DRIVER - ((dma_addr_t)(dma_addr_t)g_dma_mem_free - (dma_addr_t)g_dma_mem_start))/1024);
+                (SEC_DMA_MEMORY_SIZE - ((dma_addr_t)(dma_addr_t)g_dma_mem_free - (dma_addr_t)g_dma_mem_start))/1024);
     }
     else
     {

@@ -45,75 +45,10 @@
 // START OF CONFIGURATION SECTION
 /******************************************************************************/
 
-//////////////////////////////////////////////////////////////////////////
-// !!!!!!!!!!!!!!!!!       IMPORTANT !!!!!!!!!!!!!!!!
-//Select one and only one algorithm at a time, from below
-//////////////////////////////////////////////////////////////////////////
-
-// Ciphering
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F8_ENC
-// Deciphering
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F8_DEC
-
-// Authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F9_ENC
-// Authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F9_DEC
-
-// Ciphering
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CTR_ENC
-// Deciphering
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CTR_DEC
-
-// Authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CMAC_ENC
-// Authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CMAC_DEC
-
-// Test data plane PDCP with NULL-crypto(EEA0) algorithm set
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_DATA_PLANE_NULL_ALGO
-
-// Test control plane PDCP with NULL-crypto(EEA0)
-// and NULL-authentication(EIA0) algorithms set
-#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_NULL_ALGO
-
-// Test PDCP control plane encapsulation with SNOW F8 ciphering
-// and SNOW F9 authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_SNOW_F8_SNOW_F9_ENC
-// Test PDCP control plane decapsulation with SNOW F8 ciphering
-// and SNOW F9 authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_SNOW_F8_SNOW_F9_DEC
-
-
-// Test PDCP control plane encapsulation with AES CTR ciphering
-// and AES CMAC authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_AES_CTR_AES_CMAC_ENC
-// Test PDCP control plane decapsulation with AES CTR ciphering
-// and AES CMAC authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_AES_CTR_AES_CMAC_DEC
-
-
-// Test PDCP control plane encapsulation with AES CTR ciphering
-// and SNOW F9 authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_AES_CTR_SNOW_F9_ENC
-// Test PDCP control plane decapsulation with AES CTR ciphering
-// and SNOW F9 authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_AES_CTR_SNOW_F9_DEC
-
-// Test PDCP control plane encapsulation with SNOW F8 ciphering
-// and AES CMAC authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_SNOW_F8_AES_CMAC_ENC
-// Test PDCP control plane decapsulation with SNOW F8 ciphering
-// and AES CMAC authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_SNOW_F8_AES_CMAC_DEC
-
-
-// Test PDCP control plane decapsulation with SNOW F8 ciphering
-// and NULL authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_CTRL_PLANE_SNOW_F8_NULL_DEC
-
-
-
+/* Each PDCP context will be assigned a random scenario (ciphering + integrity
+ * algorithms will be random.
+ */
+//#define RANDOM_TESTING
 
 //////////////////////////////////////////////////////////////////////////////
 // Number of PDCP contexts options
@@ -123,11 +58,16 @@
 // Generate randomly the number of PDCP contexts, in the range
 // #MIN_PDCP_CONTEXT_NUMBER ... #MAX_PDCP_CONTEXT_NUMBER
 
+#ifdef RANDOM_TESTING
 // Higher limit for number of PDCP contexts
 #define MAX_PDCP_CONTEXT_NUMBER         15
 // Lower limit for number of PDCP contexts
 #define MIN_PDCP_CONTEXT_NUMBER         5
+#else
+// Will use one scenario per context
+#define MAX_PDCP_CONTEXT_NUMBER             (sizeof(test_scenarios)/sizeof(test_scenarios[0]))
 
+#endif
 // The maximum number of packets processed per context
 // This test application will process a random number of packets per context ranging
 // from a #MIN_PACKET_NUMBER_PER_CTX to #MAX_PACKET_NUMBER_PER_CTX value.
@@ -141,15 +81,18 @@
 //////////////////////////////////////////////////////////////////////////////
 
 // Disable test application logging
-#define test_printf(format, ...)
+//#define test_printf(format, ...)
 
 // Enable test application logging
-//#define test_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__)
+#define test_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__)
 
 /******************************************************************************/
 // END OF CONFIGURATION SECTION
 /******************************************************************************/
 
+/*==============================================================================
+                         GLOBAL VARIABLE DECLARATIONS
+==============================================================================*/
 
 /*==============================================================================
                                     ENUMS
@@ -161,29 +104,6 @@
 
 /*==============================================================================
                                  CONSTANTS
-==============================================================================*/
-/** List of algorithms supported by this test */
-#define PDCP_TEST_SNOW_F8_ENC                       0
-#define PDCP_TEST_SNOW_F8_DEC                       1
-#define PDCP_TEST_SNOW_F9_ENC                       2
-#define PDCP_TEST_SNOW_F9_DEC                       3
-#define PDCP_TEST_AES_CTR_ENC                       4
-#define PDCP_TEST_AES_CTR_DEC                       5
-#define PDCP_TEST_AES_CMAC_ENC                      6
-#define PDCP_TEST_AES_CMAC_DEC                      7
-#define PDCP_TEST_DATA_PLANE_NULL_ALGO              8
-#define PDCP_TEST_CTRL_PLANE_NULL_ALGO              9
-#define PDCP_TEST_CTRL_PLANE_SNOW_F8_SNOW_F9_ENC    10
-#define PDCP_TEST_CTRL_PLANE_SNOW_F8_SNOW_F9_DEC    11
-#define PDCP_TEST_CTRL_PLANE_AES_CTR_AES_CMAC_ENC   12
-#define PDCP_TEST_CTRL_PLANE_AES_CTR_AES_CMAC_DEC   13
-#define PDCP_TEST_CTRL_PLANE_AES_CTR_SNOW_F9_ENC    14
-#define PDCP_TEST_CTRL_PLANE_AES_CTR_SNOW_F9_DEC    15
-#define PDCP_TEST_CTRL_PLANE_SNOW_F8_AES_CMAC_ENC   16
-#define PDCP_TEST_CTRL_PLANE_SNOW_F8_AES_CMAC_DEC   17
-#define PDCP_TEST_CTRL_PLANE_SNOW_F8_NULL_DEC       18
-/*==============================================================================
-                         GLOBAL VARIABLE DECLARATIONS
 ==============================================================================*/
 
 /*==============================================================================
