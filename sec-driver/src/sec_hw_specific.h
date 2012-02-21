@@ -645,7 +645,7 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
          *          by this job descriptor,pointer in next word)
          * REO = 1 (execute job descr. first, shared descriptor
          *          after)
-         * SHARE = Always
+         * SHARE = DEFER
          * Descriptor Length = 0 ( to be completed @ runtime )
          *
          */                                                     \
@@ -672,15 +672,15 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 
 #define SEC_PDCP_INIT_CPLANE_SD(descriptor){ \
         /* CTYPE = shared job descriptor                        \
-         * RIF = 1
+         * RIF = 0
          * DNR = 0
          * ONE = 1
          * Start Index = 5, in order to jump over PDB
          * ZRO,CIF,SC = 0
-         * PD = 0, SHARE = Defer (use value from JD)
+         * PD = 0, SHARE = WAIT
          * Descriptor Length = 10
          */                                                     \
-        (descriptor)->deschdr.command.word  = 0xBA85020A;       \
+        (descriptor)->deschdr.command.word  = 0xB885010A;       \
         /* CTYPE = Key
          * Class = 2 (authentication)
          * SGF = 0
@@ -709,16 +709,16 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 
 #define SEC_PDCP_INIT_UPLANE_SD(descriptor){ \
         /* CTYPE = shared job descriptor                        \
-         * RIF = 1
+         * RIF = 0
          * DNR = 0
          * ONE = 1
-         * Start Index = 10, in order to jump over PDB and
+         * Start Index = 7, in order to jump over PDB and
          *                  key2 command
          * ZRO,CIF,SC = 0
-         * PD = 0, SHARE = Defer (use value from JD)
+         * PD = 0, SHARE = WAIT
          * Descriptor Length = 10
          */                                                     \
-        (descriptor)->deschdr.command.word  = 0xBA8A020A;       \
+        (descriptor)->deschdr.command.word  = 0xB887010A;       \
         /* CTYPE = Key
          * Class = 2 (authentication)
          * SGF = 0

@@ -1,7 +1,7 @@
 ----------------------------------------------------------------------------------------------------
 ABOUT THIS FILE
 ----------------------------------------------------------------------------------------------------
-Date:	26 January 2012
+Date:	20 February 2012
 
 This Readme file contains details on SEC user space driver package contents as well as instructions
 showing how to compile and install SEC user space driver related binaries:
@@ -32,8 +32,9 @@ The package contains:
 				--> Systems-tests in folder <system-tests>:
 					---> <test-scenario-poll-irq-napi>
 						 This is a two-thread test application that allows testing PDCP data plane and control
-						 plane with an option to select the ciphering and integrity check algorithms.
-						 Where available, processing result is checked against reference test vectors.
+						 plane which testes all available combinations of protocol direction (Uplink/Downlink),
+						 protocol direction (Encapsulate/Decapsulate), with an option of selecting a random subset
+						 of these. All the obtained results are checked againsted pre-made reference testt vectors.
 						 Exercises all the available options for retrieving processed packets: poll, IRQ, NAPI.
 						 See <test-scenario-poll-irq-napi>/readme.txt for more details.
 
@@ -143,20 +144,13 @@ HOW TO RUN TESTS FOR SEC USER SPACE DRIVER
 	B. Install binaries in ltib's rootfs directory and redeploy rootfs on PSC9131RDB board.
 	In this case, run tests using test name.
 
-* Before running the tests, one must modify the following kernel parameters:
-	- shmmax : used to define the maximum size (in bytes) for a shared memory segment
-	- shmall : total amount of shared memory (in pages) that can be used at one time on the system
-  The following commands must be issued:
-	[psc9131rdb]~ echo 268435456 > /proc/sys/kernel/shmmax
-	[psc9131rdb]~ echo 4194304 > /proc/sys/kernel/shmall
-
 * Run unit tests:
 	[psc9131rdb]~ ./test_api
 	[psc9131rdb]~ ./test_contexts_pool
 	[psc9131rdb]~ ./test_dma_mem
 	[psc9131rdb]~ ./test_lists
 	[psc9131rdb]~ ./test_uio_notify
-    [psc9131rdb]~ ./mixed_descs_tests
+	[psc9131rdb]~ ./mixed_descs_tests
 
 * Run system tests:
 	[psc9131rdb]~ ./test_sec_driver
