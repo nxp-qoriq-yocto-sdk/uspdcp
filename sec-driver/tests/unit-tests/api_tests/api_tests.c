@@ -1142,11 +1142,13 @@ static void test_sec_process_packet_invalid_params(void)
     get_free_packet(packet_idx,&in_packet2,&out_packet2);
     ////////////////////////////////////
     ////////////////////////////////////
-#if 0
-    // Submit one packet, two fragments input, one output
 
+    // Submit one packet, two fragments input, one output
     in_packet->num_fragments = 1; // two fragments
-    in_packet->total_length = in_packet->length + in_packet2->length;;
+    in_packet->total_length = in_packet->length;
+    in_packet->length /= 2;
+    in_packet2->length /= 2;
+    
 
     in_sg_packet[0] = *in_packet;
     in_sg_packet[1] = *in_packet2;
@@ -1159,7 +1161,11 @@ static void test_sec_process_packet_invalid_params(void)
     // Restore
     in_packet->num_fragments = 0;
     in_packet->total_length = 0;
-#endif
+    
+    in_packet->length *= 2;
+    in_packet2->length *= 2;
+    
+    
     ////////////////////////////////////
     ////////////////////////////////////
 
@@ -1245,14 +1251,15 @@ static void test_sec_process_packet_invalid_params(void)
 
     ////////////////////////////////////
     ////////////////////////////////////
-#if 0
+
     // Submit one packet, three fragments input, two fragments output
 
     in_packet->num_fragments = 2; // three fragments
     in_packet->total_length = 3 * in_packet->length;
 
     out_packet->num_fragments = 1; // two fragments
-    out_packet->total_length = 2 * out_packet->length;
+    out_packet->total_length = 3 * out_packet->length;
+    out_packet2->length *= 2;
 
     in_sg_packet[0] = *in_packet;
     in_sg_packet[1] = *in_packet2;
@@ -1272,9 +1279,10 @@ static void test_sec_process_packet_invalid_params(void)
 
     out_packet->num_fragments = 0;
     out_packet->total_length = 0;
-#endif
+    out_packet2->length /= 2;
+    
     // Poll five packets so the test below still works
-    sec_poll(3, 1, &tmp_num);
+    sec_poll(5, 1, &tmp_num);
 #endif // defined(SEC_HW_VERSION_4_4) && (SEC_ENABLE_SCATTER_GATHER == ON)
 
     // Delete context with 1 packet in flight.
