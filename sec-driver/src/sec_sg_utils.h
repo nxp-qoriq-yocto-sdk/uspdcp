@@ -55,10 +55,6 @@ extern "C"{
 /*==================================================================================================
                                        DEFINES AND MACROS
 ==================================================================================================*/
-
-/** Maximum number of entries that can be used */
-#define SEC_MAX_SG_TBL_ENTRIES  0x20
-
 /** Macro for checking if thre is a Scatter-Gather input table
  * for particular job.
  */

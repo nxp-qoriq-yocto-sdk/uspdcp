@@ -190,9 +190,11 @@ static uint8_t list_empty_with_lock(list_t * list)
 	uint8_t ret;
 
 	ASSERT(list != NULL);
-	pthread_mutex_lock(&list->mutex);
+	ASSERT( pthread_mutex_lock(&list->mutex) == 0);
+
 	ret = list_empty(list);
-	pthread_mutex_unlock(&list->mutex);
+	ASSERT( pthread_mutex_unlock(&list->mutex) == 0);
+
 
 	return ret;
 }
@@ -228,9 +230,13 @@ static list_node_t* list_remove_first_with_lock(list_t *list)
 	list_node_t * node;
 
 	ASSERT(list != NULL);
-	pthread_mutex_lock(&list->mutex);
+	if( pthread_mutex_lock(&list->mutex) != 0 )
+        return NULL;
+
 	node = list_remove_first(list);
-	pthread_mutex_unlock(&list->mutex);
+
+	if( pthread_mutex_unlock(&list->mutex) != 0 )
+        return NULL;
 
 	return node;
 }
@@ -238,22 +244,26 @@ static list_node_t* list_remove_first_with_lock(list_t *list)
 static void list_add_tail(list_t *list, list_node_t* node)
 {
 	ASSERT(node != NULL);
+    ASSERT( list->head.prev != NULL );
+    ASSERT( &list->head != NULL );
 
 	list->head.prev->next = node;
 	node->prev = list->head.prev;
 	list->head.prev = node;
 	node->next = &list->head;
 
-	ASSERT(node->next != NULL);
-	ASSERT(node->prev != NULL);
+
 }
 
 static void list_add_tail_with_lock(list_t *list, list_node_t* node)
 {
 	ASSERT(list != NULL);
-	pthread_mutex_lock(&list->mutex);
-	list_add_tail(list, node);
-	pthread_mutex_unlock(&list->mutex);
+
+    ASSERT(pthread_mutex_lock(&list->mutex) == 0);
+
+    list_add_tail(list, node);
+
+    ASSERT(pthread_mutex_unlock(&list->mutex) == 0);
 }
 
 static void list_delete_node(list_t * list, list_node_t *node)
@@ -274,9 +284,11 @@ static void list_delete_node(list_t * list, list_node_t *node)
 static void list_delete_node_with_lock(list_t * list, list_node_t *node)
 {
 	ASSERT(list != NULL);
-	pthread_mutex_lock(&list->mutex);
+	ASSERT(pthread_mutex_lock(&list->mutex) == 0);
+
 	list_delete_node(list, node);
-	pthread_mutex_unlock(&list->mutex);
+
+	ASSERT( pthread_mutex_unlock(&list->mutex) == 0);
 }
 
 static list_node_t* get_first(list_t * list)
@@ -315,9 +327,11 @@ static void list_attach_list_to_tail(list_t *list, list_t *new_list)
 static void list_attach_list_to_tail_with_lock(list_t *list, list_t *new_list)
 {
 	ASSERT(list != NULL);
-	pthread_mutex_lock(&list->mutex);
-	list_attach_list_to_tail(list, new_list);
-	pthread_mutex_unlock(&list->mutex);
+	ASSERT(pthread_mutex_lock(&list->mutex) == 0);
+
+    list_attach_list_to_tail(list, new_list);
+
+    ASSERT(pthread_mutex_unlock(&list->mutex) == 0);
 }
 
 static void list_delete_matching_nodes(list_t *list,
@@ -363,9 +377,12 @@ static void list_delete_matching_nodes_with_lock(list_t *list,
 		                                         node_modify_after_delete_func node_modify_after_delete)
 {
 	ASSERT(list != NULL);
-	pthread_mutex_lock(&list->mutex);
-	list_delete_matching_nodes(list, deleted_nodes_list, is_match, node_modify_after_delete);
-	pthread_mutex_unlock(&list->mutex);
+
+    ASSERT(pthread_mutex_lock(&list->mutex) == 0);
+
+    list_delete_matching_nodes(list, deleted_nodes_list, is_match, node_modify_after_delete);
+
+    ASSERT(pthread_mutex_unlock(&list->mutex) == 0);
 }
 
 /*==================================================================================================
@@ -409,7 +426,7 @@ void list_destroy(list_t *list)
 {
 	if (list->thread_safe == THREAD_SAFE_LIST)
 	{
-		pthread_mutex_destroy(&list->mutex);
+		ASSERT(pthread_mutex_destroy(&list->mutex) == 0);
 	}
 	memset(list, 0, sizeof(list));
 }

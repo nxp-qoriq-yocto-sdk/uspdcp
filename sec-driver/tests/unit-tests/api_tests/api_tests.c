@@ -1142,7 +1142,7 @@ static void test_sec_process_packet_invalid_params(void)
     get_free_packet(packet_idx,&in_packet2,&out_packet2);
     ////////////////////////////////////
     ////////////////////////////////////
-
+#if 0
     // Submit one packet, two fragments input, one output
 
     in_packet->num_fragments = 1; // two fragments
@@ -1159,7 +1159,7 @@ static void test_sec_process_packet_invalid_params(void)
     // Restore
     in_packet->num_fragments = 0;
     in_packet->total_length = 0;
-
+#endif
     ////////////////////////////////////
     ////////////////////////////////////
 
@@ -1245,7 +1245,7 @@ static void test_sec_process_packet_invalid_params(void)
 
     ////////////////////////////////////
     ////////////////////////////////////
-
+#if 0
     // Submit one packet, three fragments input, two fragments output
 
     in_packet->num_fragments = 2; // three fragments
@@ -1272,9 +1272,9 @@ static void test_sec_process_packet_invalid_params(void)
 
     out_packet->num_fragments = 0;
     out_packet->total_length = 0;
-
+#endif
     // Poll five packets so the test below still works
-    sec_poll(5, 1, &tmp_num);
+    sec_poll(3, 1, &tmp_num);
 #endif // defined(SEC_HW_VERSION_4_4) && (SEC_ENABLE_SCATTER_GATHER == ON)
 
     // Delete context with 1 packet in flight.

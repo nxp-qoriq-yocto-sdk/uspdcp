@@ -183,6 +183,18 @@ extern "C"{
 #define SEC_NOTIFICATION_TYPE   SEC_NOTIFICATION_TYPE_POLL
 
 
+/************************************************/
+/* Scatter/Gather support related configuration */
+/************************************************/
+
+/** Enable or disable the support for scatter/gather
+ * buffers in the SEC driver.
+ * Valid values:
+ * ON - enable scatter gather support
+ * OFF - disable scatter gather support
+ */
+#define SEC_ENABLE_SCATTER_GATHER OFF
+
 /** Name of UIO device. Each user space SEC job ring will have a corresponding UIO device
  * with the name sec-channelX, where X is the job ring id.
  * Maximum length is #SEC_UIO_MAX_DEVICE_NAME_LENGTH.
@@ -191,6 +203,8 @@ extern "C"{
  */
 #define SEC_UIO_DEVICE_NAME     "sec-job-ring"
 
+/** Maximum number of job rings supported by SEC hardware */
+#define MAX_SEC_JOB_RINGS         4
 
 /** Maximum number of PDCP contexts  per direction (uplink/downlink). */
 #define SEC_MAX_PDCP_CONTEXTS_PER_DIRECTION   256
@@ -254,6 +268,23 @@ extern "C"{
 /** DMA memory required for a job ring, including both input and output rings. */
 #define SEC_DMA_MEM_JOB_RING_SIZE       ((SEC_DMA_MEM_INPUT_RING_SIZE) + (SEC_DMA_MEM_OUTPUT_RING_SIZE) + (SEC_DMA_MEM_DESCRIPTORS))
 
+#if (SEC_ENABLE_SCATTER_GATHER == ON)
+
+/** Size of a SG table, in bytes */
+#define SEC_SG_TBL_SIZE                 16
+
+/** Maximum number of entries in a SG table, per direction (in/out) */
+#define SEC_MAX_SG_TBL_ENTRIES          32
+
+/** DMA memory required for SG tables: number of entries in the job ring
+ * multiplied by the maximum number of entries in a SG table multiplied by
+ * the the number of SG tables per job (one for the input packet, one for the
+ * output packet) i.e. 2
+ */
+#define SEC_DMA_MEM_SG_SIZE         (SEC_JOB_RING_SIZE * SEC_MAX_SG_TBL_ENTRIES * SEC_SG_TBL_SIZE * 2)
+
+#endif // (SEC_ENABLE_SCATTER_GATHER == ON)
+
 #else //#ifdef SEC_HW_VERSION_4_4
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -280,8 +311,7 @@ extern "C"{
  * On SEC 3.1 there is not output ring, instead SEC directly updates jobs from channel (input ring) */
 #define SEC_DMA_MEM_JOB_RING_SIZE       (SEC_DMA_MEM_INPUT_RING_SIZE)
 
-#endif
-
+#endif // SEC_HW_VERSION_4_4
 
 
 /** When calling sec_init() UA will provide an area of virtual memory
@@ -290,8 +320,14 @@ extern "C"{
  *  SEC device in physical addressing and later on retrieved from SEC device.
  *  At initialization the UA provides specialized ptov/vtop functions/macros to
  *  translate addresses allocated from this memory area. */
-#define SEC_DMA_MEMORY_SIZE     (SEC_CRYPTO_DESCRIPTOR_SIZE) * (SEC_MAX_PDCP_CONTEXTS)  + \
-                                (SEC_DMA_MEM_JOB_RING_SIZE) * (MAX_SEC_JOB_RINGS)
+#if (SEC_ENABLE_SCATTER_GATHER == ON)
+#define SEC_DMA_MEMORY_SIZE     ( (SEC_CRYPTO_DESCRIPTOR_SIZE) * (SEC_MAX_PDCP_CONTEXTS) + \
+                                  (SEC_DMA_MEM_JOB_RING_SIZE) * (MAX_SEC_JOB_RINGS) + \
+                                  (SEC_DMA_MEM_SG_SIZE) * (MAX_SEC_JOB_RINGS) )
+#else // (SEC_ENABLE_SCATTER_GATHER == ON)
+#define SEC_DMA_MEMORY_SIZE     ( (SEC_CRYPTO_DESCRIPTOR_SIZE) * (SEC_MAX_PDCP_CONTEXTS) + \
+                                  (SEC_DMA_MEM_JOB_RING_SIZE) * (MAX_SEC_JOB_RINGS) )
+#endif // (SEC_ENABLE_SCATTER_GATHER == ON)
 
 /** PDCP sequence number length */
 #define SEC_PDCP_SN_SIZE_5  5
@@ -331,6 +367,7 @@ extern "C"{
  * SEC_DRIVER_LOG_DEBUG - log errors, info and debug messages
  */
 #define SEC_DRIVER_LOGGING_LEVEL SEC_DRIVER_LOG_ERROR
+
 
 /***************************************/
 /* SEC JOB RING related configuration. */
@@ -373,21 +410,6 @@ extern "C"{
  *  of a job ring with bitwise operations. */
 #define SEC_JOB_RING_SIZE  32
 #endif
-
-/** Maximum number of job rings supported by SEC hardware */
-#define MAX_SEC_JOB_RINGS         4
-
-/************************************************/
-/* Scatter/Gather support related configuration */
-/************************************************/
-
-/** Enable or disable the support for scatter/gather
- * buffers in the SEC driver.
- * Valid values:
- * ON - enable scatter gather support
- * OFF - disable scatter gather support
- */
-#define SEC_ENABLE_SCATTER_GATHER OFF
 
 
 /***************************************************/

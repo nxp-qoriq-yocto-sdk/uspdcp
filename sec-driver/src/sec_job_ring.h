@@ -220,7 +220,7 @@ extern struct sec_job_ring_t g_job_rings[MAX_SEC_JOB_RINGS];
  */
 int init_job_ring(struct sec_job_ring_t *job_ring, void **dma_mem,int startup_work_mode
 #ifdef SEC_HW_VERSION_4_4
-        ,uint8_t irq_coalescing_timer, uint8_t irq_coalescing_count
+        ,uint16_t irq_coalescing_timer, uint8_t irq_coalescing_count
 #endif
     );
 

@@ -40,6 +40,9 @@ extern "C" {
 #include "list.h"
 #include "sec_sg_utils.h"
 #include "sec_utils.h"
+// for vtop macro
+#include "external_mem_management.h"
+
 #include <stdlib.h>
 
 /*==================================================================================================
@@ -82,7 +85,7 @@ sec_return_code_t   build_sg_context(sec_sg_context_t *sg_ctx,
                                      const sec_packet_t *packet,
                                      sec_sg_context_type_t dir)
 {
-    uint8_t     *sg_tbl_en;;
+    uint8_t     *sg_tbl_en;
     uint32_t    num_fragments = 0;
     uint32_t    tmp_len = 0;
     uint32_t    total_length;
@@ -97,8 +100,8 @@ sec_return_code_t   build_sg_context(sec_sg_context_t *sg_ctx,
     // Get number of fragments from first packet.
     num_fragments = packet[0].num_fragments;
 
-    sg_tbl_en = dir == SEC_SG_CONTEXT_TYPE_IN ? \
-                       &sg_ctx->in_sg_tbl_en : &sg_ctx->out_sg_tbl_en;
+    sg_tbl_en = (dir == SEC_SG_CONTEXT_TYPE_IN ? \
+                       &sg_ctx->in_sg_tbl_en : &sg_ctx->out_sg_tbl_en);
 
     if( num_fragments == 0 )
     {
@@ -110,8 +113,8 @@ sec_return_code_t   build_sg_context(sec_sg_context_t *sg_ctx,
 
     total_length = packet[0].total_length;
 
-    sg_tbl = dir == SEC_SG_CONTEXT_TYPE_IN ?   \
-            sg_ctx->in_sg_tbl : sg_ctx->out_sg_tbl;
+    sg_tbl = (dir == SEC_SG_CONTEXT_TYPE_IN ?   \
+            sg_ctx->in_sg_tbl : sg_ctx->out_sg_tbl);
 
     do{
         SEC_DEBUG("Processing SG fragment %d",i);
@@ -126,7 +129,7 @@ sec_return_code_t   build_sg_context(sec_sg_context_t *sg_ctx,
                    "Fragment %i offset (%d) is larger than its length (%d)",
                    i,packet[i].offset, packet[i].length);
 
-        SG_TBL_SET_ADDRESS(sg_tbl[i],packet[i].address);
+        SG_TBL_SET_ADDRESS(sg_tbl[i],sec_vtop(packet[i].address));
         SG_TBL_SET_OFFSET(sg_tbl[i], packet[i].offset);
         SG_TBL_SET_LENGTH(sg_tbl[i],packet[i].length);
     }while( ++i <= num_fragments);
@@ -144,8 +147,11 @@ sec_return_code_t   build_sg_context(sec_sg_context_t *sg_ctx,
         sg_ctx->in_total_length = total_length;
     else
         sg_ctx->out_total_length = total_length;
-
-    SEC_DEBUG("Created scatter gather table:");
+    
+    // Enable SG for this direction
+    *sg_tbl_en = 1;
+        
+    SEC_DEBUG("Created scatter gather table: @ 0x%08x (phys: 0x%08x)",(uint32_t)sg_tbl,sec_vtop(sg_tbl));
     DUMP_SG_TBL(sg_tbl);
 
     return ret;

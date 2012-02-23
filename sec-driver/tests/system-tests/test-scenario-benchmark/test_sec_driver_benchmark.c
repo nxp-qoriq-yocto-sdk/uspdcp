@@ -1125,7 +1125,7 @@ static int start_sec_worker_threads(void)
     ret_code = pthread_create(&threads[1], NULL, &pdcp_thread_routine, (void*)&th_config[1]);
     assert(ret_code == 0);
 
-    return 0;
+    return ret_code;
 }
 
 static int stop_sec_worker_threads(void)
@@ -1160,7 +1160,7 @@ static int stop_sec_worker_threads(void)
     test_printf("thread main: all worker threads are stopped\n");
     profile_printf("thread 0 core cycles = %d\n", th_config[0].core_cycles);
     profile_printf("thread 1 core cycles = %d\n", th_config[1].core_cycles);
-    return 0;
+    return ret_code;
 }
 
 static void* pdcp_thread_routine(void* config)
@@ -1537,11 +1537,8 @@ static int cleanup_sec_environment(void)
 
     }
 	// unmap the physical memory
-	ret_code = dma_mem_release();
-	if (ret_code != 0)
-	{
-		return 1;
-	}
+	dma_mem_release();
+	
 
     return 0;
 }

@@ -313,7 +313,6 @@ static void test_single_algorithms(void)
     uint32_t packets_out = 0;
     uint32_t packets_handled = 0;
     sec_job_ring_handle_t jr_handle_0;
-    sec_job_ring_handle_t jr_handle_1;
     sec_context_handle_t ctx_handle_0 = NULL;
     sec_context_handle_t ctx_handle_1 = NULL;
     sec_packet_t *in_encap_pkt = NULL, *out_encap_pkt = NULL, *in_decap_pkt = NULL, *out_decap_pkt = NULL;
@@ -370,7 +369,6 @@ static void test_single_algorithms(void)
                               SEC_SUCCESS, ret);
 
     jr_handle_0 = job_ring_descriptors[0].job_ring_handle;
-    jr_handle_1 = job_ring_descriptors[1].job_ring_handle;
 
     for( test_idx = 0; test_idx < sizeof(test_params)/sizeof(test_params[0]) ; test_idx ++ )
     {

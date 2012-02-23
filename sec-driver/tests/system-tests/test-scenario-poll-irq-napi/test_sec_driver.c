@@ -677,6 +677,7 @@ static int get_results(uint8_t job_ring, int limit, uint32_t *packets_out)
         ret = read(job_ring_descriptors[job_ring].job_ring_irq_fd,
                    &irq_count,
                    4); // size of irq counter = sizeof(int)
+        assert( ret == 4);
         test_printf("Job ring %d. SEC IRQ received, doing hw polling. irq_count[%d]",
                     job_ring, irq_count);
     }
@@ -837,13 +838,12 @@ static int is_packet_valid(pdcp_context_t *pdcp_context,
                         PDCP_DATA_PLANE_HEADER_LENGTH_SHORT_SN :                                \
                         PDCP_DATA_PLANE_HEADER_LENGTH_LONG_SN;
     int test_pass = 1;
-    uint8_t *data_in = NULL, *data_out = NULL;
+    uint8_t *data_out = NULL;
     uint32_t data_in_len = 0, data_out_len = 0;
     int i = 0;
 
     if( pdcp_context->pdcp_ctx_cfg_data.protocol_direction == PDCP_ENCAPSULATION )
     {
-        data_in = test_data_in[pdcp_context->test_scenario];
         data_in_len = test_data_in_len[pdcp_context->test_scenario];
 
         data_out = test_data_out[pdcp_context->test_scenario];
@@ -851,7 +851,6 @@ static int is_packet_valid(pdcp_context_t *pdcp_context,
     }
     else
     {
-        data_in  = test_data_out[pdcp_context->test_scenario];
         data_in_len = test_data_out_len[pdcp_context->test_scenario];
 
         data_out = test_data_in[pdcp_context->test_scenario];
@@ -943,7 +942,7 @@ static int start_sec_worker_threads(void)
     ret = pthread_barrier_init(&th_barrier, NULL, THREADS_NUMBER);
     assert(ret == 0);
 
-    return 0;
+    return ret;
 }
 
 static int stop_sec_worker_threads(void)
@@ -980,7 +979,7 @@ static int stop_sec_worker_threads(void)
     ret = pthread_barrier_destroy(&th_barrier);
     assert(ret == 0);
 
-    return 0;
+    return ret;
 }
 
 static void* pdcp_thread_routine(void* config)
@@ -1093,6 +1092,7 @@ static void* pdcp_thread_routine(void* config)
                     ret = get_results(th_config_local->consumer_job_ring_id,
                             JOB_RING_POLL_LIMIT,
                             &packets_received);
+                    assert(ret == 0);
                     total_packets_received += packets_received;
                     usleep(10);
                 }while(packets_received != 0);
@@ -1129,7 +1129,7 @@ static void* pdcp_thread_routine(void* config)
                             JOB_RING_POLL_LIMIT,
                             &packets_received);
                     total_packets_received += packets_received;
-                    //assert(ret == 0);
+                    assert(ret == 0);
 
                     usleep(10);
                 }else if (ret != SEC_SUCCESS)
@@ -1346,11 +1346,7 @@ static int cleanup_sec_environment(void)
 
     }
     // unmap the physical memory
-    ret = dma_mem_release();
-    if (ret != 0)
-    {
-        return 1;
-    }
+    dma_mem_release();
 
     return 0;
 }

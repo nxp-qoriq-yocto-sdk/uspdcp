@@ -232,16 +232,25 @@ static int file_read_first_line(char root[], char subdir[], char filename[], cha
 
     // compose the file name: root/subdir/filename
     memset(absolute_file_name, 0, sizeof(absolute_file_name));
-    sprintf(absolute_file_name, "%s/%s/%s", root, subdir, filename);
+    snprintf(absolute_file_name, SEC_UIO_MAX_ATTR_FILE_NAME, "%s/%s/%s", root, subdir, filename);
 
     fd = open(absolute_file_name, O_RDONLY );
-    SEC_ASSERT(fd > 0, -1, "Error opening file %s", absolute_file_name);
+    SEC_ASSERT(fd > 0, fd, "Error opening file %s", absolute_file_name);
 
     // read UIO device name from first line in file
     ret = read(fd, line, SEC_UIO_MAX_DEVICE_FILE_NAME_LENGTH);
-    SEC_ASSERT(ret != 0, -1, "Error reading from file %s", absolute_file_name);
-
     close(fd);
+    
+    // NULL-ify string
+    line[SEC_UIO_MAX_DEVICE_FILE_NAME_LENGTH-1] = '\0';
+    
+    
+    if( ret <= 0 )
+    {
+        SEC_ERROR("Error reading from file %s", absolute_file_name);
+        return ret;
+    }
+    
     return 0;
 }
 
@@ -365,6 +374,12 @@ int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
      * report an error (there is no other device)
      */
     dpa_node = of_find_compatible_node(NULL, NULL,"fsl,p4080-sec4.0" );
+    if( dpa_node == NULL )
+    {
+        SEC_ERROR("No SEC device found. Please check the DTS");
+        return SEC_INVALID_INPUT_PARAM;
+    }
+    
     if( of_device_is_available(dpa_node) == false )
     {
         SEC_ERROR("SEC is disabled. Please check the DTS");

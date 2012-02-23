@@ -1777,7 +1777,7 @@ int sec_pdcp_context_update_descriptor(sec_context_t *ctx,
     if( SG_CONTEXT_IN_TBL_EN(job->sg_ctx ))
     {
         PDCP_JD_SET_SG_IN(descriptor);
-        phys_addr = sec_vtop(SG_CONTEXT_GET_TBL_OUT(job->sg_ctx));
+        phys_addr = sec_vtop(SG_CONTEXT_GET_TBL_IN(job->sg_ctx));
         offset = 0;
         length = SG_CONTEXT_GET_LEN_IN(job->sg_ctx);
     }

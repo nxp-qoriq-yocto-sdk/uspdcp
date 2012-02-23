@@ -1220,8 +1220,8 @@ sec_return_code_t sec_init(const sec_config_t *sec_config_data,
         // Initialize job ring
         ret = init_job_ring(&g_job_rings[i], &g_dma_mem_free, sec_config_data->work_mode
 #ifdef SEC_HW_VERSION_4_4
-                , sec_config_data->irq_coalescing_timer
-                , sec_config_data->irq_coalescing_count
+                , sec_config_data->irq_coalescing_timer & 0xFFFF
+                , sec_config_data->irq_coalescing_count & 0xFF
 #endif // SEC_HW_VERSION_4_4
                 );
         if (ret != SEC_SUCCESS)
@@ -1260,7 +1260,7 @@ sec_return_code_t sec_init(const sec_config_t *sec_config_data,
      */
     if(((dma_addr_t)g_dma_mem_free - (dma_addr_t)g_dma_mem_start) < SEC_DMA_MEMORY_SIZE)
     {
-        SEC_INFO("Allocated %u KB for SEC driver, remaining free %lu KB",
+        SEC_INFO("Allocated %u KB for SEC driver, remaining free %u KB",
                 ((dma_addr_t)g_dma_mem_free - (dma_addr_t)g_dma_mem_start)/1024,
                 (SEC_DMA_MEMORY_SIZE - ((dma_addr_t)(dma_addr_t)g_dma_mem_free - (dma_addr_t)g_dma_mem_start))/1024);
     }
