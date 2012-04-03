@@ -49,7 +49,7 @@
 #include "fsl_ipc_shm.h"
 #include "logdefs.h"
 #include "fsl_ipc_errorcodes.h"
-#include "psc913x_heterogeneous.h"
+#include "bsc913x_heterogeneous.h"
 
 #define SMAP(I, A, B, C) do {	\
 			priv->map[I].phys_addr = A;   \
