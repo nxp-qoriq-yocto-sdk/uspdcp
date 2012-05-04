@@ -16,7 +16,7 @@ AM_CFLAGS += -I$(KERNEL_DIR)/drivers/misc
 AM_CFLAGS += -I$(IPC_DIR)/ipc/include
 AM_CFLAGS += -I$(IPC_DIR)/fsl_shm/include
 
-test_uio_notify_LDFLAGS := -L$(IPC_DIR)/ipc -L$(IPC_DIR)/fsl_shm -l:libmem.a -l:liblg_shm.a
+test_uio_notify_LDFLAGS := -L$(IPC_LIB_DIR) -lmem
 
 test_uio_notify_LDADD := cgreen sec-driver of
 

@@ -12,10 +12,6 @@ test_api_LDADD := cgreen dma_mem
 
 else
 
-AM_CFLAGS += -I$(KERNEL_DIR)/drivers/misc
-AM_CFLAGS += -I$(IPC_DIR)/ipc/include
-AM_CFLAGS += -I$(IPC_DIR)/fsl_shm/include
-
 test_contexts_pool_LDADD := cgreen
 
 endif

@@ -52,6 +52,14 @@ ifeq ($(shell if [ ! -d  $(IPC_DIR) ]; then echo $(IPC_DIR); fi), $(IPC_DIR))
     $(error IPC directory $(IPC_DIR) does not exist)
 endif
 
+ifeq ($(IPC_LIB_DIR),)
+    $(error You must set IPC_LIB_DIR in Makefile.config)
+endif
+
+ifeq ($(shell if [ ! -d  $(IPC_LIB_DIR) ]; then echo $(IPC_LIB_DIR); fi), $(IPC_LIB_DIR))
+    $(error IPC library directory $(IPC_LIB_DIR) does not exist)
+endif
+
 # ----=[ Arch specific definitions ]=----
 ifneq (distclean,$(MAKECMDGOALS))
  ifeq (powerpc,$(ARCH))
@@ -78,7 +86,7 @@ endif
 # ----[ Tools ]----
 MAKE		?= make
 INSTALL		?= install
-CC		:= $(CROSS_COMPILE)gcc -g
+CC		:= $(CROSS_COMPILE)gcc
 LD		:= $(CROSS_COMPILE)ld
 AR		:= $(CROSS_COMPILE)ar
 
