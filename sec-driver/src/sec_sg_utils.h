@@ -198,14 +198,21 @@ typedef struct{
 /** @brief Populates the relevant data structures of a Scatter Gather contex for a job.
  * The function checks if there is a need to construct a Scatter-Gather table for input
  * or output packets (depending if there is 1 or more fragments)
- * @param [in]  sg_ctx      The Scatter-Gather context for this job
- * @param [in]  packet      Pointer to a packet for which the Scatter-Gather table has to be
- *                          constructed
+ * @param [in]  sg_ctx      The Scatter Gather context to be populated.
+ *
+ * @param [in]  packet      Pointer to a packet for which the Scatter Gather 
+ *                          table has to be constructed
+ *
  * @param [in]  dir         The 'direction' of the packet (input or output)
+ *
+ * @param [in]  vtop        The V2P function to be used for translating the
+                            the Scatter Gather table packets' virtual addresses
+                            to physical addresses
  */
 sec_return_code_t build_sg_context(sec_sg_context_t *sg_ctx,
                                    const sec_packet_t *packet,
-                                   sec_sg_context_type_t dir);
+                                   sec_sg_context_type_t dir,
+                                   sec_vtop vtop);
 /*================================================================================================*/
 
 

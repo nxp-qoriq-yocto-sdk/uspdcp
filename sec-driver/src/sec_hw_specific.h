@@ -1,4 +1,4 @@
-/* Copyright (c) 2011 Freescale Semiconductor, Inc.
+/* Copyright (c) 2011 - 2012 Freescale Semiconductor, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -747,12 +747,12 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 
 #define SEC_PDCP_SD_SET_KEY1(descriptor,key,len) {              \
         (descriptor)->key1_cmd.command.field.length = (len);    \
-        (descriptor)->key1_ptr = sec_vtop((key));               \
+        (descriptor)->key1_ptr = g_sec_vtop((key));              \
 }
 
 #define SEC_PDCP_SD_SET_KEY2(descriptor,key,len) {              \
         (descriptor)->key2_cmd.command.field.length = (len);    \
-        (descriptor)->key2_ptr = sec_vtop((key));               \
+        (descriptor)->key2_ptr = g_sec_vtop((key));             \
 }
 
 #define PDCP_JD_SET_IN_PTR(descriptor,phys_addr,offset,length) {    \

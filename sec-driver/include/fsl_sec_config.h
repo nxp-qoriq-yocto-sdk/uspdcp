@@ -367,6 +367,7 @@ extern "C"{
  * SEC_DRIVER_LOG_DEBUG - log errors, info and debug messages
  */
 #define SEC_DRIVER_LOGGING_LEVEL SEC_DRIVER_LOG_ERROR
+//#define SEC_DRIVER_LOGGING_LEVEL SEC_DRIVER_LOG_DEBUG
 
 
 /***************************************/

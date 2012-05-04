@@ -47,7 +47,14 @@ extern "C" {
 
 #include "fsl_sec.h"
 // for dma_mem library
+#ifdef SEC_HW_VERSION_3_1
 #include "compat.h"
+#else // SEC_HW_VERSION_3_1
+
+// For shared memory allocator
+#include "fsl_usmmgr.h"
+
+#endif // SEC_HW_VERSION_3_1
 #include "test_sec_driver.h"
 #include "test_sec_driver_test_vectors.h"
 
@@ -82,13 +89,31 @@ extern "C" {
 // Max length in bytes for a confidentiality /integrity key.
 #define MAX_KEY_LENGTH    32
 
-
 // Offset in input and output packet, where PDCP header starts
 #define PACKET_OFFSET   3
 
-/** Size in bytes of a cacheline. */
+#ifdef SEC_HW_VERSION_3_1
+// Size in bytes required to be available for driver's use in input packet,
+// BEFORE PDCP header start, when using PDCP control-plane with
+// AES CMAC integrity check algorithm.
+// I.e: packet offset should be at least 8. SEC driver will use the last 8 bytes
+// before PDCP header starts, to calculate initialization data required for AES CMAC algorithm.
+#define AES_CMAC_SCTRATCHPAD_PACKET_AREA_LENGHT 8
+
+// Length in bytes requried for MAC-I code generation,
+// in case of PDCP control-plane.
+#define MAC_I_LENGTH    4
+
+#else // SEC_HW_VERSION_3_1
+
 #define CACHE_LINE_SIZE  32
 
+// For keeping the code relatively the same between HW versions
+#define dma_mem_memalign    test_memalign
+#define dma_mem_free        test_free
+
+
+#endif // SEC_HW_VERSION_3_1
 
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
@@ -139,8 +164,9 @@ typedef struct pdcp_context_s
     int no_of_used_buffers; // index incremented by Producer Thread
     int no_of_buffers_processed; // index increment by Consumer Thread
     int no_of_buffers_to_process; // configurable random number of packets to be processed per context
-
+#ifdef SEC_HW_VERSION_4_4
     int test_scenario;  // scenario used by this PDCP context
+#endif // SEC_HW_VERSION_4_4
 }pdcp_context_t;
 
 typedef struct thread_config_s
@@ -318,11 +344,54 @@ static int no_of_used_pdcp_dl_contexts = 0;
 static thread_config_t th_config[THREADS_NUMBER];
 static pthread_t threads[THREADS_NUMBER];
 static pthread_barrier_t th_barrier;
+#ifdef SEC_HW_VERSION_4_4
 
+// FSL Userspace Memory Manager structure
+fsl_usmmgr_t g_usmmgr;
 
+#endif // SEC_HW_VERSION_4_4
+/*==================================================================================================
+                                 LOCAL FUNCTION PROTOTYPES
+==================================================================================================*/
+#ifdef SEC_HW_VERSION_4_4
+/* Returns the physical address corresponding to the virtual
+ * address passed as a parameter. 
+ */
+static inline dma_addr_t test_vtop(void *v)
+{
+    return fsl_usmmgr_v2p(v,g_usmmgr);
+}
+
+/* Allocates an aligned memory area from the FSL USMMGR pool */
+static void * test_memalign(size_t align, size_t size);
+
+/* Frees a previously allocated FSL USMMGR memory region */
+static void test_free(void *ptr, size_t size);
+#endif // SEC_HW_VERSION_4_4
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
+#ifdef SEC_HW_VERSION_4_4
+static void * test_memalign(size_t align, size_t size)
+{
+    int ret;
+    range_t r = {0,0,size};
+    
+    ret = fsl_usmmgr_memalign(&r,align,g_usmmgr);    
+    if(ret != 0){
+        printf("FSL USMMGR memalign failed: %d",ret);
+        return NULL;
+    }
+    return r.vaddr;
+}
+
+static void test_free(void *ptr, size_t size)
+{
+   range_t r = {0,ptr,size};   
+   fsl_usmmgr_free(&r,g_usmmgr);
+}
+#endif // SEC_HW_VERSION_4_4
+
 static int get_free_pdcp_context(pdcp_context_t * pdcp_contexts,
                                  int * no_of_used_pdcp_contexts,
                                  pdcp_context_t ** pdcp_context)
@@ -506,7 +575,11 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
     pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].usage = PDCP_BUFFER_USED;
     (*in_packet)->address = &(pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].buffer[0]);
     //in_packet->offset = pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].offset;
-
+#ifdef SEC_HW_VERSION_3_1
+    // Needed 8 bytes before actual start of PDCP packet, for PDCP control-plane + AES algo testing.
+    (*in_packet)->offset = test_packet_offset;
+    (*in_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
+#endif // SEC_HW_VERSION_3_1
     assert(pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].usage == PDCP_BUFFER_FREE);
     *out_packet = &(pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].pdcp_packet);
 
@@ -517,9 +590,9 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
 
     // Buffer space which can be used for custom header(s)
     (*out_packet)->offset = PACKET_OFFSET;
-
-    //(*out_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
-
+#ifdef SEC_HW_VERSION_3_1
+    (*out_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
+#endif // SEC_HW_VERSION_3_1
     if( pdcp_context->pdcp_ctx_cfg_data.protocol_direction == PDCP_ENCAPSULATION )
     {
         data_in = test_data_in[pdcp_context->test_scenario];
@@ -544,9 +617,17 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
            data_in_len);
 
     (*in_packet)->length = data_in_len + hdr_len; // + (*in_packet)->offset;
+#if defined(SEC_HW_VERSION_3_1) && defined(TEST_PDCP_CONTROL_PLANE_DOUBLE_PASS_ENC)
+    // Need extra 4 bytes at end of input/output packet for MAC-I code, in case of PDCP control-plane packets
+    (*in_packet)->length += MAC_I_LENGTH;
+#endif // defined(SEC_HW_VERSION_3_1) && defined(TEST_PDCP_CONTROL_PLANE_DOUBLE_PASS_ENC)
     assert((*in_packet)->length <= PDCP_BUFFER_SIZE);
 
     (*out_packet)->length = data_out_len + hdr_len; //+ (*out_packet)->offset;
+#if defined(SEC_HW_VERSION_3_1) && defined(TEST_PDCP_CONTROL_PLANE_DOUBLE_PASS_ENC)
+    // Need extra 4 bytes at end of input/output packet for MAC-I code, in case of PDCP control-plane packets
+    (*out_packet)->length += MAC_I_LENGTH;
+#endif // defined(SEC_HW_VERSION_3_1) && defined(TEST_PDCP_CONTROL_PLANE_DOUBLE_PASS_ENC)
     assert((*out_packet)->length <= PDCP_BUFFER_SIZE);
 
     pdcp_context->no_of_used_buffers++;
@@ -1031,7 +1112,10 @@ static void* pdcp_thread_routine(void* config)
         pdcp_context->pdcp_ctx_cfg_data.protocol_direction = (th_config_local->tid) ? PDCP_ENCAPSULATION : PDCP_DECAPSULATION;
         pdcp_context->pdcp_ctx_cfg_data.hfn = test_hfn[test_scenario];
         pdcp_context->pdcp_ctx_cfg_data.hfn_threshold = test_hfn_threshold[test_scenario];
-
+#ifdef SEC_HW_VERSION_4_4
+        pdcp_context->pdcp_ctx_cfg_data.input_vtop = 
+        pdcp_context->pdcp_ctx_cfg_data.output_vtop = test_vtop;
+#endif // SEC_HW_VERSION_4_4
         // configure confidentiality algorithm
         pdcp_context->pdcp_ctx_cfg_data.cipher_algorithm = test_scenarios[test_scenario].cipher_algorithm;
         uint8_t* temp_crypto_key = test_crypto_key[test_scenario];
@@ -1228,14 +1312,17 @@ static int setup_sec_environment(void)
     memset (pdcp_dl_contexts, 0, sizeof(pdcp_context_t) * MAX_PDCP_CONTEXT_NUMBER);
     memset (pdcp_ul_contexts, 0, sizeof(pdcp_context_t) * MAX_PDCP_CONTEXT_NUMBER);
 
+#ifdef SEC_HW_VERSION_3_1
     // map the physical memory
-    ret = dma_mem_setup(SEC_DMA_MEMORY_SIZE, CACHE_LINE_SIZE);
+    ret = dma_mem_setup();
     if (ret != 0)
     {
         test_printf("dma_mem_setup failed with ret = %d\n", ret);
         return 1;
     }
     test_printf("dma_mem_setup: mapped virtual mem 0x%x to physical mem 0x%x\n", __dma_virt, DMA_MEM_PHYS);
+
+#endif
 
     for (i = 0; i < MAX_PDCP_CONTEXT_NUMBER; i++)
     {
@@ -1256,7 +1343,12 @@ static int setup_sec_environment(void)
         assert (pdcp_dl_contexts[i].output_buffers != NULL);
         assert (pdcp_dl_contexts[i].pdcp_ctx_cfg_data.cipher_key != NULL);
         assert (pdcp_dl_contexts[i].pdcp_ctx_cfg_data.integrity_key != NULL);
-
+#ifdef SEC_HW_VERSION_3_1
+        assert((dma_addr_t)pdcp_dl_contexts[i].input_buffers >= DMA_MEM_SEC_DRIVER);
+        assert((dma_addr_t)pdcp_dl_contexts[i].output_buffers >= DMA_MEM_SEC_DRIVER);
+        assert((dma_addr_t)pdcp_dl_contexts[i].pdcp_ctx_cfg_data.cipher_key >= DMA_MEM_SEC_DRIVER);
+        assert((dma_addr_t)pdcp_dl_contexts[i].pdcp_ctx_cfg_data.integrity_key >= DMA_MEM_SEC_DRIVER);
+#endif // SEC_HW_VERSION_3_1
         memset(pdcp_dl_contexts[i].input_buffers, 0, sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
         memset(pdcp_dl_contexts[i].output_buffers, 0, sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
 
@@ -1272,12 +1364,17 @@ static int setup_sec_environment(void)
                                                                             MAX_KEY_LENGTH);
         pdcp_ul_contexts[i].pdcp_ctx_cfg_data.integrity_key = dma_mem_memalign(BUFFER_ALIGNEMENT,
                                                                                MAX_KEY_LENGTH);
-        // validate that the address of the freshly allocated buffer falls in the second memory are.
+        // validate that the address of the freshly allocated buffer falls in the second memory area.
         assert (pdcp_ul_contexts[i].input_buffers != NULL);
         assert (pdcp_ul_contexts[i].output_buffers != NULL);
         assert (pdcp_ul_contexts[i].pdcp_ctx_cfg_data.cipher_key != NULL);
         assert (pdcp_ul_contexts[i].pdcp_ctx_cfg_data.integrity_key != NULL);
-
+#ifdef SEC_HW_VERSION_3_1
+        assert((dma_addr_t)pdcp_ul_contexts[i].input_buffers >= DMA_MEM_SEC_DRIVER);
+        assert((dma_addr_t)pdcp_ul_contexts[i].output_buffers >= DMA_MEM_SEC_DRIVER);
+        assert((dma_addr_t)pdcp_ul_contexts[i].pdcp_ctx_cfg_data.cipher_key >= DMA_MEM_SEC_DRIVER);
+        assert((dma_addr_t)pdcp_ul_contexts[i].pdcp_ctx_cfg_data.integrity_key >= DMA_MEM_SEC_DRIVER);
+#endif // SEC_HW_VERSION_3_1
 
         memset(pdcp_ul_contexts[i].input_buffers, 0, sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
         memset(pdcp_ul_contexts[i].output_buffers, 0, sizeof(buffer_t) * MAX_PACKET_NUMBER_PER_CTX);
@@ -1286,8 +1383,12 @@ static int setup_sec_environment(void)
     //////////////////////////////////////////////////////////////////////////////
     // 1. Initialize SEC user space driver requesting #JOB_RING_NUMBER Job Rings
     //////////////////////////////////////////////////////////////////////////////
-
+#ifdef SEC_HW_VERSION_3_1
     sec_config_data.memory_area = (void*)__dma_virt;
+#else
+    sec_config_data.memory_area = dma_mem_memalign(CACHE_LINE_SIZE,SEC_DMA_MEMORY_SIZE);
+    sec_config_data.sec_drv_vtop = test_vtop;
+#endif
     assert(sec_config_data.memory_area != NULL);
 
     // Fill SEC driver configuration data
@@ -1345,8 +1446,12 @@ static int cleanup_sec_environment(void)
         dma_mem_free(pdcp_ul_contexts[i].pdcp_ctx_cfg_data.integrity_key, MAX_KEY_LENGTH);
 
     }
+#ifdef SEC_HW_VERSION_3_1
     // unmap the physical memory
     dma_mem_release();
+#else // SEC_HW_VERSION_3_1
+    dma_mem_free(sec_config_data.memory_area,SEC_DMA_MEMORY_SIZE);
+#endif // SEC_HW_VERSION_3_1
 
     return 0;
 }
@@ -1358,7 +1463,14 @@ int main(void)
 {
     int ret = 0;
 
-
+#ifdef SEC_HW_VERSION_4_4
+    // Init FSL USMMGR
+    g_usmmgr = fsl_usmmgr_init();
+    if(g_usmmgr == NULL){
+        printf("ERROR on fsl_usmmgr_init");
+        return -1;
+    }
+#endif // SEC_HW_VERSION_4_4
     /////////////////////////////////////////////////////////////////////
     // 1. Initialize SEC environment
     /////////////////////////////////////////////////////////////////////

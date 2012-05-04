@@ -46,12 +46,9 @@ extern "C" {
 #include "sec_atomic.h"
 #include "sec_pdcp.h"
 #include "sec_hw_specific.h"
-#ifdef SEC_HW_VERSION_4_4
-#include "external_mem_management.h"
-#if (SEC_ENABLE_SCATTER_GATHER == ON)
+#if defined(SEC_HW_VERSION_4_4) && (SEC_ENABLE_SCATTER_GATHER == ON)
 #include "sec_sg_utils.h"
-#endif // (SEC_ENABLE_SCATTER_GATHER == ON)
-#endif // SEC_HW_VERSION_4_4
+#endif // defined(SEC_HW_VERSION_4_4) && (SEC_ENABLE_SCATTER_GATHER == ON)
 #include <stdio.h>
 
 /*==================================================================================================
@@ -195,6 +192,12 @@ pthread_key_t g_sec_errno = SEC_PTHREAD_KEY_INVALID;
  * @see the 'man 3 pthread_setspecific' page for further details on thread locals.
  */
 uint32_t g_sec_errno_value = SEC_SUCCESS;
+#ifdef SEC_HW_VERSION_4_4
+/** Global V2P function for virtual to physical translation for the internal
+ * SEC driver structures
+ */
+sec_vtop g_sec_vtop = NULL;
+#endif // SEC_HW_VERSION_4_4
 
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
@@ -1150,7 +1153,15 @@ sec_return_code_t sec_init(const sec_config_t *sec_config_data,
     SEC_ASSERT ((dma_addr_t)sec_config_data->memory_area % CACHE_LINE_SIZE == 0,
                 SEC_INVALID_INPUT_PARAM,
                 "Configured memory is not cacheline aligned");
+#ifdef SEC_HW_VERSION_4_4
+    // Must check the user passed a valid function for V2P translation.
+    SEC_ASSERT (sec_config_data->sec_drv_vtop != NULL,
+                SEC_INVALID_INPUT_PARAM,
+                "A valid V2P function is required for internal memory.");
 
+    // Update V2P function
+    g_sec_vtop = sec_config_data->sec_drv_vtop;
+#endif // SEC_HW_VERSION_4_4
     // Initialize per-thread-local errno variable
 
     // Delete the Errno Key here _ONLY_ if it has a valid value.
@@ -1347,6 +1358,14 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
     SEC_ASSERT((dma_addr_t)sec_ctx_info->cipher_key % CACHE_LINE_SIZE == 0,
                SEC_INVALID_INPUT_PARAM,
                "Configured crypto key is not cacheline aligned");
+#ifdef SEC_HW_VERSION_4_4
+    SEC_ASSERT(sec_ctx_info->input_vtop != NULL,
+               SEC_INVALID_INPUT_PARAM,
+               "Invalid V2P function for input packets");
+    SEC_ASSERT(sec_ctx_info->output_vtop != NULL,
+               SEC_INVALID_INPUT_PARAM,
+               "Invalid V2P function for output packets");
+#endif // SEC_HW_VERSION_4_4
 
     if(sec_ctx_info->integrity_key != NULL)
     {
@@ -1420,8 +1439,14 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
     }
 #endif // SEC_HW_VERSION_3_1
 
+#ifdef SEC_HW_VERSION_4_4
+    // Set V2P information for this context
+    ctx->in_pkt_vtop = sec_ctx_info->input_vtop;
+    ctx->out_pkt_vtop = sec_ctx_info->output_vtop;
+#endif // SEC_HW_VERSION_4_4
     // provide to UA a SEC ctx handle
-	*sec_ctx_handle = (sec_context_handle_t)ctx;
+    *sec_ctx_handle = (sec_context_handle_t)ctx;
+
     return SEC_SUCCESS;
 }
 
@@ -1783,7 +1808,7 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
     ASSERT(job->descr != NULL);
 #ifdef SEC_HW_VERSION_4_4
     // Descriptor Phy Addr will be set to 0 during the search, must be updated here
-    job->descr_phys_addr = sec_vtop(job->descr);
+    job->descr_phys_addr = g_sec_vtop(job->descr);
 #endif // SEC_HW_VERSION_4_4
 
 #ifdef SEC_HW_VERSION_3_1

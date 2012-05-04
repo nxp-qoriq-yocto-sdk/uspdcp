@@ -51,14 +51,20 @@ extern "C" {
                                      LOCAL DEFINES
 ==================================================================================================*/
 #define MAX_SEC_CONTEXTS_PER_POOL   (SEC_MAX_PDCP_CONTEXTS / (MAX_SEC_JOB_RINGS))
+#ifdef SEC_HW_VERSION_3_1
 #define sec_vtop(virt_address) \
 {\
     /* stub macro*/ \
     return (dma_addr_t)(virt_address); \
 }
-#ifdef SEC_HW_VERSION_4_4
-dma_addr_t __dma_virt = 0;
-dma_addr_t __dma_phys = 0;
+#else
+
+sec_vtop g_sec_vtop;
+
+static inline dma_addr_t test_vtop(void *v)
+{
+    return (dma_addr_t)(v);
+}
 #endif
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
@@ -351,6 +357,8 @@ int main(int argc, char *argv[])
      *
      */
     global_dma_mem_free = memalign(CACHE_LINE_SIZE, sizeof(sec_crypto_pdb_t)* MAX_SEC_CONTEXTS_PER_POOL * (MAX_SEC_JOB_RINGS + 1));
+    
+    g_sec_vtop = test_vtop;
 #endif
     assert(global_dma_mem_free != NULL);
 

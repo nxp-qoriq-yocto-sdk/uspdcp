@@ -40,11 +40,8 @@ extern "C" {
 #include "list.h"
 #include "sec_contexts.h"
 #include "sec_utils.h"
-#ifdef SEC_HW_VERSION_4_4
-// for vtop macro
-#include "external_mem_management.h"
-#endif
 #include <stdlib.h>
+
 /*==================================================================================================
                                      LOCAL CONSTANTS
 ==================================================================================================*/
@@ -75,6 +72,9 @@ extern "C" {
 /*==================================================================================================
                                      GLOBAL VARIABLES
 ==================================================================================================*/
+#ifdef SEC_HW_VERSION_4_4
+extern sec_vtop g_sec_vtop;
+#endif
 
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
@@ -327,7 +327,7 @@ sec_return_code_t init_contexts_pool(sec_contexts_pool_t * pool,
         memset(ctx->sh_desc, 0, SEC_CRYPTO_DESCRIPTOR_SIZE);
         *dma_mem += SEC_CRYPTO_DESCRIPTOR_SIZE;
 
-        ctx->sh_desc_phys = sec_vtop(ctx->sh_desc);
+        ctx->sh_desc_phys = g_sec_vtop(ctx->sh_desc);
 
         SEC_DEBUG("Created shared descriptor @ 0x%04x (phys: 0x%x)",
                 (uint32_t)ctx->sh_desc,

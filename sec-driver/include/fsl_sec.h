@@ -168,6 +168,7 @@ typedef enum sec_crypto_alg_e
     SEC_ALG_AES = 2,        /**< Use AES algorithm for confidentiality(EEA2) or integrity protection(EIA2)) */
 
 }sec_crypto_alg_t;
+
 /*==================================================================================================
                                  STRUCTURES AND OTHER TYPEDEFS
 ==================================================================================================*/
@@ -179,9 +180,10 @@ typedef uint64_t dma_addr_t;
 /** Physical address on 32 bits. MUST be kept in synch with same define from kernel!*/
 typedef uint32_t dma_addr_t;
 #endif
-
+#ifdef SEC_HW_VERSION_3_1
 /** Physical address. */
 typedef dma_addr_t  phys_addr_t;
+#endif // SEC_HW_VERSION_3_1
 
 /**Data type used for specifying addressing scheme for
  * packets submitted by User Application. Assume virtual addressing */
@@ -200,6 +202,10 @@ typedef const void* sec_context_handle_t;
 /** UA opaque handle to a packet context.
  *  The handle is opaque from SEC driver's point of view. */
 typedef const void* ua_context_handle_t;
+#ifdef SEC_HW_VERSION_4_4
+/** Function type used for virtual to physical address conversions */
+typedef dma_addr_t (*sec_vtop)(void *v);
+#endif // SEC_HW_VERSION_4_4
 
 /** Structure used to describe an input or output packet accessed by SEC. */
 #ifdef SEC_HW_VERSION_4_4
@@ -303,9 +309,9 @@ typedef struct sec_pdcp_context_info_s
                                              Possible values: #PDCP_DATA_PLANE, #PDCP_CONTROL_PLANE. */
     uint8_t     packet_direction:1;     /**< Direction can be uplink(#PDCP_UPLINK) or downlink(#PDCP_DOWNLINK). */
     uint8_t     protocol_direction:1;   /**< Can be encapsulation(#PDCP_ENCAPSULATION) or decapsulation(#PDCP_DECAPSULATION)*/
-    uint8_t     cipher_algorithm;       /**< Cryptographic algorithm used: SNOW(F8)/AES(CTR).
+    uint8_t     cipher_algorithm;       /**< Cryptographic algorithm used: NULL/SNOW(F8)/AES(CTR).
                                              Can have values from ::sec_crypto_alg_t enum. */
-    uint8_t     integrity_algorithm;    /**< Integrity algorithm used: SNOW(F9)/AES(CMAC).
+    uint8_t     integrity_algorithm;    /**< Integrity algorithm used: NULL/SNOW(F9)/AES(CMAC).
                                              Can have values from ::sec_crypto_alg_t enum. */
     uint32_t    hfn;                    /**< HFN for this radio bearer. Represents the most significant bits from sequence number. */
     uint32_t    hfn_threshold;          /**< HFN threshold for this radio bearer. If HFN matches or exceeds threshold,
@@ -316,6 +322,10 @@ typedef struct sec_pdcp_context_info_s
     uint8_t    *integrity_key;          /**< Integrity key. Must be provided by User Application as DMA-capable memory,
                                              just as it's done for packets.*/
     uint8_t    integrity_key_len;       /**< Integrity key length. */
+    sec_vtop   input_vtop;              /**< Function used for converting virtual address of the input packets for 
+                                             this context to physical addresses. */
+    sec_vtop   output_vtop;             /**< Function used for converting virtual address of the output packets for 
+                                             this context to physical addresses. */
     void        *custom;                /**< User Application custom data for this PDCP context. Usage to be defined. */
     sec_out_cbk notify_packet;          /**< Callback function to be called for all packets processed on this context. */
 } sec_pdcp_context_info_t;
@@ -351,6 +361,10 @@ typedef struct sec_config_s
 
     uint8_t         work_mode;              /**< Choose between hardware poll vs interrupt notification when driver is initialized.
                                                  Valid values are #SEC_STARTUP_POLLING_MODE and #SEC_STARTUP_INTERRUPT_MODE.*/
+    
+    sec_vtop        sec_drv_vtop;           /**< Function to be used internally by the driver for virtual to physical 
+                                                 address translation for internal structures.
+                                                 @note Applicable to SEC 4.4 only! */
 }sec_config_t;
 
 /**

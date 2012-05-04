@@ -82,9 +82,11 @@ extern "C"{
 /*==================================================================================================
                                  STRUCTURES AND OTHER TYPEDEFS
 ==================================================================================================*/
+#ifdef SEC_HW_VERSION_3_1
 /** Function type used to update a SEC descriptor according to
  * the processing operations that must be done on a packet. */
 typedef int (*sec_update_descriptor)(sec_job_t *job, sec_descriptor_t *descriptor);
+#endif /* SEC_HW_VERSION_3_1 */
 
 /** Status of a SEC context. */
 typedef enum sec_context_usage_e
@@ -186,6 +188,12 @@ struct sec_context_t
     /** Physical address of shared descriptor. Calculated when allocating the descriptor
      * in order to minimize the overhead of calling vtop. */
     dma_addr_t              sh_desc_phys;
+    /** P2V conversion function to be used for translating the virtual address
+     * for the packets belonging to this context. */
+    sec_vtop                in_pkt_vtop;
+    /** P2V conversion function to be used for translating the virtual address
+     * for the output packets belonging to this context. */
+     sec_vtop               out_pkt_vtop;
 #endif
     /** Validation pattern at end of structure. */
     uint32_t end_pattern;
@@ -238,7 +246,9 @@ void destroy_contexts_pool(sec_contexts_pool_t *pool);
  *  by multiple threads simultaneously.
  *
  *  @param [in] pool                Pointer to a sec context pool structure.
- * */
+ *
+ *
+ */
 sec_context_t* get_free_context(sec_contexts_pool_t *pool);
 
 /** @brief Release a context from the pool.

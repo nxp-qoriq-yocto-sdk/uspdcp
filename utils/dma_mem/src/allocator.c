@@ -30,80 +30,6 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef SEC_HW_VERSION_4_4
-
-#define LOCAL_DMA_ADDR_TYPE
-#include "compat.h"
-
-#include <sys/types.h>
-#include <sys/file.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdarg.h>
-
-#include <sys/mman.h>
-#include <sys/shm.h>
-
-#include "fsl_het_mgr.h"
-#include "fsl_types.h"
-
-#include "fsl_usmmgr.h"
-
-#ifdef ALLOC_DEBUG
-#define DPRINT      pr_info
-#else
-#define DPRINT( x...)    do { ; } while(0)
-#endif
-
-void *dma_mem_memalign(size_t align, size_t size)
-{
-    range_t r;
-    int ret;
-    extern fsl_usmmgr_t    mmgr;
-
-    r.size = size;
-
-    DPRINT("Requesting %u bytes aligned %u\n", size, align);
-    ret = fsl_usmmgr_memalign(&r, align, mmgr);
-    if(ret)
-    {
-        DPRINT("Error requesting aligned memory: %d\n",ret);
-        return NULL;
-    }
-
-    return (void *)r.vaddr;
-
-}
-
-void dma_mem_free(void *ptr, size_t size)
-{
-    range_t r;
-    extern fsl_usmmgr_t    mmgr;
-
-#warning "Replace w/macro"
-    size = size;
-
-    r.vaddr = ptr;
-
-    fsl_usmmgr_free(&r, mmgr);
-}
-
-
-void *dma_mem_ptov(dma_addr_t p)
-{
-    extern fsl_usmmgr_t    mmgr;
-    return fsl_usmmgr_p2v(p, mmgr);
-}
-
-dma_addr_t dma_mem_vtop(void *v)
-{
-    extern fsl_usmmgr_t    mmgr;
-    return fsl_usmmgr_v2p(v, mmgr);
-}
-#else // SEC_HW_VERSION_4_4
 #define LOCAL_DMA_ADDR_TYPE
 #include "private.h"
 
@@ -273,4 +199,3 @@ int dma_mem_alloc_init(void *bar, size_t sz)
 {
 	return _dma_mem_free(bar, sz);
 }
-#endif // SEC_HW_VERSION_4_4

@@ -1,4 +1,4 @@
-/* Copyright (c) 2011 Freescale Semiconductor, Inc.
+/* Copyright (c) 2011 - 2012 Freescale Semiconductor, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,9 +40,6 @@ extern "C" {
 #include "sec_hw_specific.h"
 #include "sec_job_ring.h"
 #include "sec_utils.h"
-#ifdef SEC_HW_VERSION_4_4
-#include "external_mem_management.h"
-#endif
 
 /*==================================================================================================
                                      LOCAL DEFINES
@@ -70,6 +67,9 @@ extern "C" {
 /*==================================================================================================
                                      GLOBAL VARIABLES
 ==================================================================================================*/
+#ifdef SEC_HW_VERSION_4_4
+extern sec_vtop g_sec_vtop;
+#endif
 
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
@@ -265,17 +265,17 @@ int hw_reset_job_ring(sec_job_ring_t *job_ring)
     hw_set_output_ring_size(job_ring,SEC_JOB_RING_SIZE);
 
     // Write the JR input queue start address
-    hw_set_input_ring_start_addr(job_ring, sec_vtop(job_ring->input_ring));
+    hw_set_input_ring_start_addr(job_ring, g_sec_vtop(job_ring->input_ring));
     SEC_DEBUG(" Set input ring base address to: Virtual: 0x%x, Physical: 0x%x, Read from HW: 0x%08x",
             (dma_addr_t)job_ring->input_ring,
-            sec_vtop(job_ring->input_ring),
+            g_sec_vtop(job_ring->input_ring),
             hw_get_inp_queue_base(job_ring));
 
     // Write the JR output queue start address
-    hw_set_output_ring_start_addr(job_ring, sec_vtop(job_ring->output_ring));
+    hw_set_output_ring_start_addr(job_ring, g_sec_vtop(job_ring->output_ring));
     SEC_DEBUG(" Set output ring base address to: Virtual: 0x%x, Physical: 0x%x, Read from HW: 0x%08x",
             (dma_addr_t)job_ring->output_ring,
-            sec_vtop(job_ring->output_ring),
+            g_sec_vtop(job_ring->output_ring),
             hw_get_out_queue_base(job_ring));
 
     // Set HW read index to 0

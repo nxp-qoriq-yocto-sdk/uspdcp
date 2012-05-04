@@ -1,4 +1,4 @@
-/* Copyright (c) 2011 Freescale Semiconductor, Inc.
+/* Copyright (c) 2011 - 2012 Freescale Semiconductor, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,8 +42,10 @@ extern "C" {
 #include "sec_hw_specific.h"
 #include "sec_config.h"
 
+#ifdef SEC_HW_VERSION_3_1
 // For definition of sec_vtop and sec_ptov macros
 #include "external_mem_management.h"
+#endif
 
 /*==================================================================================================
                                      LOCAL DEFINES
@@ -70,6 +72,9 @@ extern "C" {
 ==================================================================================================*/
 /* Job rings used for communication with SEC HW */
 sec_job_ring_t g_job_rings[MAX_SEC_JOB_RINGS];
+#ifdef SEC_HW_VERSION_4_4
+extern sec_vtop g_sec_vtop;
+#endif
 
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
@@ -181,7 +186,11 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
         job_ring->jobs[i].descr = &job_ring->descriptors[i];
 
         // Obtain and store the physical address for a job descriptor
+#ifdef SEC_HW_VERSION_3_1
         job_ring->jobs[i].descr_phys_addr = sec_vtop(&job_ring->descriptors[i]);
+#else // SEC_HW_VERSION_3_1
+        job_ring->jobs[i].descr_phys_addr = g_sec_vtop(&job_ring->descriptors[i]);
+#endif // SEC_HW_VERSION_3_1
 #if defined(SEC_HW_VERSION_4_4) && (SEC_ENABLE_SCATTER_GATHER == ON)
         job_ring->jobs[i].sg_ctx = &job_ring->sg_ctxs[i];
 

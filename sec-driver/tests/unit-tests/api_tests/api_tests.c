@@ -39,8 +39,15 @@ extern "C" {
 ==================================================================================================*/
 #include "fsl_sec.h"
 #include "cgreen.h"
-// for dma_mem library
+
+#ifdef SEC_HW_VERSION_3_1
 #include "compat.h"
+#else // SEC_HW_VERSION_3_1
+
+// For shared memory allocator
+#include "fsl_usmmgr.h"
+
+#endif // SEC_HW_VERSION_3_1
 
 #include <stdio.h>
 #include <assert.h>
@@ -79,6 +86,11 @@ extern "C" {
 #ifdef SEC_HW_VERSION_4_4
 /** Size in bytes of a cacheline. */
 #define CACHE_LINE_SIZE  32
+
+// For keeping the code relatively the same between HW versions
+#define dma_mem_memalign  test_memalign
+#define dma_mem_free      test_free
+
 #endif
 
 // Sizeof sec_context_t struct as defined in driver.
@@ -164,6 +176,12 @@ static uint8_t test_crypto_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
 // Authentication key
 static uint8_t test_auth_key[] = {0xC7,0x36,0xC6,0xAA,0xB2,0x2B,0xFF,0xF9,
                                   0x1E,0x26,0x98,0xD2,0xE2,0x2A,0xD5,0x7E};
+#ifdef SEC_HW_VERSION_4_4
+
+// FSL Userspace Memory Manager structure
+fsl_usmmgr_t g_usmmgr;
+
+#endif // SEC_HW_VERSION_4_4
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
 ==================================================================================================*/
@@ -181,7 +199,21 @@ static void get_free_packet(int packet_idx, sec_packet_t **in_packet, sec_packet
 static void send_packets(sec_context_handle_t ctx,
                          int packet_no,
                          int expected_ret_code);
+#ifdef SEC_HW_VERSION_4_4
+/* Returns the physical address corresponding to the virtual
+ * address passed as a parameter. 
+ */
+static inline dma_addr_t test_vtop(void *v)
+{
+    return fsl_usmmgr_v2p(v,g_usmmgr);
+}
 
+/* Allocates an aligned memory area from the FSL USMMGR pool */
+static void * test_memalign(size_t align, size_t size);
+
+/* Frees a previously allocated FSL USMMGR memory region */
+static void test_free(void *ptr, size_t size);
+#endif // SEC_HW_VERSION_4_4
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
@@ -271,20 +303,38 @@ static void send_packets(sec_context_handle_t ctx, int packet_no, int expected_r
 #endif
 }
 
+#ifdef SEC_HW_VERSION_4_4
+static void * test_memalign(size_t align, size_t size)
+{
+    int ret;
+    range_t r = {0,0,size};
+    
+    ret = fsl_usmmgr_memalign(&r,align,g_usmmgr);    
+    assert_equal_with_message(ret, 0, "FSL USMMGR memalign failed: %d",ret);
+    return r.vaddr;
+}
+
+static void test_free(void *ptr, size_t size)
+{
+   range_t r = {0,ptr,size};   
+   fsl_usmmgr_free(&r,g_usmmgr);
+}
+#endif // SEC_HW_VERSION_4_4
 static void test_setup(void)
 {
+#ifdef SEC_HW_VERSION_3_1
     int ret = 0;
 
     // map the physical memory
-#ifdef SEC_HW_VERSION_4_4
-    ret = dma_mem_setup(SEC_DMA_MEMORY_SIZE, CACHE_LINE_SIZE);
-#else
     ret = dma_mem_setup();
-#endif
     assert_equal_with_message(ret, 0, "ERROR on dma_mem_setup: ret = %d", ret);
 
     // Fill SEC driver configuration data
     sec_config_data.memory_area = (void*)__dma_virt;
+#else
+    sec_config_data.memory_area = dma_mem_memalign(CACHE_LINE_SIZE,SEC_DMA_MEMORY_SIZE);
+    sec_config_data.sec_drv_vtop = test_vtop;
+#endif
     sec_config_data.work_mode = SEC_STARTUP_POLLING_MODE;
 
     cipher_key = dma_mem_memalign(BUFFER_ALIGNEMENT, MAX_KEY_LENGTH);
@@ -313,7 +363,10 @@ static void test_setup(void)
     ctx_info.protocol_direction = PDCP_ENCAPSULATION;
     ctx_info.hfn = 0xFA556;
     ctx_info.hfn_threshold = 0xFF00000;
-
+#ifdef SEC_HW_VERSION_4_4
+     ctx_info.input_vtop = 
+     ctx_info.output_vtop = test_vtop;
+#endif // SEC_HW_VERSION_4_4
     test_input_packets = dma_mem_memalign(BUFFER_ALIGNEMENT,
             sizeof(buffer_t) * TEST_PACKETS_NUMBER);
     assert_not_equal_with_message(test_input_packets, NULL,
@@ -331,11 +384,17 @@ static void test_setup(void)
 
 static void test_teardown()
 {
+#ifdef SEC_HW_VERSION_3_1
     int ret = 0;
 
     // unmap the physical memory
-    ret = dma_mem_release();
-    assert_equal_with_message(ret, 0, "ERROR on dma_mem_release: ret = %d", ret);
+    dma_mem_release();
+#else // SEC_HW_VERSION_3_1
+    // Destoy FSL USMMGR object
+    //ret = fsl_usmmgr_exit(g_usmmgr);
+    //assert_equal_with_message(ret,0,"Failure to destroy the FSL USMMGR: %d",ret);
+    dma_mem_free(sec_config_data.memory_area,SEC_DMA_MEMORY_SIZE);
+#endif // SEC_HW_VERSION_3_1
 
     dma_mem_free(cipher_key, MAX_KEY_LENGTH);
     dma_mem_free(integrity_key, MAX_KEY_LENGTH);
@@ -2547,7 +2606,11 @@ int main(int argc, char *argv[])
     /* create test suite */
     TestSuite * suite = uio_tests();
     TestReporter * reporter = create_text_reporter();
-
+#ifdef SEC_HW_VERSION_4_4
+    // Init FSL USMMGR
+    g_usmmgr = fsl_usmmgr_init();
+    assert_not_equal_with_message(g_usmmgr, NULL, "ERROR on fsl_usmmgr_init");
+#endif // SEC_HW_VERSION_4_4
     /* Run tests */
 
     ////////////////////////////////////

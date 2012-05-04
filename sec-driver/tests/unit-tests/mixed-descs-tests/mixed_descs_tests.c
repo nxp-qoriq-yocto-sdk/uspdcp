@@ -54,8 +54,9 @@ extern "C" {
 ==================================================================================================*/
 #include "fsl_sec.h"
 #include "cgreen.h"
-// for dma_mem library
-#include "compat.h"
+
+// For shared memory allocator
+#include "fsl_usmmgr.h"
 
 #include <stdio.h>
 #include <assert.h>
@@ -97,6 +98,10 @@ extern "C" {
 
 /** Size in bytes of a cacheline. */
 #define CACHE_LINE_SIZE  32
+
+// For keeping the code relatively the same between HW versions
+#define dma_mem_memalign    test_memalign
+#define dma_mem_free        test_free
 
 // Number of SEC contexts in each pool. Define taken from SEC user-space driver.
 #define MAX_SEC_CONTEXTS_PER_POOL   (SEC_MAX_PDCP_CONTEXTS / (JOB_RING_NUMBER))
@@ -151,6 +156,8 @@ static uint8_t *cipher_key = NULL;
 // integrity key, required for every PDCP context
 static uint8_t *integrity_key = NULL;
 
+// FSL Userspace Memory Manager structure
+fsl_usmmgr_t g_usmmgr;
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
 ==================================================================================================*/
@@ -169,6 +176,19 @@ static int get_pkt(sec_packet_t **pkt,
 // Return packet in the global array with test packets.
 static int put_pkt(sec_packet_t **pkt);
 
+/* Returns the physical address corresponding to the virtual
+ * address passed as a parameter. 
+ */
+static inline dma_addr_t test_vtop(void *v)
+{
+    return fsl_usmmgr_v2p(v,g_usmmgr);
+}
+
+/* Allocates an aligned memory area from the FSL USMMGR pool */
+static void * test_memalign(size_t align, size_t size);
+
+/* Frees a previously allocated FSL USMMGR memory region */
+static void test_free(void *ptr, size_t size);
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
@@ -257,18 +277,28 @@ static int put_pkt(sec_packet_t **pkt)
     return 1;
 }
 
+static void * test_memalign(size_t align, size_t size)
+{
+    int ret;
+    range_t r = {0,0,size};
+    
+    ret = fsl_usmmgr_memalign(&r,align,g_usmmgr);    
+    assert_equal_with_message(ret, 0, "FSL USMMGR memalign failed: %d",ret);
+    return r.vaddr;
+}
+
+static void test_free(void *ptr, size_t size)
+{
+   range_t r = {0,ptr,size};   
+   fsl_usmmgr_free(&r,g_usmmgr);
+}
 
 static void test_setup(void)
 {
-    int ret = 0;
-
-    // map the physical memory
-    ret = dma_mem_setup(SEC_DMA_MEMORY_SIZE, CACHE_LINE_SIZE);
-
-    assert_equal_with_message(ret, 0, "ERROR on dma_mem_setup: ret = %d", ret);
-
     // Fill SEC driver configuration data
-    sec_config_data.memory_area = (void*)__dma_virt;
+    sec_config_data.memory_area = dma_mem_memalign(CACHE_LINE_SIZE, SEC_DMA_MEMORY_SIZE);
+    sec_config_data.sec_drv_vtop = test_vtop;
+
     sec_config_data.work_mode = SEC_STARTUP_POLLING_MODE;
 
     cipher_key = dma_mem_memalign(BUFFER_ALIGNEMENT, MAX_KEY_LENGTH);
@@ -292,12 +322,8 @@ static void test_setup(void)
 
 static void test_teardown()
 {
-    int ret = 0;
-
-    // unmap the physical memory
-    ret = dma_mem_release();
-    assert_equal_with_message(ret, 0, "ERROR on dma_mem_release: ret = %d", ret);
-
+    dma_mem_free(sec_config_data.memory_area,SEC_DMA_MEMORY_SIZE);
+    
     dma_mem_free(cipher_key, MAX_KEY_LENGTH);
     dma_mem_free(integrity_key, MAX_KEY_LENGTH);
     dma_mem_free(test_packets, sizeof(buffer_t) * TEST_PACKETS_NUMBER);
@@ -336,7 +362,9 @@ static void test_single_algorithms(void)
             //.packet_direction       = test_pkt_dir;
             //.protocol_direction     = test_proto_dir;
             .hfn                    = test_hfn,
-            .hfn_threshold          = test_hfn_threshold
+            .hfn_threshold          = test_hfn_threshold,
+            .input_vtop             = test_vtop,
+            .output_vtop            = test_vtop
         },
         // Context for decapsulation
         {
@@ -353,7 +381,9 @@ static void test_single_algorithms(void)
             //.packet_direction       = test_pkt_dir;
             //.protocol_direction     = test_proto_dir;
             .hfn                    = test_hfn,
-            .hfn_threshold          = test_hfn_threshold
+            .hfn_threshold          = test_hfn_threshold,
+            .input_vtop             = test_vtop,
+            .output_vtop            = test_vtop
         }
     };
 
@@ -571,7 +601,9 @@ static void test_combined_algos(void)
             //.packet_direction       = test_pkt_dir;
             //.protocol_direction     = test_proto_dir;
             .hfn                    = test_hfn,
-            .hfn_threshold          = test_hfn_threshold
+            .hfn_threshold          = test_hfn_threshold,
+            .input_vtop             = test_vtop,
+            .output_vtop            = test_vtop
         },
         /* auth-only */
         {
@@ -588,7 +620,9 @@ static void test_combined_algos(void)
             //.packet_direction       = test_pkt_dir;
             //.protocol_direction     = test_proto_dir;
             .hfn                    = test_hfn,
-            .hfn_threshold          = test_hfn_threshold
+            .hfn_threshold          = test_hfn_threshold,
+            .input_vtop             = test_vtop,
+            .output_vtop            = test_vtop
         },
         /* auth+cipher */
         {
@@ -605,7 +639,9 @@ static void test_combined_algos(void)
             //.packet_direction       = test_pkt_dir;
             //.protocol_direction     = test_proto_dir;
             .hfn                    = test_hfn,
-            .hfn_threshold          = test_hfn_threshold
+            .hfn_threshold          = test_hfn_threshold,
+            .input_vtop             = test_vtop,
+            .output_vtop            = test_vtop
         }
     };
 
@@ -954,6 +990,10 @@ int main(int argc, char *argv[])
     /* create test suite */
     TestSuite * suite = mixed_descs_tests();
     TestReporter * reporter = create_text_reporter();
+    
+    // Init FSL USMMGR
+    g_usmmgr = fsl_usmmgr_init();
+    assert_not_equal_with_message(g_usmmgr, NULL, "ERROR on fsl_usmmgr_init");
 
     /* Run tests */
 

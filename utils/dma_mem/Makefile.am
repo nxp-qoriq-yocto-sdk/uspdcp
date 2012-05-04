@@ -29,14 +29,15 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+ifeq (DMA_MEM,$(MEM_MANAGER))
 lib_LIBRARIES = dma_mem
+dist_DATA = create_dev.sh
 
-AM_CFLAGS := -I$(TOP_LEVEL)/utils/dma_mem/include
-AM_CFLAGS += -I${KERNEL_DIR}/drivers/misc
-AM_CFLAGS += -I${IPC_DIR}/ipc/include
-AM_CFLAGS += -I${IPC_DIR}/fsl_shm/include
-AM_CFLAGS += -I${IPC_DIR}/fsl_shm/lib
+create_dev.sh_install := $(INSTALL_BIN)
+create_dev.sh_install_flags := $(INSTALL_BIN_FLAGS)
 
-dma_mem_SOURCES := src/setup.c src/allocator.c src/fsl_usmmgr.c src/lg_shm.c
+AM_CFLAGS := -I$(TOP_LEVEL)/utils/dma_mem/include/
 
-dma_mem_LDADD := fsl_usmmgr lg_shm
+dma_mem_SOURCES := src/setup.c src/allocator.c
+
+endif

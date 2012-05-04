@@ -29,88 +29,13 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
 #define LOCAL_DMA_ADDR_TYPE
+
+#include "private.h"
 
 #define test_printf(format, ...)
 //#define test_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__)
 
-#ifdef SEC_HW_VERSION_4_4
-#include "compat.h"
-
-#include <sys/types.h>
-#include <sys/file.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdarg.h>
-
-#include <sys/mman.h>
-#include <sys/shm.h>
-
-#include "fsl_het_mgr.h"
-#include "fsl_types.h"
-
-#include "fsl_usmmgr.h"
-
-/* This global is exported for use in ptov/vtop inlines. It is the result of the
- * mmap(), but pre-cast to dma_addr_t, so if we have 64-bit physical addresses
- * the ptov/vtop inlines will have less conversion to do. */
-dma_addr_t      __dma_virt;
-dma_addr_t      __dma_phys;
-
-/* This is the same value, but it's the pointer type */
-static void *virt;
-
-/** US memory manager. One per each instance of an application */
-fsl_usmmgr_t    mmgr;
-
-/** Value indicating if the memory manager was instantiated. MemMgr must
-  * be instantiated only once per application
-  */
-uint32_t    dma_mem_init = 0;
-
-int dma_mem_setup(uint32_t sec_driver_size, uint32_t align)
-{
-    range_t r;
-    int ret;
-
-    if( dma_mem_init == 0 )
-    {
-        mmgr = fsl_usmmgr_init();
-        dma_mem_init = 1;
-    }
-
-    r.size = sec_driver_size;
-
-    test_printf("Allocating %u for SEC driver internal use\n", sec_driver_size);
-
-    ret = fsl_usmmgr_memalign(&r,align,mmgr);
-
-    if(ret)
-    {
-        test_printf("Error allocating SEC driver memory: %d\n",ret);
-        return -1;
-    }
-
-    virt = r.vaddr;
-    __dma_virt = (dma_addr_t)r.vaddr;
-    __dma_phys = r.phys_addr;
-
-    return 0;
-}
-
-int dma_mem_release()
-{
-    test_printf("Releasing DMA mem from address: %p\n",(void*)__dma_virt);
-    dma_mem_free((void*)__dma_virt,0);
-
-    return 0;
-}
-#else // SEC_HW_VERSION_4_4
-#include "private.h"
 /* For an efficient conversion between user-space virtual address map(s) and bus
  * addresses required by hardware for DMA, we use a single contiguous mmap() on
  * the /dev/fsl-shmem device, a pre-arranged physical base address (and
@@ -123,7 +48,6 @@ static int fd;
  * mmap(), but pre-cast to dma_addr_t, so if we have 64-bit physical addresses
  * the ptov/vtop inlines will have less conversion to do. */
 dma_addr_t __dma_virt;
-
 /* This is the same value, but it's the pointer type */
 static void *virt;
 
@@ -188,5 +112,3 @@ int dma_mem_release(void)
 	}
 	return 0;
 }
-
-#endif // SEC_HW_VERSION_3_1

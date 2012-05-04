@@ -1,4 +1,4 @@
-/* Copyright (c) 2011 Freescale Semiconductor, Inc.
+/* Copyright (c) 2011 - 2012 Freescale Semiconductor, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,8 +43,10 @@ extern "C" {
 #include "sec_hw_specific.h"
 #include "sec_utils.h"
 
+#ifdef SEC_HW_VERSION_3_1
 // For definition of sec_vtop and sec_ptov macros
 #include "external_mem_management.h"
+#endif // SEC_HW_VERSION_3_1
 
 /*==================================================================================================
                                      LOCAL DEFINES
@@ -224,7 +226,9 @@ static create_desc_fp u_plane_create_desc[];
 /*==================================================================================================
                                      GLOBAL VARIABLES
 ==================================================================================================*/
-
+#ifdef SEC_HW_VERSION_4_4
+extern sec_vtop g_sec_vtop;
+#endif
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
 ==================================================================================================*/
@@ -1461,7 +1465,7 @@ static int create_c_plane_auth_only_desc(sec_context_t *ctx)
 
             *((uint32_t*)ctx->sh_desc + i++) = 0x04000000 |
                     ctx->pdcp_crypto_info->integrity_key_len;  // key2, len = integrity_key_len
-            *((uint32_t*)ctx->sh_desc + i++) = sec_vtop(ctx->pdcp_crypto_info->integrity_key);
+            *((uint32_t*)ctx->sh_desc + i++) = g_sec_vtop(ctx->pdcp_crypto_info->integrity_key);
 
             *((uint32_t*)ctx->sh_desc + i++) = 0x1E080001;  // seq load, class 3, length = 1, dest = m0
             *((uint32_t*)ctx->sh_desc + i++) = 0xA1001001;  // wait for calm
@@ -1526,7 +1530,7 @@ static int create_c_plane_auth_only_desc(sec_context_t *ctx)
             ctx->sh_desc->deschdr.command.word  = 0xB8850100;
             *((uint32_t*)ctx->sh_desc + i++) = 0x02000000 |
                     ctx->pdcp_crypto_info->integrity_key_len;     // key1, len = integrity_key_len
-            *((uint32_t*)ctx->sh_desc + i++) = sec_vtop(ctx->pdcp_crypto_info->integrity_key);
+            *((uint32_t*)ctx->sh_desc + i++) = g_sec_vtop(ctx->pdcp_crypto_info->integrity_key);
 
             *((uint32_t*)ctx->sh_desc + i++) = 0x1E080001;     // seq load, class 3, length = 1, dest = m0
             *((uint32_t*)ctx->sh_desc + i++) = 0xA1001001;     // wait for calm
@@ -1604,7 +1608,7 @@ static int create_c_plane_cipher_only_desc(sec_context_t *ctx)
 
             *((uint32_t*)ctx->sh_desc + i++) = 0x02000000 |
                     ctx->pdcp_crypto_info->cipher_key_len; // key1, len = cipher_key_len
-            *((uint32_t*)ctx->sh_desc + i++) = sec_vtop(ctx->pdcp_crypto_info->cipher_key);
+            *((uint32_t*)ctx->sh_desc + i++) = g_sec_vtop(ctx->pdcp_crypto_info->cipher_key);
 
             *((uint32_t*)ctx->sh_desc + i++) = 0x1e080001;      // seq load, class 3, length = 1, dest = m0
             *((uint32_t*)ctx->sh_desc + i++) = 0xa1001001;      // wait for calm
@@ -1641,7 +1645,7 @@ static int create_c_plane_cipher_only_desc(sec_context_t *ctx)
 
             *((uint32_t*)ctx->sh_desc + i++) = 0x02000000 |
                     ctx->pdcp_crypto_info->cipher_key_len; // key1, len = cipher_key_len
-            *((uint32_t*)ctx->sh_desc + i++) = sec_vtop(ctx->pdcp_crypto_info->cipher_key);
+            *((uint32_t*)ctx->sh_desc + i++) = g_sec_vtop(ctx->pdcp_crypto_info->cipher_key);
 
             *((uint32_t*)ctx->sh_desc + i++) = 0x1E080001;  // seq load, class 3, length = 1, dest = m0
             *((uint32_t*)ctx->sh_desc + i++) = 0xA1001001;  // wait for calm
@@ -1756,14 +1760,14 @@ int sec_pdcp_context_update_descriptor(sec_context_t *ctx,
     if( SG_CONTEXT_OUT_TBL_EN(job->sg_ctx ))
     {
         PDCP_JD_SET_SG_OUT(descriptor);
-        phys_addr = sec_vtop(SG_CONTEXT_GET_TBL_OUT(job->sg_ctx));
+        phys_addr = g_sec_vtop(SG_CONTEXT_GET_TBL_OUT(job->sg_ctx));
         offset = 0;
         length = SG_CONTEXT_GET_LEN_OUT(job->sg_ctx);
     }
     else
 #endif // SEC_ENABLE_SCATTER_GATHER == ON
     {
-        phys_addr = sec_vtop(job->out_packet->address);
+        phys_addr = job->sec_context->out_pkt_vtop(job->out_packet->address);
         offset = job->out_packet->offset;
         length = job->out_packet->length;
     }
@@ -1777,14 +1781,14 @@ int sec_pdcp_context_update_descriptor(sec_context_t *ctx,
     if( SG_CONTEXT_IN_TBL_EN(job->sg_ctx ))
     {
         PDCP_JD_SET_SG_IN(descriptor);
-        phys_addr = sec_vtop(SG_CONTEXT_GET_TBL_IN(job->sg_ctx));
+        phys_addr = g_sec_vtop(SG_CONTEXT_GET_TBL_IN(job->sg_ctx));
         offset = 0;
         length = SG_CONTEXT_GET_LEN_IN(job->sg_ctx);
     }
     else
 #endif // (SEC_ENABLE_SCATTER_GATHER == ON)
     {
-        phys_addr = sec_vtop(job->in_packet->address);
+        phys_addr = job->sec_context->in_pkt_vtop(job->in_packet->address);
         offset = job->in_packet->offset;
         length = job->in_packet->length;
     }

@@ -33,53 +33,6 @@
 #ifndef __DMA_MEM_H
 #define __DMA_MEM_H
 
-#ifdef SEC_HW_VERSION_4_4
-/* These types are for linux-compatibility, eg. they're used by single-source
- * qbman drivers. These aren't in compat.h because that would lead to
- * dependencies being back-to-front. */
-
-#ifdef LOCAL_DMA_ADDR_TYPE
-#if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
-/** Physical address on 36 bits or more. MUST be kept in synch with same define from kernel! */
-typedef uint64_t dma_addr_t;
-#else
-/** Physical address on 32 bits. MUST be kept in synch with same define from kernel!*/
-typedef uint32_t dma_addr_t;
-#endif
-#endif // #ifdef LOCAL_DMA_ADDR_TYPE
-
-/* For an efficient conversion between user-space virtual address map(s) and bus
- * addresses required by hardware for DMA, we use a single contiguous mmap() on
- * the /dev/mem device, a pre-arranged physical base address (and
- * similarly reserved from regular linux use by a "mem=<...>" kernel boot
- * parameter). See conf.h for the hard-coded constants that are used. */
-
-/* initialise ad-hoc DMA allocation memory.
- *    -> returns non-zero on failure.
- */
-int dma_mem_setup(uint32_t sec_driver_size, uint32_t align);
-
-/** unmap the memory */
-int dma_mem_release(void);
-
-/* Ad-hoc DMA allocation (not optimised for speed...). NB, the size must be
- * provided to 'free'. */
-void *dma_mem_memalign(size_t boundary, size_t size);
-void dma_mem_free(void *ptr, size_t size);
-
-/* Internal base-address pointer, it's exported only to allow the ptov/vtop
- * functions (below) to be implemented as inlines. Note, this is dma_addr_t
- * rather than void*, so that 32/64 type conversions aren't required for
- * ptov/vtop when sizeof(dma_addr_t)>sizeof(void*). */
-extern dma_addr_t __dma_virt;
-extern dma_addr_t __dma_phys;
-
-/* Conversion between user-virtual ("v") and physical ("p") address */
-
-void *dma_mem_ptov(dma_addr_t p);
-dma_addr_t dma_mem_vtop(void *v);
-
-#else // SEC_HW_VERSION_4_4
 /* These types are for linux-compatibility, eg. they're used by single-source
  * qbman drivers. These aren't in compat.h because that would lead to
  * dependencies being back-to-front. */
@@ -105,26 +58,6 @@ enum dma_data_direction {
 	DMA_FROM_DEVICE = 2,
 	DMA_NONE = 3,
 };
-
-#ifdef SEC_HW_VERSION_4_4
-typedef struct shm_seg {
-        void *vaddr;
-        void *paddr;
-        u32 size;
-} shm_seg_t;
-
-typedef struct alloc_req {
-        void *paddr;
-        size_t size;
-} alloc_req_t;
-
-typedef struct memalign_req {
-        void *paddr;
-        unsigned long align;
-        size_t size;
-} memalign_req_t;
-
-#endif // SEC_HW_VERSION_4_4
 
 /* For an efficient conversion between user-space virtual address map(s) and bus
  * addresses required by hardware for DMA, we use a single contiguous mmap() on
@@ -183,7 +116,5 @@ static inline int dma_mapping_error(void *dev __always_unused,
 {
 	return 0;
 }
-
-#endif // SEC_HW_VERSION_4_4
 
 #endif	/* __DMA_MEM_H */

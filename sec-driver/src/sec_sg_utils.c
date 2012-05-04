@@ -40,9 +40,6 @@ extern "C" {
 #include "list.h"
 #include "sec_sg_utils.h"
 #include "sec_utils.h"
-// for vtop macro
-#include "external_mem_management.h"
-
 #include <stdlib.h>
 
 /*==================================================================================================
@@ -83,7 +80,8 @@ extern "C" {
 
 sec_return_code_t   build_sg_context(sec_sg_context_t *sg_ctx,
                                      const sec_packet_t *packet,
-                                     sec_sg_context_type_t dir)
+                                     sec_sg_context_type_t dir,
+                                     sec_vtop vtop)
 {
     uint8_t     *sg_tbl_en;
     uint32_t    num_fragments = 0;
@@ -95,7 +93,7 @@ sec_return_code_t   build_sg_context(sec_sg_context_t *sg_ctx,
 
     // Sanity checks
     ASSERT(packet != NULL );
-    ASSERT( sg_ctx != NULL );
+    ASSERT(sg_ctx != NULL);
 
     // Get number of fragments from first packet.
     num_fragments = packet[0].num_fragments;
@@ -129,7 +127,7 @@ sec_return_code_t   build_sg_context(sec_sg_context_t *sg_ctx,
                    "Fragment %i offset (%d) is larger than its length (%d)",
                    i,packet[i].offset, packet[i].length);
 
-        SG_TBL_SET_ADDRESS(sg_tbl[i],sec_vtop(packet[i].address));
+        SG_TBL_SET_ADDRESS(sg_tbl[i],vtop(packet[i].address));
         SG_TBL_SET_OFFSET(sg_tbl[i], packet[i].offset);
         SG_TBL_SET_LENGTH(sg_tbl[i],packet[i].length);
     }while( ++i <= num_fragments);
@@ -150,8 +148,8 @@ sec_return_code_t   build_sg_context(sec_sg_context_t *sg_ctx,
     
     // Enable SG for this direction
     *sg_tbl_en = 1;
-        
-    SEC_DEBUG("Created scatter gather table: @ 0x%08x (phys: 0x%08x)",(uint32_t)sg_tbl,sec_vtop(sg_tbl));
+
+    SEC_DEBUG("Created scatter gather table: @ 0x%08x",(uint32_t)sg_tbl);
     DUMP_SG_TBL(sg_tbl);
 
     return ret;

@@ -47,9 +47,17 @@ extern "C" {
 #include <sys/time.h>
 
 #include "fsl_sec.h"
-// for dma_mem library
+// for mfspr related functions
 #include "compat.h"
+#ifdef SEC_HW_VERSION_4_4
 
+#warning "Ugly hack to keep compat.h unchanged."
+#undef __KERNEL__
+
+// For shared memory allocator
+#include "fsl_usmmgr.h"
+
+#endif
 #include "test_sec_driver_benchmark.h"
 
 /*==================================================================================================
@@ -111,7 +119,12 @@ extern "C" {
 #ifdef SEC_HW_VERSION_4_4
 /** Size in bytes of a cacheline. */
 #define CACHE_LINE_SIZE  32
-#endif
+
+// For keeping the code relatively the same between HW versions
+#define dma_mem_memalign    test_memalign
+#define dma_mem_free        test_free
+
+#endif //SEC_HW_VERSION_4_4
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
 ==================================================================================================*/
@@ -186,7 +199,35 @@ typedef struct thread_config_s
     uint32_t rx_packets_per_ctx;
     uint32_t tx_packets_per_ctx;
 }thread_config_t;
+/*==================================================================================================
+                                     GLOBAL VARIABLES
+==================================================================================================*/
+// configuration data for SEC driver
+static sec_config_t sec_config_data;
 
+// job ring handles provided by SEC driver
+static const sec_job_ring_descriptor_t *job_ring_descriptors = NULL;
+
+// UA pool of PDCP contexts for UL and DL.
+// For simplicity, use an array of contexts and a mutex to synchronize access to it.
+static pdcp_context_t pdcp_ul_contexts[PDCP_CONTEXT_NUMBER];
+static int no_of_used_pdcp_ul_contexts = 0;
+
+static pdcp_context_t pdcp_dl_contexts[PDCP_CONTEXT_NUMBER];
+static int no_of_used_pdcp_dl_contexts = 0;
+
+// There are 2 threads: one thread handles PDCP UL and one thread handles PDCP DL
+// One thread is producer on JR1 and consumer on JR2. The other thread is producer on JR2
+// and consumer on JR1.
+static thread_config_t th_config[THREADS_NUMBER];
+static pthread_t threads[THREADS_NUMBER];
+
+#ifdef SEC_HW_VERSION_4_4
+
+// FSL Userspace Memory Manager structure
+fsl_usmmgr_t g_usmmgr;
+
+#endif // SEC_HW_VERSION_4_4
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
 ==================================================================================================*/
@@ -270,7 +311,21 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
                                       ua_context_handle_t ua_ctx_handle,
                                       uint32_t status,
                                       uint32_t error_info);
+#ifdef SEC_HW_VERSION_4_4
+/* Returns the physical address corresponding to the virtual
+ * address passed as a parameter.
+ */
+static inline dma_addr_t test_vtop(void *v)
+{
+    return fsl_usmmgr_v2p(v,g_usmmgr);
+}
 
+/* Allocates an aligned memory area from the FSL USMMGR pool */
+static void * test_memalign(size_t align, size_t size);
+
+/* Frees a previously allocated FSL USMMGR memory region */
+static void test_free(void *ptr, size_t size);
+#endif // SEC_HW_VERSION_4_4
 /*==================================================================================================
                                         LOCAL MACROS
 ==================================================================================================*/
@@ -278,32 +333,6 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
 /*==================================================================================================
                                       LOCAL VARIABLES
 ==================================================================================================*/
-
-/*==================================================================================================
-                                     GLOBAL VARIABLES
-==================================================================================================*/
-// configuration data for SEC driver
-static sec_config_t sec_config_data;
-
-// job ring handles provided by SEC driver
-static const sec_job_ring_descriptor_t *job_ring_descriptors = NULL;
-
-// UA pool of PDCP contexts for UL and DL.
-// For simplicity, use an array of contexts and a mutex to synchronize access to it.
-static pdcp_context_t pdcp_ul_contexts[PDCP_CONTEXT_NUMBER];
-static int no_of_used_pdcp_ul_contexts = 0;
-
-static pdcp_context_t pdcp_dl_contexts[PDCP_CONTEXT_NUMBER];
-static int no_of_used_pdcp_dl_contexts = 0;
-
-// There are 2 threads: one thread handles PDCP UL and one thread handles PDCP DL
-// One thread is producer on JR1 and consumer on JR2. The other thread is producer on JR2
-// and consumer on JR1.
-static thread_config_t th_config[THREADS_NUMBER];
-static pthread_t threads[THREADS_NUMBER];
-
-
-
 #ifndef PDCP_TEST_SCENARIO
 #error "PDCP_TEST_SCENARIO is undefined!!!"
 #endif
@@ -956,6 +985,27 @@ static uint32_t aes_cmac_dec_hfn_threshold = 0xFF00000;
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
+#ifdef SEC_HW_VERSION_4_4
+static void * test_memalign(size_t align, size_t size)
+{
+    int ret;
+    range_t r = {0,0,size};
+
+    ret = fsl_usmmgr_memalign(&r,align,g_usmmgr);
+    if(ret != 0){
+        printf("FSL USMMGR memalign failed: %d",ret);
+        return NULL;
+    }
+    return r.vaddr;
+}
+
+static void test_free(void *ptr, size_t size)
+{
+   range_t r = {0,ptr,size};
+   fsl_usmmgr_free(&r,g_usmmgr);
+}
+#endif // SEC_HW_VERSION_4_4
+
 static int get_free_pdcp_context(pdcp_context_t * pdcp_contexts,
                                  int * no_of_used_pdcp_contexts,
                                  pdcp_context_t ** pdcp_context)
@@ -1211,6 +1261,10 @@ static void* pdcp_thread_routine(void* config)
         pdcp_context->pdcp_ctx_cfg_data.protocol_direction = test_protocol_direction;
         pdcp_context->pdcp_ctx_cfg_data.hfn = test_hfn;
         pdcp_context->pdcp_ctx_cfg_data.hfn_threshold = test_hfn_threshold;
+#ifdef SEC_HW_VERSION_4_4
+     pdcp_context->pdcp_ctx_cfg_data.input_vtop =
+     pdcp_context->pdcp_ctx_cfg_data.output_vtop = test_vtop;
+#endif // SEC_HW_VERSION_4_4
 
         // configure confidentiality algorithm
         pdcp_context->pdcp_ctx_cfg_data.cipher_algorithm = test_cipher_algorithm;
@@ -1401,18 +1455,16 @@ static int setup_sec_environment(void)
     memset (pdcp_dl_contexts, 0, sizeof(pdcp_context_t) * PDCP_CONTEXT_NUMBER);
     memset (pdcp_ul_contexts, 0, sizeof(pdcp_context_t) * PDCP_CONTEXT_NUMBER);
 
+#ifdef SEC_HW_VERSION_3_1
     // map the physical memory
-#ifdef SEC_HW_VERSION_4_4
-    ret_code = dma_mem_setup(SEC_DMA_MEMORY_SIZE,CACHE_LINE_SIZE);
-#else
     ret_code = dma_mem_setup();
-#endif
     if (ret_code != 0)
     {
-        test_printf("dma_mem_setup failed with ret_code = %d\n", ret_code);
+        test_printf("dma_mem_setup failed with ret = %d\n", ret_code);
         return 1;
     }
-	test_printf("dma_mem_setup: mapped virtual mem 0x%x to physical mem 0x%x\n", __dma_virt, DMA_MEM_PHYS);
+    test_printf("dma_mem_setup: mapped virtual mem 0x%x to physical mem 0x%x\n", __dma_virt, DMA_MEM_PHYS);
+#endif
 
     for (i = 0; i < PDCP_CONTEXT_NUMBER; i++)
     {
@@ -1428,7 +1480,6 @@ static int setup_sec_environment(void)
                                                                             MAX_KEY_LENGTH);
         pdcp_dl_contexts[i].pdcp_ctx_cfg_data.integrity_key = dma_mem_memalign(BUFFER_ALIGNEMENT,
                                                                                MAX_KEY_LENGTH);
-
         pdcp_dl_contexts[i].no_of_buffers_to_process = PACKET_NUMBER_PER_CTX_DL;
 
         // validate that the address of the freshly allocated buffer falls in the second memory are.
@@ -1436,6 +1487,7 @@ static int setup_sec_environment(void)
         assert (pdcp_dl_contexts[i].output_buffers != NULL);
         assert (pdcp_dl_contexts[i].pdcp_ctx_cfg_data.cipher_key != NULL);
         assert (pdcp_dl_contexts[i].pdcp_ctx_cfg_data.integrity_key != NULL);
+
 #ifdef SEC_HW_VERSION_3_1
         assert((dma_addr_t)pdcp_dl_contexts[i].input_buffers >= DMA_MEM_SEC_DRIVER);
         assert((dma_addr_t)pdcp_dl_contexts[i].output_buffers >= DMA_MEM_SEC_DRIVER);
@@ -1478,8 +1530,12 @@ static int setup_sec_environment(void)
     //////////////////////////////////////////////////////////////////////////////
     // 1. Initialize SEC user space driver requesting #JOB_RING_NUMBER Job Rings
     //////////////////////////////////////////////////////////////////////////////
-
+#ifdef SEC_HW_VERSION_3_1
     sec_config_data.memory_area = (void*)__dma_virt;
+#else
+    sec_config_data.memory_area = dma_mem_memalign(CACHE_LINE_SIZE,SEC_DMA_MEMORY_SIZE);
+    sec_config_data.sec_drv_vtop = test_vtop;
+#endif
     assert(sec_config_data.memory_area != NULL);
 
     // Fill SEC driver configuration data
@@ -1536,9 +1592,12 @@ static int cleanup_sec_environment(void)
         dma_mem_free(pdcp_ul_contexts[i].pdcp_ctx_cfg_data.integrity_key, MAX_KEY_LENGTH);
 
     }
-	// unmap the physical memory
-	dma_mem_release();
-	
+#ifdef SEC_HW_VERSION_3_1
+    // unmap the physical memory
+    dma_mem_release();
+#else // SEC_HW_VERSION_3_1
+    dma_mem_free(sec_config_data.memory_area,SEC_DMA_MEMORY_SIZE);
+#endif // SEC_HW_VERSION_3_1
 
     return 0;
 }
@@ -1558,7 +1617,14 @@ int main(void)
     {
         perror("sched_setaffinity");
     }
-
+#ifdef SEC_HW_VERSION_4_4
+    // Init FSL USMMGR
+    g_usmmgr = fsl_usmmgr_init();
+    if(g_usmmgr == NULL){
+        printf("ERROR on fsl_usmmgr_init");
+        return -1;
+    }
+#endif // SEC_HW_VERSION_4_4
     /////////////////////////////////////////////////////////////////////
     // 1. Initialize SEC environment
     /////////////////////////////////////////////////////////////////////

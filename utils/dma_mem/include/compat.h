@@ -63,6 +63,7 @@
  * required by interfaces shared with linux drivers (ie. for "single-source"
  * purposes).
  */
+
 /* Tracing - #define WANT_MARKPOINTS before including this file */
 #ifdef WANT_MARKPOINTS
 static inline void markpoint(const uint32_t markid) {
@@ -102,7 +103,7 @@ typedef int		phandle;
 #define module_init(fn) int m_##fn(void) { return fn(); }
 #define module_exit(fn) void m_##fn(void) { fn(); }
 #define GFP_KERNEL	0
-//#define __KERNEL__
+#define __KERNEL__
 #define __init
 #define lower_32_bits(x) ((u32)(x))
 #define upper_32_bits(x) ((u32)(((x) >> 16) >> 16))
@@ -303,19 +304,6 @@ typedef uint32_t	irqreturn_t; /* as per hwi.h */
 #define free_irq(irq, portal)	0
 #define irq_can_set_affinity(x)	0
 #define irq_set_affinity(x,y)	0
-
-#ifdef SEC_HW_VERSION_4_4
-
-#define FSL_MM_MAGIC    'F'
-#define IOCTL_FSL_SHM_INIT      _IOWR(FSL_MM_MAGIC, 1, shm_seg_t *)
-#define IOCTL_FSL_SHM_ALLOC     _IOWR(FSL_MM_MAGIC, 2, alloc_req_t *)
-#define IOCTL_FSL_SHM_MEMALIGN  _IOWR(FSL_MM_MAGIC, 3, memalign_req_t *)
-#define IOCTL_FSL_SHM_FREE      _IOR(FSL_MM_MAGIC, 4, void *)
-
-#endif // SEC_HW_VERSION_4_4
-
-
-
 
 // REMOTE_ATOMIC_TYPE will be defined if atomic_t type is already defined by an external lib
 #ifndef REMOTE_ATOMIC_TYPE
