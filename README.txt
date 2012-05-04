@@ -1,7 +1,7 @@
 ----------------------------------------------------------------------------------------------------
 ABOUT THIS FILE
 ----------------------------------------------------------------------------------------------------
-Date:	20 February 2012
+Date:	04 May 2012
 
 This Readme file contains details on SEC user space driver package contents as well as instructions
 showing how to compile and install SEC user space driver related binaries:
@@ -12,7 +12,6 @@ SEC USER SPACE DRIVER PACKAGE DETAILS
 The package contains:
 	- User space components, in folder <us-drivers>:
 		* Utilitary libraries, in folder <utils>:
-			-> DMA memory library. Enables user-space usage for Freescale's custom memory management mechanism
 			-> OF library used for parsing DTS
 			-> Cgreen test framework, used for implementing SEC user space driver unit-tests
 		* SEC user space driver components:
@@ -78,7 +77,17 @@ further reffered to as <psc9131-sdk>.
 
     -> WUSDK IPC source path. Usually found under <WUSDK BSP release path>/src/ipc
 
-	-> SEC device version. Configured for SEC 4.4 now.
+    -> WUSDK IPC libraries path. Usually found under <WUSDK BSP release path>/src/ipc/ipc
+       Note: Before compiling SEC US driver, you MUST compile IPC by issuing the following commands:
+       [<WUSDK BSP release path>/src/ipc] make
+
+       In order to confirm that the required objects have been built, issue the following command:
+       [<WUSDK BSP release path>/src/ipc] ls -la ipc/*.so
+
+       The output should list the following two files
+       ipc/libipc.so  ipc/libmem.so
+
+    -> SEC device version. Configured for SEC 4.4 now.
 ----------------------------------------------------------------------------------------------------
 CONFIGURE LINUX KERNEL
 ----------------------------------------------------------------------------------------------------
@@ -147,7 +156,6 @@ HOW TO RUN TESTS FOR SEC USER SPACE DRIVER
 * Run unit tests:
 	[psc9131rdb]~ ./test_api
 	[psc9131rdb]~ ./test_contexts_pool
-	[psc9131rdb]~ ./test_dma_mem
 	[psc9131rdb]~ ./test_lists
 	[psc9131rdb]~ ./test_uio_notify
 	[psc9131rdb]~ ./mixed_descs_tests
