@@ -182,7 +182,6 @@ extern "C"{
  * and #SEC_NOTIFICATION_TYPE_NAPI. */
 #define SEC_NOTIFICATION_TYPE   SEC_NOTIFICATION_TYPE_POLL
 
-
 /************************************************/
 /* Scatter/Gather support related configuration */
 /************************************************/
@@ -367,8 +366,6 @@ extern "C"{
  * SEC_DRIVER_LOG_DEBUG - log errors, info and debug messages
  */
 #define SEC_DRIVER_LOGGING_LEVEL SEC_DRIVER_LOG_ERROR
-//#define SEC_DRIVER_LOGGING_LEVEL SEC_DRIVER_LOG_DEBUG
-
 
 /***************************************/
 /* SEC JOB RING related configuration. */

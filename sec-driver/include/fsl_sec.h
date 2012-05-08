@@ -326,6 +326,7 @@ typedef struct sec_pdcp_context_info_s
                                              this context to physical addresses. */
     sec_vtop   output_vtop;             /**< Function used for converting virtual address of the output packets for 
                                              this context to physical addresses. */
+    uint32_t   hfn_ov_en;               /**< Enables HFN override by user for this context */
     void        *custom;                /**< User Application custom data for this PDCP context. Usage to be defined. */
     sec_out_cbk notify_packet;          /**< Callback function to be called for all packets processed on this context. */
 } sec_pdcp_context_info_t;
@@ -664,6 +665,62 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
                                      const sec_packet_t *out_packet,
                                      ua_context_handle_t ua_ctx_handle);
 
+/**
+ * @brief Submit a packet for SEC processing on a specified context using a
+          specified value for HFN.
+ *
+ * This function creates a "job" which is meant to instruct SEC HW
+ * to perform the processing associated to the packet's SEC context
+ * on the input buffer. The "job" is enqueued in the Job Ring associated
+ * to the packet's SEC context. The function will return after the "job"
+ * enqueue is finished. The function will not wait for SEC to
+ * start or/and finish the "job" processing.
+ *
+ * After the processing is finished the SEC HW writes the processing result
+ * to the provided output buffer.
+ *
+ * The User Application must poll SEC driver using sec_poll() or sec_poll_job_ring() to
+ * receive notifications of the processing completion status. The notifications are received
+ * by UA by means of callback (see ::sec_out_cbk).
+ *
+ *
+ * @note The input packet and output packet must not both point to the same memory location!
+ *
+ * @param [in]  sec_ctx_handle     The handle of the context associated to this packet.
+ *                                 This handle is opaque from the User Application point of view.
+ *                                 SEC driver uses this handle to identify the processing type
+ *                                 required for this packet.
+ * @param [in]  in_packet          Input packet read by SEC.
+ * @param [in]  out_packet         Output packet where SEC writes result.
+ * @param [in]  hfn_ov_value       The value of HFN to be used by SEC for processing the input packet.
+ *
+ * @note It is the user responsability to provide an adequate bit-sized value for HFN
+ *
+ * @param [in]  ua_ctx_handle      The handle to a User Application packet context.
+ *                                 This handle is opaque from the SEC driver's point of view and
+ *                                 will be provided by SEC driver in the response callback.
+ *
+ *
+ * @retval ::SEC_SUCCESS is returned for successful execution
+ * @retval ::SEC_INVALID_INPUT_PARAM when at least one invalid parameter was provided. Example:
+ *                                   - the SEC context handle is invalid (e.g. corrupt handle)
+ *                                   - input/output buffer address is invalid (e.g. NULL)
+ *                                   - etc
+ *
+ * @retval ::SEC_JR_IS_FULL                  is returned if the JR is full
+ * @retval ::SEC_DRIVER_RELEASE_IN_PROGRESS  is returned if SEC driver release is in progress
+ * @retval ::SEC_DRIVER_NOT_INITIALIZED      is returned if SEC driver is not yet initialized.
+ * @retval ::SEC_CONTEXT_MARKED_FOR_DELETION is returned if the SEC context was marked for deletion.
+ *                                           This can happen if sec_delete_pdcp_context() was called on the context.
+ * @retval ::SEC_JOB_RING_RESET_IN_PROGRESS  indicates job ring is resetting due to a per-packet SEC processing error ::SEC_PACKET_PROCESSING_ERROR.
+ *                                           Reset is finished when sec_poll() or sec_poll_job_ring() return.
+ *                                           Then, sec_process_packet() can be called again.
+ */
+sec_return_code_t sec_process_packet_hfn_ov(sec_context_handle_t sec_ctx_handle,
+                                            const sec_packet_t *in_packet,
+                                            const sec_packet_t *out_packet,
+                                            uint32_t hfn_ov_val,
+                                            ua_context_handle_t ua_ctx_handle);
 /**
     @}
  */

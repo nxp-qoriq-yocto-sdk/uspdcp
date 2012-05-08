@@ -521,8 +521,9 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 
 #define CMD_ALGORITHM_ENCRYPT                   0x01
 
-#define PDCP_SD_KEY_LEN     0x4
+#define PDCP_SD_KEY_LEN                         0x4
 
+#define CMD_DPOVRD_HFN_OV_EN                    0x80000000
 
 /******************************************************************
  * Macros for extracting error codes for the job ring
@@ -649,7 +650,7 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
          * Descriptor Length = 0 ( to be completed @ runtime )
          *
          */                                                     \
-        (descriptor)->deschdr.command.word = 0xB0801C08;        \
+        (descriptor)->deschdr.command.word = 0xB0801C0A;        \
         /*
          * CTYPE = SEQ OUT command
          * Scater Gather Flag = 0 (can be updated @ runtime)
@@ -680,7 +681,7 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
          * PD = 0, SHARE = WAIT
          * Descriptor Length = 10
          */                                                     \
-        (descriptor)->deschdr.command.word  = 0xB885010A;       \
+        (descriptor)->deschdr.command.word  = 0xB8850113;       \
         /* CTYPE = Key
          * Class = 2 (authentication)
          * SGF = 0
@@ -718,7 +719,7 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
          * PD = 0, SHARE = WAIT
          * Descriptor Length = 10
          */                                                     \
-        (descriptor)->deschdr.command.word  = 0xB887010A;       \
+        (descriptor)->deschdr.command.word  = 0xB8870113;       \
         /* CTYPE = Key
          * Class = 2 (authentication)
          * SGF = 0
@@ -1026,6 +1027,20 @@ struct seq_out_command_s{
     } PACKED command;
 } PACKED;
 
+struct load_command_s{
+    union {
+        uint32_t word;
+        struct {
+            unsigned int ctype:5;
+            unsigned int class:2;
+            unsigned int sgf:1;
+            unsigned int imm:1;
+            unsigned int dst:7;
+            unsigned char offset;
+            unsigned char length;
+        } fields;
+    } PACKED command;
+} PACKED;
 /** Structure describing the PDB (Protocol Data Block)
  * needed by protocol acceleration descriptors for
  * PDCP Control Plane.
@@ -1104,6 +1119,7 @@ struct sec_pdcp_sd_t{
     struct key_command_s        key1_cmd;
 #warning "Update for 36 bits addresses"
     dma_addr_t                  key1_ptr;
+    uint32_t                    hfn_ov_desc[9];
     struct protocol_operation_command_s protocol;
 
 } PACKED;
@@ -1122,7 +1138,9 @@ struct sec_descriptor_t {
     uint32_t      out_ext_length;
     struct seq_in_command_s seq_in;
     dma_addr_t    seq_in_ptr;
-    uint32_t    in_ext_length;
+    uint32_t      in_ext_length;
+    struct load_command_s load_dpovrd;
+    uint32_t      dpovrd;
 } PACKED;
 
 #endif // SEC_HW_VERSION_3_1

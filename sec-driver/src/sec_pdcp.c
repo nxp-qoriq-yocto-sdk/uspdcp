@@ -1402,6 +1402,20 @@ static int create_c_plane_hw_acc_desc(sec_context_t *ctx)
 
     SEC_PDCP_INIT_CPLANE_SD(ctx->sh_desc);
 
+    /* Plug-in the HFN override in descriptor from DPOVRD */
+    
+    ctx->sh_desc->hfn_ov_desc[0] = 0xAC574F08;
+    ctx->sh_desc->hfn_ov_desc[1] = 0x80000000;
+    
+    ctx->sh_desc->hfn_ov_desc[2] = 0xA0000407;
+    
+    ctx->sh_desc->hfn_ov_desc[3] = 0xAC574008;
+    ctx->sh_desc->hfn_ov_desc[4] = 0x07FFFFFF;
+    ctx->sh_desc->hfn_ov_desc[5] = 0xAC704008;
+    ctx->sh_desc->hfn_ov_desc[6] = 0x00000005;
+    ctx->sh_desc->hfn_ov_desc[7] = 0xA8900008;
+    ctx->sh_desc->hfn_ov_desc[8] = 0x78430804;
+
     SEC_PDCP_SD_SET_KEY2(ctx->sh_desc,
                          ctx->pdcp_crypto_info->integrity_key,
                          ctx->pdcp_crypto_info->integrity_key_len);
@@ -1431,6 +1445,32 @@ static int create_u_plane_hw_acc_desc(sec_context_t *ctx)
 
     SEC_PDCP_INIT_UPLANE_SD(ctx->sh_desc);
 
+    /* Plug-in the HFN override in descriptor from DPOVRD */
+    ctx->sh_desc->hfn_ov_desc[0] = 0xAC574F08;
+    ctx->sh_desc->hfn_ov_desc[1] = 0x80000000;
+    ctx->sh_desc->hfn_ov_desc[2] = 0xA0000407;
+    ctx->sh_desc->hfn_ov_desc[3] = 0xAC574008;
+    ctx->sh_desc->hfn_ov_desc[5] = 0xAC704008;
+    
+    /* I avoid to do complicated things in CAAM, thus I 'hardcode'
+     * the operations to be done on the HFN as per the SN size. Doing
+     * a generic descriptor that would look at the PDB and then decide
+     * on the actual values to shift would have made the descriptors too
+     * large and slow [ if-then-else construct in CAAM means 2 JUMPS ]
+     */
+    if(ctx->pdcp_crypto_info->sn_size == SEC_PDCP_SN_SIZE_7)
+    {
+        ctx->sh_desc->hfn_ov_desc[4] = 0x01FFFFFF;
+        ctx->sh_desc->hfn_ov_desc[6] = 0x00000007;
+    }
+    else
+    {
+        ctx->sh_desc->hfn_ov_desc[4] = 0x000FFFFF;
+        ctx->sh_desc->hfn_ov_desc[6] = 0x0000000C;
+    }
+    ctx->sh_desc->hfn_ov_desc[7] = 0xA8900008;
+    ctx->sh_desc->hfn_ov_desc[8] = 0x78430804;
+
     SEC_PDCP_SD_SET_KEY1(ctx->sh_desc,
                          ctx->pdcp_crypto_info->cipher_key,
                          ctx->pdcp_crypto_info->cipher_key_len);
@@ -1457,11 +1497,27 @@ static int create_c_plane_auth_only_desc(sec_context_t *ctx)
 {
     int i = 5;
 
+    ctx->sh_desc->deschdr.command.word  = 0xB8850100;
+
+    /* Plug-in the HFN override in descriptor from DPOVRD */    
+    *((uint32_t*)ctx->sh_desc + i++) = 0xAC574F08;
+    *((uint32_t*)ctx->sh_desc + i++) = 0x80000000;
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA0000407;
+    
+    *((uint32_t*)ctx->sh_desc + i++) = 0xAC574008;
+    *((uint32_t*)ctx->sh_desc + i++) = 0x07FFFFFF;
+    
+    *((uint32_t*)ctx->sh_desc + i++) = 0xAC704008;
+    *((uint32_t*)ctx->sh_desc + i++) = 0x00000005;
+        
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA8900008;
+    
+    *((uint32_t*)ctx->sh_desc + i++) = 0x78430804;
+    
     switch( ctx->pdcp_crypto_info->integrity_algorithm )
     {
         case SEC_ALG_SNOW:
             SEC_INFO(" Creating NULL/SNOW f9 descriptor.");
-            ctx->sh_desc->deschdr.command.word  = 0xB8850100;
 
             *((uint32_t*)ctx->sh_desc + i++) = 0x04000000 |
                     ctx->pdcp_crypto_info->integrity_key_len;  // key2, len = integrity_key_len
@@ -1527,7 +1583,6 @@ static int create_c_plane_auth_only_desc(sec_context_t *ctx)
         case SEC_ALG_AES:
             SEC_INFO(" Creating NULL/AES-CMAC descriptor.");
 
-            ctx->sh_desc->deschdr.command.word  = 0xB8850100;
             *((uint32_t*)ctx->sh_desc + i++) = 0x02000000 |
                     ctx->pdcp_crypto_info->integrity_key_len;     // key1, len = integrity_key_len
             *((uint32_t*)ctx->sh_desc + i++) = g_sec_vtop(ctx->pdcp_crypto_info->integrity_key);
@@ -1599,12 +1654,27 @@ static int create_c_plane_cipher_only_desc(sec_context_t *ctx)
 {
     int i = 5;
 
+    ctx->sh_desc->deschdr.command.word = 0xB8850100;  // shared header, start idx = 5
+
+    /* Plug-in the HFN override in descriptor from DPOVRD */    
+    *((uint32_t*)ctx->sh_desc + i++) = 0xAC574F08;
+    *((uint32_t*)ctx->sh_desc + i++) = 0x80000000;
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA0000407;
+    
+    *((uint32_t*)ctx->sh_desc + i++) = 0xAC574008;
+    *((uint32_t*)ctx->sh_desc + i++) = 0x07FFFFFF;
+    
+    *((uint32_t*)ctx->sh_desc + i++) = 0xAC704008;
+    *((uint32_t*)ctx->sh_desc + i++) = 0x00000005;
+        
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA8900008;
+    
+    *((uint32_t*)ctx->sh_desc + i++) = 0x78430804;
+
     switch( ctx->pdcp_crypto_info->cipher_algorithm )
     {
         case SEC_ALG_SNOW:
             SEC_INFO(" Creating SNOW f8/NULL descriptor.");
-
-            ctx->sh_desc->deschdr.command.word = 0xB8850100;  // shared header, start idx = 5
 
             *((uint32_t*)ctx->sh_desc + i++) = 0x02000000 |
                     ctx->pdcp_crypto_info->cipher_key_len; // key1, len = cipher_key_len
@@ -1635,13 +1705,10 @@ static int create_c_plane_cipher_only_desc(sec_context_t *ctx)
             *((uint32_t*)ctx->sh_desc + i++) = 0x2B130000;      // seqfifold: class1 msgdata-last1-flush1 vlf
             *((uint32_t*)ctx->sh_desc + i++) = 0x69300000;      // SEQ FIFO STORE, vlf
 
-
             break;
 
         case SEC_ALG_AES:
             SEC_INFO(" Creating AES-CTR/NULL descriptor.");
-
-            ctx->sh_desc->deschdr.command.word = 0xB8850100;  // shared header, start idx = 5
 
             *((uint32_t*)ctx->sh_desc + i++) = 0x02000000 |
                     ctx->pdcp_crypto_info->cipher_key_len; // key1, len = cipher_key_len
@@ -1797,6 +1864,20 @@ int sec_pdcp_context_update_descriptor(sec_context_t *ctx,
                        phys_addr,
                        offset,
                        length);
+
+/* In order to be compatible with QI scenarios, the DPOVRD value loaded
+ * must be formated like this:
+ * HFN_Ov_En(1b) | Res(1b) | HFN Value (right aligned)
+ */
+    descriptor->load_dpovrd.command.word = 0x16870004;   // ld: deco-povrd len=4 offs=0 imm
+    if( job->sec_context->hfn_ov_en == TRUE)
+    {
+        descriptor->dpovrd = CMD_DPOVRD_HFN_OV_EN | job->hfn_ov_value;
+    }
+    else
+    {
+        descriptor->dpovrd = 0x00000000;
+    }
 
     SEC_PDCP_DUMP_DESC(descriptor);
 

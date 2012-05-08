@@ -120,6 +120,10 @@ struct sec_job_t
     volatile uint8_t is_integrity_algo; /*< Is set to value #TRUE for jobs with integrity algorithm configured.
                                             Set to #FALSE for crypto algorithm. */
 #endif // SEC_HW_VERSION_3_1
+#ifdef SEC_HW_VERSION_4_4
+    uint32_t hfn_ov_value;              /*< HFN override value to be used for this job.
+                                            CAUTION: The value must be right aligned and of proper length (27 bits). */
+#endif // SEC_HW_VERSION_4_4
 }__CACHELINE_ALIGNED;
 
 #ifdef SEC_HW_VERSION_4_4

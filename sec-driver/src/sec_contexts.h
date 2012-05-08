@@ -194,7 +194,9 @@ struct sec_context_t
     /** P2V conversion function to be used for translating the virtual address
      * for the output packets belonging to this context. */
      sec_vtop               out_pkt_vtop;
-#endif
+     /** Enable the HFN override by user for this context */
+     uint32_t               hfn_ov_en;
+#endif // SEC_HW_VERSION_4_4
     /** Validation pattern at end of structure. */
     uint32_t end_pattern;
 }__CACHELINE_ALIGNED;

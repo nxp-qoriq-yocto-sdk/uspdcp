@@ -575,8 +575,13 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
                   tail,
                   (uint32_t)job_ring->output_ring[hw_idx].desc,
                   (uint32_t)job_ring->jobs[sw_idx].descr_phys_addr);
-
+        
         ASSERT(SEC_JOB_RING_NUMBER_OF_ITEMS(SEC_JOB_RING_SIZE, head, tail + i) > 0);
+
+        SEC_DEBUG("Dump of JD");
+        SEC_PDCP_DUMP_DESC(job_ring->jobs[sw_idx].descr)
+        SEC_DEBUG("Dump of SD");
+        SEC_PDCP_DUMP_DESC( *((uint32_t*)job_ring->jobs[sw_idx].descr + 1) + 0x40000000 );
 
         /* mark completed, avoid matching on a recycled desc addr */
         job_ring->jobs[sw_idx].descr_phys_addr = 0;
@@ -1443,6 +1448,11 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
     // Set V2P information for this context
     ctx->in_pkt_vtop = sec_ctx_info->input_vtop;
     ctx->out_pkt_vtop = sec_ctx_info->output_vtop;
+
+    if( sec_ctx_info->hfn_ov_en == TRUE )
+    {
+        ctx->hfn_ov_en = TRUE;
+    }
 #endif // SEC_HW_VERSION_4_4
     // provide to UA a SEC ctx handle
     *sec_ctx_handle = (sec_context_handle_t)ctx;
@@ -1668,10 +1678,24 @@ sec_return_code_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle,
 #endif
     return SEC_SUCCESS;
 }
+
 sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
                                      const sec_packet_t *in_packet,
                                      const sec_packet_t *out_packet,
                                      ua_context_handle_t ua_ctx_handle)
+{
+    return sec_process_packet_hfn_ov(sec_ctx_handle,
+                                     in_packet,
+                                     out_packet,
+                                     0x00,
+                                     ua_ctx_handle);
+}
+
+sec_return_code_t sec_process_packet_hfn_ov(sec_context_handle_t sec_ctx_handle,
+                                            const sec_packet_t *in_packet,
+                                            const sec_packet_t *out_packet,
+                                            uint32_t hfn_ov_val,
+                                            ua_context_handle_t ua_ctx_handle)
 {
     int ret = SEC_SUCCESS;
     sec_job_t *job = NULL;
@@ -1714,6 +1738,7 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
     SEC_ASSERT(in_packet->num_fragments == 0, SEC_INVALID_INPUT_PARAM, "Please enable Scatter Gather support");
     SEC_ASSERT(out_packet->num_fragments == 0, SEC_INVALID_INPUT_PARAM, "Please enable Scatter Gather support");
 #endif // SEC_ENABLE_SCATTER_GATHER == ON
+
 #endif // SEC_HW_VERSION_4_4
     sec_context_t * sec_context = (sec_context_t *)sec_ctx_handle;
 
@@ -1793,6 +1818,10 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
 
     job->sec_context = sec_context;
     job->ua_handle = ua_ctx_handle;
+#ifdef SEC_HW_VERSION_4_4
+    job->hfn_ov_value = hfn_ov_val;
+#endif // SEC_HW_VERSION_4_4
+
 #ifdef SEC_HW_VERSION_3_1
     job->is_integrity_algo = (sec_context->pdcp_crypto_info->user_plane == PDCP_CONTROL_PLANE) &&
         ((sec_context->double_pass == FALSE && sec_context->pdcp_crypto_info->integrity_algorithm != SEC_ALG_NULL) ||
