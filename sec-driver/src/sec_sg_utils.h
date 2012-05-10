@@ -211,8 +211,7 @@ typedef struct{
  */
 sec_return_code_t build_sg_context(sec_sg_context_t *sg_ctx,
                                    const sec_packet_t *packet,
-                                   sec_sg_context_type_t dir,
-                                   sec_vtop vtop);
+                                   sec_sg_context_type_t dir);
 /*================================================================================================*/
 
 

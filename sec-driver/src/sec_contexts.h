@@ -188,12 +188,6 @@ struct sec_context_t
     /** Physical address of shared descriptor. Calculated when allocating the descriptor
      * in order to minimize the overhead of calling vtop. */
     dma_addr_t              sh_desc_phys;
-    /** P2V conversion function to be used for translating the virtual address
-     * for the packets belonging to this context. */
-    sec_vtop                in_pkt_vtop;
-    /** P2V conversion function to be used for translating the virtual address
-     * for the output packets belonging to this context. */
-     sec_vtop               out_pkt_vtop;
      /** Enable the HFN override by user for this context */
      uint32_t               hfn_ov_en;
 #endif // SEC_HW_VERSION_4_4

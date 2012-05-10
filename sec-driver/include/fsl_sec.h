@@ -211,7 +211,7 @@ typedef dma_addr_t (*sec_vtop)(void *v);
 #ifdef SEC_HW_VERSION_4_4
 typedef struct sec_packet_s
 {
-    uint8_t         *address;       /**< The virtual address of the buffer. */
+    dma_addr_t      address;        /**< The PHYSICAL address of the buffer. */
     uint32_t        offset;         /**< Offset within packet from where SEC will access (read or write) data. */
     uint32_t        length;         /**< Packet data length, excluding head room offset. In previous versions
                                          of the driver, this included the packet offset(headroom).
@@ -322,10 +322,6 @@ typedef struct sec_pdcp_context_info_s
     uint8_t    *integrity_key;          /**< Integrity key. Must be provided by User Application as DMA-capable memory,
                                              just as it's done for packets.*/
     uint8_t    integrity_key_len;       /**< Integrity key length. */
-    sec_vtop   input_vtop;              /**< Function used for converting virtual address of the input packets for 
-                                             this context to physical addresses. */
-    sec_vtop   output_vtop;             /**< Function used for converting virtual address of the output packets for 
-                                             this context to physical addresses. */
     uint32_t   hfn_ov_en;               /**< Enables HFN override by user for this context */
     void        *custom;                /**< User Application custom data for this PDCP context. Usage to be defined. */
     sec_out_cbk notify_packet;          /**< Callback function to be called for all packets processed on this context. */

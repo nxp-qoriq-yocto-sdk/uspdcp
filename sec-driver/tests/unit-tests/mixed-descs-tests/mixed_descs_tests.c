@@ -106,15 +106,15 @@ extern "C" {
 // Number of SEC contexts in each pool. Define taken from SEC user-space driver.
 #define MAX_SEC_CONTEXTS_PER_POOL   (SEC_MAX_PDCP_CONTEXTS / (JOB_RING_NUMBER))
 
-#define DUMP_PACKET(in_pkt)                             \
-    {                                                   \
-        int __i;                                        \
-        printf("Packet @ address : 0x%08x\n",(in_pkt)->address);   \
-        for( __i = 0; __i < (in_pkt)->offset + (in_pkt)->length; __i++)  \
-        {                                               \
-           printf("0x%02x\n",                           \
-           *((uint8_t*)((in_pkt)->address) + __i ));    \
-        }                                               \
+#define DUMP_PACKET(in_pkt)                                                   \
+    {                                                                         \
+        int __i;                                                              \
+        printf("Packet @ address : 0x%08x\n",test_ptov((in_pkt)->address));   \
+        for( __i = 0; __i < (in_pkt)->offset + (in_pkt)->length; __i++)       \
+        {                                                                     \
+           printf("0x%02x\n",                                                 \
+           *((uint8_t*)(test_ptov((in_pkt)->address)) + __i ));               \
+        }                                                                     \
     }
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
@@ -184,6 +184,10 @@ static inline dma_addr_t test_vtop(void *v)
     return fsl_usmmgr_v2p(v,g_usmmgr);
 }
 
+static inline void* test_ptov(dma_addr_t p)
+{
+    return fsl_usmmgr_p2v(p,g_usmmgr);
+}
 /* Allocates an aligned memory area from the FSL USMMGR pool */
 static void * test_memalign(size_t align, size_t size);
 
@@ -223,7 +227,7 @@ static int get_pkt(sec_packet_t **pkt,
 
             *pkt = &test_packets[packet_idx].pdcp_packet;
 
-            (*pkt)->address = &(test_packets[packet_idx].buffer[0]);
+            (*pkt)->address = test_vtop(&(test_packets[packet_idx].buffer[0]));
             (*pkt)->offset = TEST_PACKET_OFFSET;
             (*pkt)->total_length = 0;
             (*pkt)->num_fragments = 0;
@@ -232,17 +236,17 @@ static int get_pkt(sec_packet_t **pkt,
             if( data != NULL )
             {
                 // copy PDCP header
-                memcpy((*pkt)->address + (*pkt)->offset, hdr, hdr_len);
+                memcpy(test_ptov((*pkt)->address) + (*pkt)->offset, hdr, hdr_len);
                 // copy input data
-                memcpy((*pkt)->address + (*pkt)->offset + hdr_len,
+                memcpy(test_ptov((*pkt)->address) + (*pkt)->offset + hdr_len,
                         data,
                         data_len);
             }
             else
             {
                 /* set everything to 0 */
-                memset((*pkt)->address + (*pkt)->offset, 0x00,hdr_len);
-                memset((*pkt)->address + (*pkt)->offset + hdr_len, 0x00, data_len);
+                memset(test_ptov((*pkt)->address) + (*pkt)->offset, 0x00,hdr_len);
+                memset(test_ptov((*pkt)->address) + (*pkt)->offset + hdr_len, 0x00, data_len);
             }
             return 0;
         }
@@ -264,7 +268,7 @@ static int put_pkt(sec_packet_t **pkt)
                 return -1;
 
             /* set everything to 0 */
-            memset((*pkt)->address, 0x00, TEST_PACKET_LENGTH);
+            memset(test_ptov((*pkt)->address), 0x00, TEST_PACKET_LENGTH);
 
             *pkt = NULL;
 
@@ -363,8 +367,6 @@ static void test_single_algorithms(void)
             //.protocol_direction     = test_proto_dir;
             .hfn                    = test_hfn,
             .hfn_threshold          = test_hfn_threshold,
-            .input_vtop             = test_vtop,
-            .output_vtop            = test_vtop
         },
         // Context for decapsulation
         {
@@ -382,8 +384,6 @@ static void test_single_algorithms(void)
             //.protocol_direction     = test_proto_dir;
             .hfn                    = test_hfn,
             .hfn_threshold          = test_hfn_threshold,
-            .input_vtop             = test_vtop,
-            .output_vtop            = test_vtop
         }
     };
 
@@ -510,23 +510,23 @@ static void test_single_algorithms(void)
                                 packets_handled, packets_out);
 
         // Check that encap content is correct
-        memcmp_res = memcmp(out_encap_pkt->address + out_encap_pkt->offset,
+        memcmp_res = memcmp(test_ptov(out_encap_pkt->address) + out_encap_pkt->offset,
                             hdr,hdr_len);
         assert_equal_with_message(memcmp_res, 0,
                               "ERROR on checking encapsulation contents: header is different!");
 
-        memcmp_res = memcmp(out_encap_pkt->address + out_encap_pkt->offset + hdr_len,
+        memcmp_res = memcmp(test_ptov(out_encap_pkt->address) + out_encap_pkt->offset + hdr_len,
                             test_data_out[test_idx],test_data_out_len[test_idx]);
         assert_equal_with_message(memcmp_res, 0,
                               "ERROR on checking encapsulation contents: content is different!");
 
         // check that decap content is correct
-        memcmp_res = memcmp(out_decap_pkt->address + out_decap_pkt->offset,
+        memcmp_res = memcmp(test_ptov(out_decap_pkt->address) + out_decap_pkt->offset,
                             hdr,hdr_len);
         assert_equal_with_message(memcmp_res, 0,
                               "ERROR on checking decapsulation contents: header is different!");
 
-        memcmp_res = memcmp(out_decap_pkt->address + out_decap_pkt->offset + hdr_len,
+        memcmp_res = memcmp(test_ptov(out_decap_pkt->address) + out_decap_pkt->offset + hdr_len,
                             test_data_in,test_data_in_len);
         assert_equal_with_message(memcmp_res, 0,
                               "ERROR on checking decapsulation contents: content is different!");
@@ -602,8 +602,6 @@ static void test_combined_algos(void)
             //.protocol_direction     = test_proto_dir;
             .hfn                    = test_hfn,
             .hfn_threshold          = test_hfn_threshold,
-            .input_vtop             = test_vtop,
-            .output_vtop            = test_vtop
         },
         /* auth-only */
         {
@@ -621,8 +619,6 @@ static void test_combined_algos(void)
             //.protocol_direction     = test_proto_dir;
             .hfn                    = test_hfn,
             .hfn_threshold          = test_hfn_threshold,
-            .input_vtop             = test_vtop,
-            .output_vtop            = test_vtop
         },
         /* auth+cipher */
         {
@@ -640,8 +636,6 @@ static void test_combined_algos(void)
             //.protocol_direction     = test_proto_dir;
             .hfn                    = test_hfn,
             .hfn_threshold          = test_hfn_threshold,
-            .input_vtop             = test_vtop,
-            .output_vtop            = test_vtop
         }
     };
 
@@ -779,13 +773,13 @@ static void test_combined_algos(void)
                                   "actual packets notified[%d]",
                                   packets_handled, packets_out);
 
-        memcmp_res = memcmp(first_step_pkt->address + first_step_pkt->offset,
+        memcmp_res = memcmp(test_ptov(first_step_pkt->address) + first_step_pkt->offset,
                             hdr,
                             hdr_len);
         assert_equal_with_message(memcmp_res, 0,
                         "ERROR on checking intermediate packet: Header is different");
 
-        memcmp_res = memcmp(first_step_pkt->address + first_step_pkt->offset + hdr_len,
+        memcmp_res = memcmp(test_ptov(first_step_pkt->address) + first_step_pkt->offset + hdr_len,
                             data_inter,
                             data_inter_len);
 
@@ -850,8 +844,8 @@ static void test_combined_algos(void)
 
         // Check that the double-pass packet matches the test-vector
 
-        memcmp_res = memcmp(second_step_pkt->address + second_step_pkt->offset,
-                            out_pkt->address + out_pkt->offset,
+        memcmp_res = memcmp(test_ptov(second_step_pkt->address) + second_step_pkt->offset,
+                            test_ptov(out_pkt->address) + out_pkt->offset,
                             PDCP_CTRL_PLANE_HEADER_LENGTH);
         assert_equal_with_message(memcmp_res, 0,
                                   "ERROR on checking packet contents: header is different!");
@@ -862,11 +856,11 @@ static void test_combined_algos(void)
         }
         printf("Double pass header  |  Test vector header\n");
         printf("0x%02x                |                0x%02x\n",
-                *(uint8_t*)(second_step_pkt->address + second_step_pkt->offset),
-                *(uint8_t*)(out_pkt->address + out_pkt->offset) );
+                *(uint8_t*)(test_ptov(second_step_pkt->address) + second_step_pkt->offset),
+                *(uint8_t*)(test_ptov(out_pkt->address) + out_pkt->offset) );
 
-        memcmp_res = memcmp(second_step_pkt->address + second_step_pkt->offset + PDCP_CTRL_PLANE_HEADER_LENGTH,
-                            out_pkt->address + out_pkt->offset + PDCP_CTRL_PLANE_HEADER_LENGTH,
+        memcmp_res = memcmp(test_ptov(second_step_pkt->address) + second_step_pkt->offset + PDCP_CTRL_PLANE_HEADER_LENGTH,
+                            test_ptov(out_pkt->address) + out_pkt->offset + PDCP_CTRL_PLANE_HEADER_LENGTH,
                             out_pkt->length - PDCP_CTRL_PLANE_HEADER_LENGTH);
 
         assert_equal_with_message(memcmp_res, 0,
@@ -881,13 +875,13 @@ static void test_combined_algos(void)
         for( i = 0; i < out_pkt->length - PDCP_CTRL_PLANE_HEADER_LENGTH; i++)
         {
             printf("0x%02x                |                0x%02x\n",
-                    *(uint8_t*)(second_step_pkt->address + second_step_pkt->offset + PDCP_CTRL_PLANE_HEADER_LENGTH + i),
-                    *(uint8_t*)(out_pkt->address + out_pkt->offset + PDCP_CTRL_PLANE_HEADER_LENGTH + i) );
+                    *(uint8_t*)(test_ptov(second_step_pkt->address) + second_step_pkt->offset + PDCP_CTRL_PLANE_HEADER_LENGTH + i),
+                    *(uint8_t*)(test_ptov(out_pkt->address) + out_pkt->offset + PDCP_CTRL_PLANE_HEADER_LENGTH + i) );
         }
 
         // Check that the single-pass packet matches the test-vector
-        memcmp_res = memcmp(one_step_pkt->address + one_step_pkt->offset,
-                            out_pkt->address + out_pkt->offset,
+        memcmp_res = memcmp(test_ptov(one_step_pkt->address) + one_step_pkt->offset,
+                            test_ptov(out_pkt->address) + out_pkt->offset,
                             PDCP_CTRL_PLANE_HEADER_LENGTH);
         assert_equal_with_message(memcmp_res, 0,
                                   "ERROR on checking packet contents: header is different!");
@@ -898,11 +892,11 @@ static void test_combined_algos(void)
         }
         printf("Single pass header  |  Test vector header\n");
         printf("0x%02x                |                0x%02x\n",
-                *(uint8_t*)(one_step_pkt->address + one_step_pkt->offset),
-                *(uint8_t*)(out_pkt->address + out_pkt->offset) );
+                *(uint8_t*)(test_ptov(one_step_pkt->address) + one_step_pkt->offset),
+                *(uint8_t*)(test_ptov(out_pkt->address) + out_pkt->offset) );
 
-        memcmp_res = memcmp(one_step_pkt->address + one_step_pkt->offset + PDCP_CTRL_PLANE_HEADER_LENGTH,
-                            out_pkt->address + out_pkt->offset + PDCP_CTRL_PLANE_HEADER_LENGTH,
+        memcmp_res = memcmp(test_ptov(one_step_pkt->address) + one_step_pkt->offset + PDCP_CTRL_PLANE_HEADER_LENGTH,
+                            test_ptov(out_pkt->address) + out_pkt->offset + PDCP_CTRL_PLANE_HEADER_LENGTH,
                             out_pkt->length - PDCP_CTRL_PLANE_HEADER_LENGTH);
 
         assert_equal_with_message(memcmp_res, 0,
@@ -917,8 +911,8 @@ static void test_combined_algos(void)
         for( i = 0; i < out_pkt->length - PDCP_CTRL_PLANE_HEADER_LENGTH; i++)
         {
             printf("0x%02x                |                0x%02x\n",
-                    *(uint8_t*)(one_step_pkt->address + one_step_pkt->offset + PDCP_CTRL_PLANE_HEADER_LENGTH + i),
-                    *(uint8_t*)(out_pkt->address + out_pkt->offset + PDCP_CTRL_PLANE_HEADER_LENGTH + i) );
+                    *(uint8_t*)(test_ptov(one_step_pkt->address) + one_step_pkt->offset + PDCP_CTRL_PLANE_HEADER_LENGTH + i),
+                    *(uint8_t*)(test_ptov(out_pkt->address) + out_pkt->offset + PDCP_CTRL_PLANE_HEADER_LENGTH + i) );
         }
 
         // release packets

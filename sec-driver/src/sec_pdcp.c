@@ -1896,7 +1896,7 @@ int sec_pdcp_context_update_descriptor(sec_context_t *ctx,
     else
 #endif // SEC_ENABLE_SCATTER_GATHER == ON
     {
-        phys_addr = job->sec_context->out_pkt_vtop(job->out_packet->address);
+        phys_addr = job->out_packet->address;
         offset = job->out_packet->offset;
         length = job->out_packet->length;
     }
@@ -1917,7 +1917,7 @@ int sec_pdcp_context_update_descriptor(sec_context_t *ctx,
     else
 #endif // (SEC_ENABLE_SCATTER_GATHER == ON)
     {
-        phys_addr = job->sec_context->in_pkt_vtop(job->in_packet->address);
+        phys_addr = job->in_packet->address;
         offset = job->in_packet->offset;
         length = job->in_packet->length;
     }

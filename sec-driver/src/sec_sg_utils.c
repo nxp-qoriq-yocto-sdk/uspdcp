@@ -80,8 +80,7 @@ extern "C" {
 
 sec_return_code_t   build_sg_context(sec_sg_context_t *sg_ctx,
                                      const sec_packet_t *packet,
-                                     sec_sg_context_type_t dir,
-                                     sec_vtop vtop)
+                                     sec_sg_context_type_t dir)
 {
     uint8_t     *sg_tbl_en;
     uint32_t    num_fragments = 0;
@@ -120,14 +119,14 @@ sec_return_code_t   build_sg_context(sec_sg_context_t *sg_ctx,
         SEC_ASSERT(tmp_len <= total_length, SEC_INVALID_INPUT_PARAM,
                    "Fragment %d length would make total length exceed the total buffer length (%d)",
                    i, total_length);
-        SEC_ASSERT( packet[i].address != NULL, SEC_INVALID_INPUT_PARAM,
+        SEC_ASSERT( packet[i].address != 0, SEC_INVALID_INPUT_PARAM,
                     "Fragment %d pointer is NULL",i);
 
         SEC_ASSERT(packet[i].offset < packet[i].length, SEC_INVALID_INPUT_PARAM,
                    "Fragment %i offset (%d) is larger than its length (%d)",
                    i,packet[i].offset, packet[i].length);
 
-        SG_TBL_SET_ADDRESS(sg_tbl[i],vtop(packet[i].address));
+        SG_TBL_SET_ADDRESS(sg_tbl[i],packet[i].address);
         SG_TBL_SET_OFFSET(sg_tbl[i], packet[i].offset);
         SG_TBL_SET_LENGTH(sg_tbl[i],packet[i].length);
     }while( ++i <= num_fragments);

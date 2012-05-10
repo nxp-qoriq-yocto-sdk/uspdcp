@@ -208,11 +208,20 @@ static inline dma_addr_t test_vtop(void *v)
     return fsl_usmmgr_v2p(v,g_usmmgr);
 }
 
+static inline void* test_ptov(dma_addr_t p)
+{
+    return fsl_usmmgr_p2v(p,g_usmmgr);
+}
 /* Allocates an aligned memory area from the FSL USMMGR pool */
 static void * test_memalign(size_t align, size_t size);
 
 /* Frees a previously allocated FSL USMMGR memory region */
 static void test_free(void *ptr, size_t size);
+#else
+
+#define test_ptov(x)    (x)
+#define test_vtop(x)    (x)
+
 #endif // SEC_HW_VERSION_4_4
 /*==================================================================================================
                                      LOCAL FUNCTIONS
@@ -244,7 +253,7 @@ static void get_free_packet(int packet_idx, sec_packet_t **in_packet, sec_packet
     *out_packet = &test_output_packets[packet_idx].pdcp_packet;
 
     // Initialize with valid info the input packet
-    (*in_packet)->address = &(test_input_packets[packet_idx].buffer[0]);
+    (*in_packet)->address = test_vtop(&(test_input_packets[packet_idx].buffer[0]));
     (*in_packet)->offset = TEST_PACKET_OFFSET;
 #ifdef SEC_HW_VERSION_3_1
     (*in_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
@@ -254,7 +263,7 @@ static void get_free_packet(int packet_idx, sec_packet_t **in_packet, sec_packet
     (*in_packet)->num_fragments = 0;
 
     // Initialize with valid info the output packet
-    (*out_packet)->address = &(test_output_packets[packet_idx].buffer[0]);
+    (*out_packet)->address = test_vtop(&(test_output_packets[packet_idx].buffer[0]));
     (*out_packet)->offset = TEST_PACKET_OFFSET;
 #ifdef SEC_HW_VERSION_3_1
     (*out_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
@@ -363,10 +372,7 @@ static void test_setup(void)
     ctx_info.protocol_direction = PDCP_ENCAPSULATION;
     ctx_info.hfn = 0xFA556;
     ctx_info.hfn_threshold = 0xFF00000;
-#ifdef SEC_HW_VERSION_4_4
-     ctx_info.input_vtop = 
-     ctx_info.output_vtop = test_vtop;
-#endif // SEC_HW_VERSION_4_4
+
     test_input_packets = dma_mem_memalign(BUFFER_ALIGNEMENT,
             sizeof(buffer_t) * TEST_PACKETS_NUMBER);
     assert_not_equal_with_message(test_input_packets, NULL,
@@ -772,7 +778,11 @@ static void test_sec_process_packet_invalid_params(void)
     struct test_sec_context_t *ctx = NULL;
     sec_packet_t *in_packet = NULL;
     sec_packet_t *out_packet = NULL;
+#ifdef SEC_HW_VERSION_4_4
+    dma_addr_t tmp = 0;
+#else
     uint8_t* tmp = NULL;
+#endif
     int packet_idx = 0;
 #ifdef SEC_HW_VERSION_4_4
     uint32_t    tmp_num;
@@ -846,7 +856,11 @@ static void test_sec_process_packet_invalid_params(void)
 
     // Invalid input packet -> buffer address is NULL
     tmp = in_packet->address;
+#ifdef SEC_HW_VERSION_4_4
+    in_packet->address = 0;
+#else
     in_packet->address = NULL;
+#endif
 
     ret = sec_process_packet(ctx_handle, in_packet, out_packet, (ua_context_handle_t)&ua_data[packet_idx]);
     assert_equal_with_message(ret, SEC_INVALID_INPUT_PARAM,
@@ -869,7 +883,11 @@ static void test_sec_process_packet_invalid_params(void)
     ////////////////////////////////////
 
     tmp = out_packet->address;
+#ifdef SEC_HW_VERSION_4_4
+    out_packet->address = 0;
+#else
     out_packet->address = NULL;
+#endif
 
     // Invalid output packet -> buffer address is NULL
     ret = sec_process_packet(ctx_handle, in_packet, out_packet, (ua_context_handle_t)&ua_data[packet_idx]);
@@ -1095,7 +1113,11 @@ static void test_sec_process_packet_invalid_params(void)
 
     in_sg_packet[0] = *in_packet;
     tmp = in_packet->address;
+#ifdef SEC_HW_VERSION_4_4
+    in_packet->address = 0;
+#else
     in_packet->address = NULL;
+#endif
     in_sg_packet[1] = *in_packet;
     in_packet->address = tmp;
 
@@ -1118,7 +1140,11 @@ static void test_sec_process_packet_invalid_params(void)
 
     out_sg_packet[0] = *out_packet;
     tmp = out_packet->address;
+#ifdef SEC_HW_VERSION_4_4
+    out_packet->address = 0;
+#else
     out_packet->address = NULL;
+#endif
     out_sg_packet[1] = *out_packet;
     out_packet->address = tmp;
 

@@ -320,11 +320,20 @@ static inline dma_addr_t test_vtop(void *v)
     return fsl_usmmgr_v2p(v,g_usmmgr);
 }
 
+static inline void* test_ptov(dma_addr_t p)
+{
+    return fsl_usmmgr_p2v(p,g_usmmgr);
+}
 /* Allocates an aligned memory area from the FSL USMMGR pool */
 static void * test_memalign(size_t align, size_t size);
 
 /* Frees a previously allocated FSL USMMGR memory region */
 static void test_free(void *ptr, size_t size);
+#else
+
+#define test_ptov(x)    (x)
+#define test_vtop(x)    (x)
+
 #endif // SEC_HW_VERSION_4_4
 /*==================================================================================================
                                         LOCAL MACROS
@@ -1063,7 +1072,7 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
     *in_packet = &(pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].pdcp_packet);
 
     pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].usage = PDCP_BUFFER_USED;
-    (*in_packet)->address = &(pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].buffer[0]);
+    (*in_packet)->address = test_vtop(&(pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].buffer[0]));
 
 #ifdef SEC_HW_VERSION_3_1
     // Needed 8 bytes before actual start of PDCP packet, for PDCP control-plane + AES algo testing.
@@ -1074,7 +1083,7 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
     *out_packet = &(pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].pdcp_packet);
 
     pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].usage = PDCP_BUFFER_USED;
-    (*out_packet)->address = &(pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].buffer[0]);
+    (*out_packet)->address = test_vtop(&(pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].buffer[0]));
 
 #ifdef SEC_HW_VERSION_3_1
     (*out_packet)->offset = 8;
@@ -1082,9 +1091,9 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
 #endif // SEC_HW_VERSION_3_1
 
     // copy PDCP header
-    memcpy((*in_packet)->address + (*in_packet)->offset, test_pdcp_hdr, sizeof(test_pdcp_hdr));
+    memcpy(test_ptov((*in_packet)->address) + (*in_packet)->offset, test_pdcp_hdr, sizeof(test_pdcp_hdr));
     // copy input data
-    memcpy((*in_packet)->address + (*in_packet)->offset + PDCP_HEADER_LENGTH,
+    memcpy(test_ptov((*in_packet)->address) + (*in_packet)->offset + PDCP_HEADER_LENGTH,
            test_data_in,
            sizeof(test_data_in));
 
@@ -1261,10 +1270,6 @@ static void* pdcp_thread_routine(void* config)
         pdcp_context->pdcp_ctx_cfg_data.protocol_direction = test_protocol_direction;
         pdcp_context->pdcp_ctx_cfg_data.hfn = test_hfn;
         pdcp_context->pdcp_ctx_cfg_data.hfn_threshold = test_hfn_threshold;
-#ifdef SEC_HW_VERSION_4_4
-     pdcp_context->pdcp_ctx_cfg_data.input_vtop =
-     pdcp_context->pdcp_ctx_cfg_data.output_vtop = test_vtop;
-#endif // SEC_HW_VERSION_4_4
 
         // configure confidentiality algorithm
         pdcp_context->pdcp_ctx_cfg_data.cipher_algorithm = test_cipher_algorithm;
