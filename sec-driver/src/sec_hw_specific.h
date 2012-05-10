@@ -502,6 +502,7 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
 #define SEC_HW_ERR_SSRC_JMP_HALT_COND       0x07
 
 #define SEC_HW_ERR_DECO_HFN_THRESHOLD       0xF1
+#define SEC_HW_ERR_CCB_ICV_CHECK_FAIL       0x0A
 
 
 /******************************************************************
@@ -611,10 +612,22 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
  * context
  *****************************************************************/
 #define HFN_THRESHOLD_MATCH(error)  \
-    COND_EXPR1_EQ_AND_EXPR2_EQ( ((union hw_error_code)(error)).error_desc.deco_src.ssrc,    \
-                                SEC_HW_ERR_SSRC_DECO,                                       \
-                                ((union hw_error_code)(error)).error_desc.deco_src.desc_err,\
-                                SEC_HW_ERR_DECO_HFN_THRESHOLD )
+    ( COND_EXPR1_EQ_AND_EXPR2_EQ( ((union hw_error_code)(error)).error_desc.deco_src.ssrc,             \
+                                  SEC_HW_ERR_SSRC_DECO,                                                \
+                                  ((union hw_error_code)(error)).error_desc.deco_src.desc_err,         \
+                                  SEC_HW_ERR_DECO_HFN_THRESHOLD )                                      \
+    ||                                                                                                 \
+    COND_EXPR1_EQ_AND_EXPR2_EQ( ((union hw_error_code)(error)).error_desc.jmp_halt_user_src.ssrc,      \
+                                SEC_HW_ERR_SSRC_JMP_HALT_U,                                            \
+                                ((union hw_error_code)(error)).error_desc.jmp_halt_user_src.offset,    \
+                                SEC_HW_ERR_DECO_HFN_THRESHOLD )                                        \
+    )
+    
+#define ICV_CHECK_FAIL(error)  \
+    COND_EXPR1_EQ_AND_EXPR2_EQ( ((union hw_error_code)(error)).error_desc.ccb_status_src.ssrc,  \
+                                SEC_HW_ERR_SSRC_CCB_ERR,                                        \
+                                ((union hw_error_code)(error)).error_desc.ccb_status_src.err_id,\
+                                SEC_HW_ERR_CCB_ICV_CHECK_FAIL )
 
 /******************************************************************
  * Macros for manipulating JR registers

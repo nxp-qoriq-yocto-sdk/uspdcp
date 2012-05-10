@@ -1523,29 +1523,39 @@ static int create_c_plane_auth_only_desc(sec_context_t *ctx)
                     ctx->pdcp_crypto_info->integrity_key_len;  // key2, len = integrity_key_len
             *((uint32_t*)ctx->sh_desc + i++) = g_sec_vtop(ctx->pdcp_crypto_info->integrity_key);
 
-            *((uint32_t*)ctx->sh_desc + i++) = 0x1E080001;  // seq load, class 3, length = 1, dest = m0
-            *((uint32_t*)ctx->sh_desc + i++) = 0xA1001001;  // wait for calm
+            *((uint32_t*)ctx->sh_desc + i++) = 0x1e080701;      // seq load, class 3, offset 7, length = 1, dest = m0
+            *((uint32_t*)ctx->sh_desc + i++) = 0xa1001001;      // wait for calm
 
-            *((uint32_t*)ctx->sh_desc + i++) = 0xF0200001;  // seqinptr: len=1 rto
+            *((uint32_t*)ctx->sh_desc + i++) = 0xF0200001;      // seqinptr: len=1 rto
 
-            *((uint32_t*)ctx->sh_desc + i++) = 0xAC804108;  // shift right 24 bits, put result in math1
-            *((uint32_t*)ctx->sh_desc + i++) = 0x00000018;  // 24
-            *((uint32_t*)ctx->sh_desc + i++) = 0xA8514108;  // retain SN only (5 bits)
-            *((uint32_t*)ctx->sh_desc + i++) = 0x0000001F;  // M1 = M1 & 0x0000001f_00000000
-            *((uint32_t*)ctx->sh_desc + i++) = 0x00000000;  //
+            *((uint32_t*)ctx->sh_desc + i++) = 0xac504108;      // retain SN only (5 bits)
+            *((uint32_t*)ctx->sh_desc + i++) = 0x0000001f;      // M1 = M0 & 0x00000000_0000001f
 
-            *((uint32_t*)ctx->sh_desc + i++) = 0x79360808;  // move from desc buf to math2, wc=1,offset = 8, len 8
-            *((uint32_t*)ctx->sh_desc + i++) = 0xa8524208;  // Mask "Bearer" bit in IV
-            *((uint32_t*)ctx->sh_desc + i++) = 0xffffffff;  //
-            *((uint32_t*)ctx->sh_desc + i++) = 0x04000000;  //
-            *((uint32_t*)ctx->sh_desc + i++) = 0x79370c04;  // move from desc buf to math3, wc=1,offset = 0x0C, len 4
-            *((uint32_t*)ctx->sh_desc + i++) = 0xa8534308;  // Mask "Direction" bit in IV
-            *((uint32_t*)ctx->sh_desc + i++) = 0xf8000000;  //
-            *((uint32_t*)ctx->sh_desc + i++) = 0x00000000;  //
+            *((uint32_t*)ctx->sh_desc + i++) = 0xA8911108;      // math: (<math1> shld math1)->math1 len=8
+#ifdef UNDER_CONSTRUCTION_HFN_THRESHOLD
+            *((uint32_t*)ctx->sh_desc + i++) = 0x79370404;      // move: descbuf+4[01] -> math3, len=4
+            *((uint32_t*)ctx->sh_desc + i++) = 0xA8231F08;      // math: (math3 - math1)->none len=8
 
-            *((uint32_t*)ctx->sh_desc + i++) = 0xa8412208;  // M2 = M2 | M1
+            *((uint32_t*)ctx->sh_desc + i++) = 0xA0010805;      // jump: jsl0 all-mismatch[math-n] offset=5 local->[06]
+            *((uint32_t*)ctx->sh_desc + i++) = 0x79360408;      // move: descbuf+4[01] -> math2, len=8
+            *((uint32_t*)ctx->sh_desc + i++) = 0xAC024208;      // math: (math2 + imm1)->math2 len=4, ifb
+            *((uint32_t*)ctx->sh_desc + i++) = 0x00000020;      // imm1=32
+            *((uint32_t*)ctx->sh_desc + i++) = 0x79630408;      // move: math2 -> descbuf+4[01], len=8
 
-            *((uint32_t*)ctx->sh_desc + i++) = 0x7961000c;  // load, class2 ctx, math2, wc = 1, len 12, offset 0,
+            *((uint32_t*)ctx->sh_desc + i++) = 0x78530404;      // move: math1 -> descbuf+4[01], len=4
+#endif // UNDER_CONSTRUCTION_HFN_THRESHOLD
+            *((uint32_t*)ctx->sh_desc + i++) = 0x79360808;      // move from desc buf to math2, wc=1,offset = 8, len 8
+            *((uint32_t*)ctx->sh_desc + i++) = 0xa8524208;      // Mask "Bearer" bit in IV
+            *((uint32_t*)ctx->sh_desc + i++) = 0xffffffff;      //
+            *((uint32_t*)ctx->sh_desc + i++) = 0x04000000;      //
+            *((uint32_t*)ctx->sh_desc + i++) = 0x79370c04;      // move from desc buf to math3, wc=1,offset = 0x0C, len 4
+            *((uint32_t*)ctx->sh_desc + i++) = 0xa8534308;      // Mask "Direction" bit in IV
+            *((uint32_t*)ctx->sh_desc + i++) = 0xf8000000;      //
+            *((uint32_t*)ctx->sh_desc + i++) = 0x00000000;      //
+
+            *((uint32_t*)ctx->sh_desc + i++) = 0xa8412208;      // M2 = M2 | M1
+
+            *((uint32_t*)ctx->sh_desc + i++) = 0x7961000c;      // load, class2 ctx, math2, wc = 1, len 12, offset 0,
 
             if( ctx->pdcp_crypto_info->protocol_direction == PDCP_DECAPSULATION )
             {
@@ -1587,21 +1597,31 @@ static int create_c_plane_auth_only_desc(sec_context_t *ctx)
                     ctx->pdcp_crypto_info->integrity_key_len;     // key1, len = integrity_key_len
             *((uint32_t*)ctx->sh_desc + i++) = g_sec_vtop(ctx->pdcp_crypto_info->integrity_key);
 
-            *((uint32_t*)ctx->sh_desc + i++) = 0x1E080001;     // seq load, class 3, length = 1, dest = m0
-            *((uint32_t*)ctx->sh_desc + i++) = 0xA1001001;     // wait for calm
+            *((uint32_t*)ctx->sh_desc + i++) = 0x1e080701;      // seq load, class 3, offset 7, length = 1, dest = m0
+            *((uint32_t*)ctx->sh_desc + i++) = 0xa1001001;      // wait for calm
 
             *((uint32_t*)ctx->sh_desc + i++) = 0xF0200001;     // seqinptr: len=1 rto
 
-            *((uint32_t*)ctx->sh_desc + i++) = 0xac804108;     // shift right 24 bits, put result in math1
-            *((uint32_t*)ctx->sh_desc + i++) = 0x00000018;     // 24
-            *((uint32_t*)ctx->sh_desc + i++) = 0xa8514108;     // retain SN only (5 bits)
-            *((uint32_t*)ctx->sh_desc + i++) = 0x0000001f;     // M1 = M1 & 0x0000001f_00000000
-            *((uint32_t*)ctx->sh_desc + i++) = 0x00000000;     //
+            *((uint32_t*)ctx->sh_desc + i++) = 0xac504108;      // retain SN only (5 bits)
+            *((uint32_t*)ctx->sh_desc + i++) = 0x0000001f;      // M1 = M0 & 0x00000000_0000001f
 
-            *((uint32_t*)ctx->sh_desc + i++) = 0x79360808;     // move from desc buf to math2, wc=1,offset = 8, len 8
-            *((uint32_t*)ctx->sh_desc + i++) = 0xa8412208;     // M2 = M2 | M1
+            *((uint32_t*)ctx->sh_desc + i++) = 0xA8911108;      // math: (<math1> shld math1)->math1 len=8
+#ifdef UNDER_CONSTRUCTION_HFN_THRESHOLD
+            *((uint32_t*)ctx->sh_desc + i++) = 0x79370404;      // move: descbuf+4[01] -> math3, len=4
+            *((uint32_t*)ctx->sh_desc + i++) = 0xA8231F08;      // math: (math3 - math1)->none len=8
 
-            *((uint32_t*)ctx->sh_desc + i++) = 0x78680008;     // move math2 to class1 input fifo(IV=64bits)
+            *((uint32_t*)ctx->sh_desc + i++) = 0xA0010805;      // jump: jsl0 all-mismatch[math-n] offset=5 local->[06]
+            *((uint32_t*)ctx->sh_desc + i++) = 0x79360408;      // move: descbuf+4[01] -> math2, len=8
+            *((uint32_t*)ctx->sh_desc + i++) = 0xAC024208;      // math: (math2 + imm1)->math2 len=4, ifb
+            *((uint32_t*)ctx->sh_desc + i++) = 0x00000020;      // imm1=32
+            *((uint32_t*)ctx->sh_desc + i++) = 0x79630408;      // move: math2 -> descbuf+4[01], len=8
+
+            *((uint32_t*)ctx->sh_desc + i++) = 0x78530404;      // move: math1 -> descbuf+4[01], len=4
+#endif // UNDER_CONSTRUCTION_HFN_THRESHOLD
+            *((uint32_t*)ctx->sh_desc + i++) = 0x79360808;      // move from desc buf to math2, wc=1,offset = 8, len 8
+            *((uint32_t*)ctx->sh_desc + i++) = 0xa8412208;      // M2 = M2 | M1
+
+            *((uint32_t*)ctx->sh_desc + i++) = 0x78680008;      // move math2 to class1 input fifo(IV=64bits)
 
             if( ctx->pdcp_crypto_info->protocol_direction == PDCP_DECAPSULATION )
             {
@@ -1641,7 +1661,16 @@ static int create_c_plane_auth_only_desc(sec_context_t *ctx)
             ASSERT(0);
             break;
     }
+#ifdef UNDER_CONSTRUCTION_HFN_THRESHOLD
+    *((uint32_t*)ctx->sh_desc + i++) = 0x78340408;      // move: descbuf+8[01] -> math0, len=4
+    *((uint32_t*)ctx->sh_desc + i++) = 0x79350C08;      // move: descbuf+16[04] -> math1, len=4
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA8210104;      // math: (math1 - math0)->none len=8
+    
+    *((uint32_t*)ctx->sh_desc + i++) = 0x56420104;      // str: deco-shrdesc+1 len=4
+    *((uint32_t*)ctx->sh_desc + i++) = 0xa1001001;      // wait for calm
 
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA0C20CF1;      // jump: jsl0 any-match[math-n,math-z] halt-user status=241
+#endif // UNDER_CONSTRUCTION_HFN_THRESHOLD
     // update descriptor length
     ctx->sh_desc->deschdr.command.sd.desclen = i;
 
@@ -1657,19 +1686,16 @@ static int create_c_plane_cipher_only_desc(sec_context_t *ctx)
     ctx->sh_desc->deschdr.command.word = 0xB8850100;  // shared header, start idx = 5
 
     /* Plug-in the HFN override in descriptor from DPOVRD */    
-    *((uint32_t*)ctx->sh_desc + i++) = 0xAC574F08;
-    *((uint32_t*)ctx->sh_desc + i++) = 0x80000000;
-    *((uint32_t*)ctx->sh_desc + i++) = 0xA0000407;
-    
-    *((uint32_t*)ctx->sh_desc + i++) = 0xAC574008;
-    *((uint32_t*)ctx->sh_desc + i++) = 0x07FFFFFF;
-    
-    *((uint32_t*)ctx->sh_desc + i++) = 0xAC704008;
-    *((uint32_t*)ctx->sh_desc + i++) = 0x00000005;
-        
-    *((uint32_t*)ctx->sh_desc + i++) = 0xA8900008;
-    
-    *((uint32_t*)ctx->sh_desc + i++) = 0x78430804;
+    *((uint32_t*)ctx->sh_desc + i++) = 0xAC574F08;    // math: (povrd & imm1)->none len=8 ifb
+    *((uint32_t*)ctx->sh_desc + i++) = 0x80000000;    // imm
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA0000407;    // jump: jsl0 all-match[math-z] offset=7 local->[32]
+
+    *((uint32_t*)ctx->sh_desc + i++) = 0xAC574008;    // math: (povrd & imm1)->math0 len=8 ifb
+    *((uint32_t*)ctx->sh_desc + i++) = 0x07FFFFFF;    // imm
+    *((uint32_t*)ctx->sh_desc + i++) = 0xAC704008;    // math: (math0 << imm1)->math0 len=8 ifb
+    *((uint32_t*)ctx->sh_desc + i++) = 0x00000005;    // imm
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA8900008;    // math: (<math0> shld math0)->math0 len=8
+    *((uint32_t*)ctx->sh_desc + i++) = 0x78430804;    // move: math0 -> descbuf+8[02], len=4
 
     switch( ctx->pdcp_crypto_info->cipher_algorithm )
     {
@@ -1680,23 +1706,38 @@ static int create_c_plane_cipher_only_desc(sec_context_t *ctx)
                     ctx->pdcp_crypto_info->cipher_key_len; // key1, len = cipher_key_len
             *((uint32_t*)ctx->sh_desc + i++) = g_sec_vtop(ctx->pdcp_crypto_info->cipher_key);
 
-            *((uint32_t*)ctx->sh_desc + i++) = 0x1e080001;      // seq load, class 3, length = 1, dest = m0
+            *((uint32_t*)ctx->sh_desc + i++) = 0x1e080701;      // seq load, class 3, offset 7, length = 1, dest = m0
             *((uint32_t*)ctx->sh_desc + i++) = 0xa1001001;      // wait for calm
-            *((uint32_t*)ctx->sh_desc + i++) = 0xac804108;      // shift right 24 bits, put result in math1
-            *((uint32_t*)ctx->sh_desc + i++) = 0x00000018;      // 24
-            *((uint32_t*)ctx->sh_desc + i++) = 0xa8514108;      // retain SN only (5 bits)
-            *((uint32_t*)ctx->sh_desc + i++) = 0x0000001f;      // M1 = M1 & 0x0000001f_00000000
-            *((uint32_t*)ctx->sh_desc + i++) = 0x00000000;      //
 
+            *((uint32_t*)ctx->sh_desc + i++) = 0xac504108;      // retain SN only (5 bits)
+            *((uint32_t*)ctx->sh_desc + i++) = 0x0000001f;      // M1 = M0 & 0x00000000_0000001f
+
+            *((uint32_t*)ctx->sh_desc + i++) = 0xA8911108;      // math: (<math1> shld math1)->math1 len=8
+
+#ifdef UNDER_CONSTRUCTION_HFN_THRESHOLD
+            *((uint32_t*)ctx->sh_desc + i++) = 0x79370404;      // move: descbuf+4[01] -> math3, len=4
+            
+            *((uint32_t*)ctx->sh_desc + i++) = 0xA8231F08;      // math: (math3 - math1)->none len=8
+
+            *((uint32_t*)ctx->sh_desc + i++) = 0xA0010805;      // jump: jsl0 all-mismatch[math-n] offset=5 local->[06]
+            *((uint32_t*)ctx->sh_desc + i++) = 0x79360408;      // move: descbuf+4[01] -> math2, len=8
+            *((uint32_t*)ctx->sh_desc + i++) = 0xAC024208;      // math: (math2 + imm1)->math2 len=4, ifb
+            *((uint32_t*)ctx->sh_desc + i++) = 0x00000020;      // imm1=32
+            *((uint32_t*)ctx->sh_desc + i++) = 0x79630408;      // move: math2 -> descbuf+4[01], len=8
+
+            *((uint32_t*)ctx->sh_desc + i++) = 0x78530404;      // move: math1 -> descbuf+4[01], len=4
+#endif // UNDER_CONSTRUCTION_HFN_THRESHOLD
             *((uint32_t*)ctx->sh_desc + i++) = 0x79360808;      // move from desc buf to math2, wc=1,offset = 8, len 8
             *((uint32_t*)ctx->sh_desc + i++) = 0xa8412208;      // M2 = M2 | M1
 
-            *((uint32_t*)ctx->sh_desc + i++) = 0x5e080001;      // seq store, class 3, length = 1, src=m0
+            *((uint32_t*)ctx->sh_desc + i++) = 0x5e080701;      // seq store, class 3, offset 7, length = 1, src=m0
 
             *((uint32_t*)ctx->sh_desc + i++) = 0x79600008;      // load, class1 ctx, math2, wc = 1, len 8, offset 0
 
             *((uint32_t*)ctx->sh_desc + i++) = 0xa828fa04;      // VSIL=SIL-0x00
             *((uint32_t*)ctx->sh_desc + i++) = 0xa828fb04;      // VSOL=SOL-0x00
+
+            
 
             *((uint32_t*)ctx->sh_desc + i++) = 0x82600c0c | \
                     ( (ctx->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION) ? \
@@ -1714,23 +1755,35 @@ static int create_c_plane_cipher_only_desc(sec_context_t *ctx)
                     ctx->pdcp_crypto_info->cipher_key_len; // key1, len = cipher_key_len
             *((uint32_t*)ctx->sh_desc + i++) = g_sec_vtop(ctx->pdcp_crypto_info->cipher_key);
 
-            *((uint32_t*)ctx->sh_desc + i++) = 0x1E080001;  // seq load, class 3, length = 1, dest = m0
-            *((uint32_t*)ctx->sh_desc + i++) = 0xA1001001;  // wait for calm
-            *((uint32_t*)ctx->sh_desc + i++) = 0xac804108;  // shift right 24 bits, put result in math1
-            *((uint32_t*)ctx->sh_desc + i++) = 0x00000018;  // 24
-            *((uint32_t*)ctx->sh_desc + i++) = 0xa8514108;  // retain SN only (5 bits)
-            *((uint32_t*)ctx->sh_desc + i++) = 0x0000001f;  // M1 = M1 & 0x0000001f_00000000
-            *((uint32_t*)ctx->sh_desc + i++) = 0x00000000;  //
+            *((uint32_t*)ctx->sh_desc + i++) = 0x1e080701;      // seq load, class 3, offset 7, length = 1, dest = m0
+            *((uint32_t*)ctx->sh_desc + i++) = 0xa1001001;      // wait for calm
 
-            *((uint32_t*)ctx->sh_desc + i++) = 0x79360808;  // move from desc buf to math2, wc=1,offset = 8, len 8
-            *((uint32_t*)ctx->sh_desc + i++) = 0xa8412208;  // M2 = M2 | M1
+            *((uint32_t*)ctx->sh_desc + i++) = 0xac504108;      // retain SN only (5 bits)
+            *((uint32_t*)ctx->sh_desc + i++) = 0x0000001f;      // M1 = M0 & 0x00000000_0000001f
 
-            *((uint32_t*)ctx->sh_desc + i++) = 0x5e080001;  // seq store, class 3, length = 1, src=m0
+            *((uint32_t*)ctx->sh_desc + i++) = 0xA8911108;      // math: (<math1> shld math1)->math1 len=8
+#ifdef UNDER_CONSTRUCTION_HFN_THRESHOLD
+            *((uint32_t*)ctx->sh_desc + i++) = 0x79370404;      // move: descbuf+4[01] -> math3, len=4
 
-            *((uint32_t*)ctx->sh_desc + i++) = 0x79601010;  // load, class1 ctx, math2, wc = 1, len 16, offset 16
+            *((uint32_t*)ctx->sh_desc + i++) = 0xA8231F08;      // math: (math3 - math1)->none len=8
 
-            *((uint32_t*)ctx->sh_desc + i++) = 0xa828fa04;  // VSIL=SIL-0x00
-            *((uint32_t*)ctx->sh_desc + i++) = 0xa828fb04;  // VSOL=SIL-0x00
+            *((uint32_t*)ctx->sh_desc + i++) = 0xA0010805;      // jump: jsl0 all-mismatch[math-n] offset=5 local->[06]
+            *((uint32_t*)ctx->sh_desc + i++) = 0x79360408;      // move: descbuf+4[01] -> math2, len=8
+            *((uint32_t*)ctx->sh_desc + i++) = 0xAC024208;      // math: (math2 + imm1)->math2 len=4, ifb
+            *((uint32_t*)ctx->sh_desc + i++) = 0x00000020;      // imm1=32
+            *((uint32_t*)ctx->sh_desc + i++) = 0x79630408;      // move: math2 -> descbuf+4[01], len=8
+
+            *((uint32_t*)ctx->sh_desc + i++) = 0x78530404;      // move: math1 -> descbuf+4[01], len=4
+#endif // UNDER_CONSTRUCTION_HFN_THRESHOLD
+            *((uint32_t*)ctx->sh_desc + i++) = 0x79360808;      // move from desc buf to math2, wc=1,offset = 8, len 8
+            *((uint32_t*)ctx->sh_desc + i++) = 0xa8412208;      // M2 = M2 | M1
+
+            *((uint32_t*)ctx->sh_desc + i++) = 0x5e080701;      // seq store, class 3, offset 7, length = 1, src=m0
+
+            *((uint32_t*)ctx->sh_desc + i++) = 0x79601010;      // load, class1 ctx, math2, wc = 1, len 16, offset 16
+
+            *((uint32_t*)ctx->sh_desc + i++) = 0xa828fa04;      // VSIL=SIL-0x00
+            *((uint32_t*)ctx->sh_desc + i++) = 0xa828fb04;      // VSOL=SIL-0x00
 
             *((uint32_t*)ctx->sh_desc + i++) = 0x8210000c | \
                     ( (ctx->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION) ? \
@@ -1744,7 +1797,16 @@ static int create_c_plane_cipher_only_desc(sec_context_t *ctx)
             ASSERT(0);
             break;
     }
+#ifdef UNDER_CONSTRUCTION_HFN_THRESHOLD
+    *((uint32_t*)ctx->sh_desc + i++) = 0x78340408;      // move: descbuf+8[01] -> math0, len=4
+    *((uint32_t*)ctx->sh_desc + i++) = 0x79350C08;      // move: descbuf+16[04] -> math1, len=4
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA8210104;      // math: (math1 - math0)->none len=8
+    
+    *((uint32_t*)ctx->sh_desc + i++) = 0x56420104;      // str: deco-shrdesc+1 len=4
+    *((uint32_t*)ctx->sh_desc + i++) = 0xa1001001;      // wait for calm
 
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA0C20CF1;      // jump: jsl0 any-match[math-n,math-z] halt-user status=241
+#endif // UNDER_CONSTRUCTION_HFN_THRESHOLD
     // update descriptor length
     ctx->sh_desc->deschdr.command.sd.desclen = i;
 

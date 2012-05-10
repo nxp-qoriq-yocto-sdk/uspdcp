@@ -158,6 +158,10 @@ static uint8_t *integrity_key = NULL;
 
 // FSL Userspace Memory Manager structure
 fsl_usmmgr_t g_usmmgr;
+#ifdef UNDER_CONSTRUCTION_HFN_THRESHOLD
+// Counter of packets received with HFN > HFN threshold
+static uint32_t pkts_hfn_threshold;
+#endif // UNDER_CONSTRUCTION_HFN_THRESHOLD
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
 ==================================================================================================*/
@@ -167,7 +171,15 @@ static int handle_packet_from_sec(const sec_packet_t *in_packet,
                                   ua_context_handle_t ua_ctx_handle,
                                   uint32_t status,
                                   uint32_t error_info);
-
+#ifdef UNDER_CONSTRUCTION_HFN_THRESHOLD
+// Callback function registered for PDCP contexts which have
+// reached HFN threshold
+static int handle_packet_from_sec_hfn_threshold(const sec_packet_t *in_packet,
+                                  const sec_packet_t *out_packet,
+                                  ua_context_handle_t ua_ctx_handle,
+                                  uint32_t status,
+                                  uint32_t error_info);
+#endif // UNDER_CONSTRUCTION_HFN_THRESHOLD
 // Get packet from the global array with test packets.
 static int get_pkt(sec_packet_t **pkt,
                    uint8_t *data, int data_len,
@@ -202,7 +214,23 @@ static int handle_packet_from_sec(const sec_packet_t *in_packet,
 
     return ret;
 }
+#ifdef UNDER_CONSTRUCTION_HFN_THRESHOLD
+static int handle_packet_from_sec_hfn_threshold(const sec_packet_t *in_packet,
+                                  const sec_packet_t *out_packet,
+                                  ua_context_handle_t ua_ctx_handle,
+                                  uint32_t status,
+                                  uint32_t error_info)
+{
+    int ret = SEC_SUCCESS;
 
+    if( status == SEC_STATUS_HFN_THRESHOLD_REACHED)
+    {
+        pkts_hfn_threshold++;
+    }
+    
+    return ret;
+}
+#endif // UNDER_CONSTRUCTION_HFN_THRESHOLD
 static int get_pkt(sec_packet_t **pkt,
                    uint8_t *data, int data_len,
                    uint8_t *hdr, int hdr_len)
@@ -320,6 +348,7 @@ static void test_setup(void)
     memset(ua_data, 0x3, TEST_PACKETS_NUMBER);
 }
 
+
 static void test_teardown()
 {
     dma_mem_free(sec_config_data.memory_area,SEC_DMA_MEMORY_SIZE);
@@ -328,8 +357,592 @@ static void test_teardown()
     dma_mem_free(integrity_key, MAX_KEY_LENGTH);
     dma_mem_free(test_packets, sizeof(buffer_t) * TEST_PACKETS_NUMBER);
 }
+#ifdef UNDER_CONSTRUCTION_HFN_THRESHOLD
+static void test_hfn_threshold_reach(void)
+{
+    int ret = 0;
+    int limit = SEC_JOB_RING_SIZE  - 1;
+    int memcmp_res = 0;
+    int test_idx;
 
-static void test_single_algorithms(void)
+    uint32_t packets_out = 0;
+    uint32_t packets_handled = 0;
+    sec_job_ring_handle_t jr_handle_0;
+    sec_context_handle_t ctx_handle_0 = NULL;
+    sec_context_handle_t ctx_handle_1 = NULL;
+    sec_packet_t *in_encap_pkt = NULL, *out_encap_pkt = NULL, *in_decap_pkt = NULL, *out_decap_pkt = NULL;
+    uint8_t *hdr;
+    uint8_t hdr_len;
+
+    // configuration data for a PDCP context
+    sec_pdcp_context_info_t ctx_info[] = {
+        // Context for encapsulation
+        {
+            //.cipher_algorithm       = SEC_ALG_NULL,
+            .cipher_key             = cipher_key,
+            .cipher_key_len         = sizeof(test_crypto_key),
+            //.integrity_algorithm    = SEC_ALG_AES,
+            .integrity_key          = integrity_key,
+            .integrity_key_len      = sizeof(test_auth_key),
+            .notify_packet          = &handle_packet_from_sec_hfn_threshold,
+            //.sn_size                = SEC_PDCP_SN_SIZE_5,
+            .bearer                 = test_bearer,
+            //.user_plane             = PDCP_CONTROL_PLANE,
+            //.packet_direction       = test_pkt_dir;
+            //.protocol_direction     = test_proto_dir;
+            .hfn                    = test_hfn_threshold,
+            .hfn_threshold          = test_hfn_threshold,
+            .hfn_ov_en              = 0,
+            .input_vtop             = test_vtop,
+            .output_vtop            = test_vtop
+        },
+        // Context for decapsulation
+        {
+            //.cipher_algorithm       = SEC_ALG_NULL,
+            .cipher_key             = cipher_key,
+            .cipher_key_len         = sizeof(test_crypto_key),
+            //.integrity_algorithm    = SEC_ALG_AES,
+            .integrity_key          = integrity_key,
+            .integrity_key_len      = sizeof(test_auth_key),
+            .notify_packet          = &handle_packet_from_sec_hfn_threshold,
+            //.sn_size                = SEC_PDCP_SN_SIZE_5,
+            .bearer                 = test_bearer,
+            //.user_plane             = PDCP_CONTROL_PLANE,
+            //.packet_direction       = test_pkt_dir;
+            //.protocol_direction     = test_proto_dir;
+            .hfn                    = test_hfn_threshold,
+            .hfn_threshold          = test_hfn_threshold,
+            .hfn_ov_en              = 0,
+            .input_vtop             = test_vtop,
+            .output_vtop            = test_vtop
+        }
+    };
+
+    printf("Running test %s\n", __FUNCTION__);
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Init sec driver. No invalid param.
+    ret = sec_init(&sec_config_data, JOB_RING_NUMBER, &job_ring_descriptors);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                              "ERROR on sec_init: expected ret[%d]. actual ret[%d]",
+                              SEC_SUCCESS, ret);
+
+    jr_handle_0 = job_ring_descriptors[0].job_ring_handle;
+
+    for( test_idx = 0; test_idx < sizeof(test_params)/sizeof(test_params[0]) ; test_idx ++ )
+    {
+        if( (test_data_sns[test_idx] == SEC_PDCP_SN_SIZE_5 && 
+             test_params[test_idx].cipher_algorithm == SEC_ALG_NULL && 
+             test_params[test_idx].integrity_algorithm == SEC_ALG_NULL ) ||
+             ( (test_data_sns[test_idx] == SEC_PDCP_SN_SIZE_7 || 
+                test_data_sns[test_idx] == SEC_PDCP_SN_SIZE_12) &&
+             test_params[test_idx].cipher_algorithm == SEC_ALG_NULL) )
+        {
+            // It makes no sense to test for HFN threshold for SEC_ALG_NULL
+            continue;
+        }
+        ctx_info[0].packet_direction =
+        ctx_info[1].packet_direction = test_packet_direction[test_idx];
+
+        ctx_info[0].protocol_direction = PDCP_ENCAPSULATION;
+        ctx_info[1].protocol_direction = PDCP_DECAPSULATION;
+
+        ctx_info[0].user_plane =
+        ctx_info[1].user_plane = test_params[test_idx].type;
+
+        ctx_info[0].cipher_algorithm    = test_params[test_idx].cipher_algorithm;
+        ctx_info[0].integrity_algorithm = test_params[test_idx].integrity_algorithm;
+
+        ctx_info[1].cipher_algorithm    = test_params[test_idx].cipher_algorithm;
+        ctx_info[1].integrity_algorithm = test_params[test_idx].integrity_algorithm;
+
+        ctx_info[0].sn_size =
+        ctx_info[1].sn_size = test_data_sns[test_idx];
+
+        hdr = test_hdr[test_idx];
+
+        hdr_len = (test_data_sns[test_idx] == SEC_PDCP_SN_SIZE_5 ? 1 :
+                   test_data_sns[test_idx] == SEC_PDCP_SN_SIZE_7 ? 1 : 2);
+
+        ////////////////////////////////////
+        ////////////////////////////////////
+
+        // Create one context and affine it to first job ring.
+        ret = sec_create_pdcp_context(jr_handle_0, &ctx_info[0], &ctx_handle_0);
+        assert_equal_with_message(ret, SEC_SUCCESS,
+                "ERROR on sec_create_pdcp_context: expected ret[%d]. actual ret[%d]",
+                SEC_SUCCESS, ret);
+
+        // Create another context and affine it to the first job ring.
+        ret = sec_create_pdcp_context(jr_handle_0, &ctx_info[1], &ctx_handle_1);
+        assert_equal_with_message(ret, SEC_SUCCESS,
+                "ERROR on sec_create_pdcp_context: expected ret[%d]. actual ret[%d]",
+                SEC_SUCCESS, ret);
+
+        // Reset number of packets received with HFN threshold exceeded
+        pkts_hfn_threshold = 0;
+
+        ////////////////////////////////////
+        ////////////////////////////////////
+
+        // How many packets to send and receive to/from SEC
+        packets_handled = 1;
+
+        // Get one packet to be used as input for encapsulation
+        ret = get_pkt(&in_encap_pkt,test_data_in,test_data_in_len,
+                      hdr,hdr_len);
+        assert_equal_with_message(ret, 0,
+                "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
+                0, ret);
+
+        // Get one packet to be used as output for encapsulation
+        ret = get_pkt(&out_encap_pkt,NULL,test_data_out_len[test_idx],
+                     hdr,hdr_len);
+        assert_equal_with_message(ret, 0,
+                "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
+                0, ret);
+
+        // Submit one packet on the first context for encapsulation
+        ret = sec_process_packet(ctx_handle_0, in_encap_pkt, out_encap_pkt, NULL);
+        assert_equal_with_message(ret, SEC_SUCCESS,
+                    "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                    SEC_SUCCESS, ret);
+        usleep(1000);
+
+        ret = sec_poll_job_ring(jr_handle_0, limit, &packets_out);
+        assert_equal_with_message(ret, SEC_SUCCESS,
+                                "ERROR on sec_poll: expected ret[%d]. actual ret[%d]",
+                                SEC_SUCCESS, ret);
+        // <packets_handled> packets should be retrieved from SEC
+        assert_equal_with_message(packets_out, packets_handled,
+                                "ERROR on sec_poll: expected packets notified[%d]."
+                                "actual packets notified[%d]",
+                                packets_handled, packets_out);
+        DUMP_PACKET(out_encap_pkt);
+
+        // Get one packet to be used as input for decapsulation
+        ret = get_pkt(&in_decap_pkt,test_data_out_hfn_threshold[test_idx],test_data_out_len[test_idx],
+                      hdr,hdr_len);
+        assert_equal_with_message(ret, 0,
+                    "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
+                    0, ret);
+
+        // Get one packet to be used as output for decapsulation
+        ret = get_pkt(&out_decap_pkt,NULL,test_data_in_len,
+                      hdr,hdr_len);
+        assert_equal_with_message(ret, 0,
+                    "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
+                    0, ret);
+
+        // Submit one packet on the second context for decapsulation
+        ret = sec_process_packet(ctx_handle_1, in_decap_pkt, out_decap_pkt, NULL);
+        assert_equal_with_message(ret, SEC_SUCCESS,
+                                  "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                                  SEC_SUCCESS, ret);
+        usleep(1000);
+        ret = sec_poll_job_ring(jr_handle_0, limit, &packets_out);
+
+        assert_equal_with_message(ret, SEC_SUCCESS,
+                                "ERROR on sec_poll: expected ret[%d]. actual ret[%d]",
+                                SEC_SUCCESS, ret);
+        // <packets_handled> packets should be retrieved from SEC
+        assert_equal_with_message(packets_out, packets_handled,
+                                "ERROR on sec_poll: expected packets notified[%d]."
+                                "actual packets notified[%d]",
+                                packets_handled, packets_out);
+        DUMP_PACKET(out_decap_pkt);
+        // Check that encap content is correct
+        memcmp_res = memcmp(out_encap_pkt->address + out_encap_pkt->offset,
+                            hdr,hdr_len);
+        assert_equal_with_message(memcmp_res, 0,
+                              "ERROR on checking encapsulation contents: header is different!");
+
+        memcmp_res = memcmp(out_encap_pkt->address + out_encap_pkt->offset + hdr_len,
+                            test_data_out_hfn_threshold[test_idx],test_data_out_len[test_idx]);
+        assert_equal_with_message(memcmp_res, 0,
+                              "ERROR on checking encapsulation contents: content is different!");
+
+        // check that decap content is correct
+        memcmp_res = memcmp(out_decap_pkt->address + out_decap_pkt->offset,
+                            hdr,hdr_len);
+        assert_equal_with_message(memcmp_res, 0,
+                              "ERROR on checking decapsulation contents: header is different!");
+
+        memcmp_res = memcmp(out_decap_pkt->address + out_decap_pkt->offset + hdr_len,
+                            test_data_in,test_data_in_len);
+        assert_equal_with_message(memcmp_res, 0,
+                              "ERROR on checking decapsulation contents: content is different!");
+
+        assert_equal_with_message(pkts_hfn_threshold, 2, "ERROR: Expected HFN threshold exceeded "
+                                  "for %d packets, got instead %d",2,pkts_hfn_threshold);
+        // release packets
+        ret = put_pkt(&in_encap_pkt);
+        assert_equal_with_message(ret, 0,
+                                  "ERROR on releasing in encapsulation packet!");
+        ret = put_pkt(&in_decap_pkt);
+        assert_equal_with_message(ret, 0,
+                                  "ERROR on releasing in decapsulation packet!");
+        ret = put_pkt(&out_encap_pkt);
+        assert_equal_with_message(ret, 0,
+                                  "ERROR on releasing output encapsulation packet!");
+        ret = put_pkt(&out_decap_pkt);
+        assert_equal_with_message(ret, 0,
+                                  "ERROR on releasing output decapsulation packet!");
+
+        // delete contexts
+        ret = sec_delete_pdcp_context(ctx_handle_0);
+        assert_equal_with_message(ret, 0,
+                                  "ERROR on releasing context !");
+
+        ret = sec_delete_pdcp_context(ctx_handle_1);
+        assert_equal_with_message(ret, 0,
+                                  "ERROR on releasing context!");
+
+    }
+
+    // release sec driver
+    ret = sec_release();
+    assert_equal_with_message(ret, SEC_SUCCESS, "ERROR on sec_release: ret = %d", ret);
+}
+
+static void test_hfn_increment(void)
+{
+    int ret = 0;
+    int limit = SEC_JOB_RING_SIZE  - 1;
+    int memcmp_res = 0;
+    int test_idx;
+
+    uint32_t packets_out = 0;
+    uint32_t packets_handled = 0;
+    sec_job_ring_handle_t jr_handle_0;
+    sec_context_handle_t ctx_handle_0 = NULL;
+    sec_context_handle_t ctx_handle_1 = NULL;
+    sec_packet_t *in_encap_pkt = NULL, *out_encap_pkt = NULL, *in_decap_pkt = NULL, *out_decap_pkt = NULL;
+    uint8_t *hdr;
+    uint8_t hdr_len;
+
+    // configuration data for a PDCP context
+    sec_pdcp_context_info_t ctx_info[] = {
+        // Context for encapsulation
+        {
+            //.cipher_algorithm       = SEC_ALG_NULL,
+            .cipher_key             = cipher_key,
+            .cipher_key_len         = sizeof(test_crypto_key),
+            //.integrity_algorithm    = SEC_ALG_AES,
+            .integrity_key          = integrity_key,
+            .integrity_key_len      = sizeof(test_auth_key),
+            .notify_packet          = &handle_packet_from_sec_hfn_threshold,
+            //.sn_size                = SEC_PDCP_SN_SIZE_5,
+            .bearer                 = test_bearer,
+            //.user_plane             = PDCP_CONTROL_PLANE,
+            //.packet_direction       = test_pkt_dir;
+            //.protocol_direction     = test_proto_dir;
+            .hfn                    = test_hfn,
+            .hfn_threshold          = test_hfn_threshold,
+            .hfn_ov_en              = 0,
+            .input_vtop             = test_vtop,
+            .output_vtop            = test_vtop
+        },
+        // Context for decapsulation
+        {
+            //.cipher_algorithm       = SEC_ALG_NULL,
+            .cipher_key             = cipher_key,
+            .cipher_key_len         = sizeof(test_crypto_key),
+            //.integrity_algorithm    = SEC_ALG_AES,
+            .integrity_key          = integrity_key,
+            .integrity_key_len      = sizeof(test_auth_key),
+            .notify_packet          = &handle_packet_from_sec_hfn_threshold,
+            //.sn_size                = SEC_PDCP_SN_SIZE_5,
+            .bearer                 = test_bearer,
+            //.user_plane             = PDCP_CONTROL_PLANE,
+            //.packet_direction       = test_pkt_dir;
+            //.protocol_direction     = test_proto_dir;
+            .hfn                    = test_hfn,
+            .hfn_threshold          = test_hfn_threshold,
+            .hfn_ov_en              = 0,
+            .input_vtop             = test_vtop,
+            .output_vtop            = test_vtop
+        }
+    };
+
+    printf("Running test %s\n", __FUNCTION__);
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Init sec driver. No invalid param.
+    ret = sec_init(&sec_config_data, JOB_RING_NUMBER, &job_ring_descriptors);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                              "ERROR on sec_init: expected ret[%d]. actual ret[%d]",
+                              SEC_SUCCESS, ret);
+
+    jr_handle_0 = job_ring_descriptors[0].job_ring_handle;
+
+    for( test_idx = 0; test_idx < sizeof(test_params)/sizeof(test_params[0]) ; test_idx ++ )
+    {
+        if( (test_data_sns[test_idx] == SEC_PDCP_SN_SIZE_5 && 
+             test_params[test_idx].cipher_algorithm == SEC_ALG_NULL && 
+             test_params[test_idx].integrity_algorithm == SEC_ALG_NULL ) ||
+             ( (test_data_sns[test_idx] == SEC_PDCP_SN_SIZE_7 || 
+                test_data_sns[test_idx] == SEC_PDCP_SN_SIZE_12) &&
+             test_params[test_idx].cipher_algorithm == SEC_ALG_NULL) )
+        {
+            // It makes no sense to test for HFN threshold for SEC_ALG_NULL
+            continue;
+        }
+        ctx_info[0].packet_direction =
+        ctx_info[1].packet_direction = test_packet_direction[test_idx];
+
+        ctx_info[0].protocol_direction = PDCP_ENCAPSULATION;
+        ctx_info[1].protocol_direction = PDCP_DECAPSULATION;
+
+        ctx_info[0].user_plane =
+        ctx_info[1].user_plane = test_params[test_idx].type;
+
+        ctx_info[0].cipher_algorithm    = test_params[test_idx].cipher_algorithm;
+        ctx_info[0].integrity_algorithm = test_params[test_idx].integrity_algorithm;
+
+        ctx_info[1].cipher_algorithm    = test_params[test_idx].cipher_algorithm;
+        ctx_info[1].integrity_algorithm = test_params[test_idx].integrity_algorithm;
+
+        ctx_info[0].sn_size =
+        ctx_info[1].sn_size = test_data_sns[test_idx];
+
+        hdr = test_hdr[test_idx];
+        // hdr_sn_next = test_hdr_sn_next[test_idx];
+
+        hdr_len = (test_data_sns[test_idx] == SEC_PDCP_SN_SIZE_5 ? 1 :
+                   test_data_sns[test_idx] == SEC_PDCP_SN_SIZE_7 ? 1 : 2);
+
+        ////////////////////////////////////
+        ////////////////////////////////////
+
+        // Create one context and affine it to first job ring.
+        ret = sec_create_pdcp_context(jr_handle_0, &ctx_info[0], &ctx_handle_0);
+        assert_equal_with_message(ret, SEC_SUCCESS,
+                "ERROR on sec_create_pdcp_context: expected ret[%d]. actual ret[%d]",
+                SEC_SUCCESS, ret);
+
+        // Create another context and affine it to the first job ring.
+        ret = sec_create_pdcp_context(jr_handle_0, &ctx_info[1], &ctx_handle_1);
+        assert_equal_with_message(ret, SEC_SUCCESS,
+                "ERROR on sec_create_pdcp_context: expected ret[%d]. actual ret[%d]",
+                SEC_SUCCESS, ret);
+
+        // Reset number of packets received with HFN threshold exceeded
+        pkts_hfn_threshold = 0;
+
+        ////////////////////////////////////
+        ////////////////////////////////////
+
+        // How many packets to send and receive to/from SEC
+        packets_handled = 1;
+
+        // Get one packet to be used as input for encapsulation
+        ret = get_pkt(&in_encap_pkt,test_data_in,test_data_in_len,
+                      hdr,hdr_len);
+        assert_equal_with_message(ret, 0,
+                "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
+                0, ret);
+
+        // Get one packet to be used as output for encapsulation
+        ret = get_pkt(&out_encap_pkt,NULL,test_data_out_len[test_idx],
+                     hdr,hdr_len);
+        assert_equal_with_message(ret, 0,
+                "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
+                0, ret);
+
+        assert_equal_with_message(ret, 0,
+                "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
+                0, ret);
+        
+        // Submit one packet on the first context for encapsulation
+        ret = sec_process_packet(ctx_handle_0, in_encap_pkt, out_encap_pkt, NULL);
+        assert_equal_with_message(ret, SEC_SUCCESS,
+                    "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                    SEC_SUCCESS, ret);
+        usleep(1000);
+
+        ret = sec_poll_job_ring(jr_handle_0, limit, &packets_out);
+        assert_equal_with_message(ret, SEC_SUCCESS,
+                                "ERROR on sec_poll: expected ret[%d]. actual ret[%d]",
+                                SEC_SUCCESS, ret);
+        // <packets_handled> packets should be retrieved from SEC
+        assert_equal_with_message(packets_out, packets_handled,
+                                "ERROR on sec_poll: expected packets notified[%d]."
+                                "actual packets notified[%d]",
+                                packets_handled, packets_out);
+        
+        // Check that encap content is correct
+        memcmp_res = memcmp(out_encap_pkt->address + out_encap_pkt->offset,
+                            hdr,hdr_len);
+        assert_equal_with_message(memcmp_res, 0,
+                              "ERROR on checking encapsulation contents: header is different!");
+
+        memcmp_res = memcmp(out_encap_pkt->address + out_encap_pkt->offset + hdr_len,
+                            test_data_out[test_idx],test_data_out_len[test_idx]);
+        assert_equal_with_message(memcmp_res, 0,
+                              "ERROR on checking encapsulation contents: content is different!");
+        DUMP_PACKET(out_encap_pkt);
+
+        /* Clear the received packet */
+        memset(out_encap_pkt->address,
+               out_encap_pkt->offset + out_encap_pkt->length,
+               0x00);
+        /*
+         * I will resubmit the same packet on the same context. This will trigger a
+         * HFN increment. Due to HFN increment, the packet submitted will be 
+         * processed with HFN = intial HFN + 1. The check will be done accordingly
+         */
+
+        // Submit one packet on the first context for encapsulation
+        ret = sec_process_packet(ctx_handle_0, in_encap_pkt, out_encap_pkt, NULL);
+        assert_equal_with_message(ret, SEC_SUCCESS,
+                    "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                    SEC_SUCCESS, ret);
+        usleep(1000);
+
+        ret = sec_poll_job_ring(jr_handle_0, limit, &packets_out);
+        assert_equal_with_message(ret, SEC_SUCCESS,
+                                "ERROR on sec_poll: expected ret[%d]. actual ret[%d]",
+                                SEC_SUCCESS, ret);
+        // <packets_handled> packets should be retrieved from SEC
+        assert_equal_with_message(packets_out, packets_handled,
+                                "ERROR on sec_poll: expected packets notified[%d]."
+                                "actual packets notified[%d]",
+                                packets_handled, packets_out);
+
+        // Check that encap content is correct
+        memcmp_res = memcmp(out_encap_pkt->address + out_encap_pkt->offset,
+                            hdr,hdr_len);
+        assert_equal_with_message(memcmp_res, 0,
+                              "ERROR on checking encapsulation contents: header is different!");
+        /* The content MUST be different ("wrong" HFN used) */
+        memcmp_res = memcmp(out_encap_pkt->address + out_encap_pkt->offset + hdr_len,
+                            test_data_out_hfn_inc[test_idx],test_data_out_len[test_idx]);
+        assert_equal_with_message(memcmp_res, 0,
+                              "ERROR on checking encapsulation contents: content is different!");
+        DUMP_PACKET(out_encap_pkt);
+				
+				
+				
+				
+				
+        // Get one packet to be used as input for decapsulation
+        ret = get_pkt(&in_decap_pkt,test_data_out_hfn_threshold[test_idx],test_data_out_len[test_idx],
+                      hdr,hdr_len);
+        assert_equal_with_message(ret, 0,
+                    "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
+                    0, ret);
+
+        // Get one packet to be used as output for decapsulation
+        ret = get_pkt(&out_decap_pkt,NULL,test_data_in_len,
+                      hdr,hdr_len);
+        assert_equal_with_message(ret, 0,
+                    "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
+                    0, ret);
+
+        // Submit one packet on the second context for decapsulation
+        ret = sec_process_packet(ctx_handle_1, in_decap_pkt, out_decap_pkt, NULL);
+        assert_equal_with_message(ret, SEC_SUCCESS,
+                                  "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                                  SEC_SUCCESS, ret);
+        usleep(1000);
+        ret = sec_poll_job_ring(jr_handle_0, limit, &packets_out);
+
+        assert_equal_with_message(ret, SEC_SUCCESS,
+                                "ERROR on sec_poll: expected ret[%d]. actual ret[%d]",
+                                SEC_SUCCESS, ret);
+        // <packets_handled> packets should be retrieved from SEC
+        assert_equal_with_message(packets_out, packets_handled,
+                                "ERROR on sec_poll: expected packets notified[%d]."
+                                "actual packets notified[%d]",
+                                packets_handled, packets_out);
+
+        // check that decap content is correct
+        memcmp_res = memcmp(out_decap_pkt->address + out_decap_pkt->offset,
+                            hdr,hdr_len);
+        assert_equal_with_message(memcmp_res, 0,
+                              "ERROR on checking decapsulation contents: header is different!");
+
+        memcmp_res = memcmp(out_decap_pkt->address + out_decap_pkt->offset + hdr_len,
+                            test_data_in,test_data_in_len);
+        assert_equal_with_message(memcmp_res, 0,
+                              "ERROR on checking decapsulation contents: content is different!");
+        DUMP_PACKET(out_decap_pkt);
+
+        /* Clear the received packet */
+        memset(out_decap_pkt->address,
+               out_decap_pkt->offset + out_decap_pkt->length,
+               0x00);
+        /*
+         * I will resubmit the same packet on the same context. This will trigger a
+         * HFN increment. Due to HFN increment, the packet submitted will be 
+         * processed with HFN = intial HFN + 1. The check will be done accordingly
+         */
+
+        // Submit one packet on the first context for encapsulation
+        ret = sec_process_packet(ctx_handle_0, in_decap_pkt, out_decap_pkt, NULL);
+        assert_equal_with_message(ret, SEC_SUCCESS,
+                    "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                    SEC_SUCCESS, ret);
+        usleep(1000);
+
+        ret = sec_poll_job_ring(jr_handle_0, limit, &packets_out);
+        assert_equal_with_message(ret, SEC_SUCCESS,
+                                "ERROR on sec_poll: expected ret[%d]. actual ret[%d]",
+                                SEC_SUCCESS, ret);
+        // <packets_handled> packets should be retrieved from SEC
+        assert_equal_with_message(packets_out, packets_handled,
+                                "ERROR on sec_poll: expected packets notified[%d]."
+                                "actual packets notified[%d]",
+                                packets_handled, packets_out);
+
+        // Check that encap content is correct
+        memcmp_res = memcmp(out_decap_pkt->address + out_decap_pkt->offset,
+                            hdr,hdr_len);
+        assert_equal_with_message(memcmp_res, 0,
+                              "ERROR on checking encapsulation contents: header is different!");
+        /* The content MUST be different ("wrong" HFN used) */
+        memcmp_res = memcmp(out_decap_pkt->address + out_decap_pkt->offset + hdr_len,
+                            test_data_out_hfn_inc[test_idx],test_data_out_len[test_idx]);
+        assert_equal_with_message(memcmp_res, 0,
+                              "ERROR on checking encapsulation contents: content is different!");
+        DUMP_PACKET(out_decap_pkt);
+
+        // release packets
+        ret = put_pkt(&in_encap_pkt);
+        assert_equal_with_message(ret, 0,
+                                  "ERROR on releasing in encapsulation packet!");
+        ret = put_pkt(&in_decap_pkt);
+        assert_equal_with_message(ret, 0,
+                                  "ERROR on releasing in decapsulation packet!");
+        ret = put_pkt(&out_encap_pkt);
+        assert_equal_with_message(ret, 0,
+                                  "ERROR on releasing output encapsulation packet!");
+        ret = put_pkt(&out_decap_pkt);
+        assert_equal_with_message(ret, 0,
+                                  "ERROR on releasing output decapsulation packet!");
+
+        // delete contexts
+        ret = sec_delete_pdcp_context(ctx_handle_0);
+        assert_equal_with_message(ret, 0,
+                                  "ERROR on releasing context !");
+
+        ret = sec_delete_pdcp_context(ctx_handle_1);
+        assert_equal_with_message(ret, 0,
+                                  "ERROR on releasing context!");
+
+    }
+
+    // release sec driver
+    ret = sec_release();
+    assert_equal_with_message(ret, SEC_SUCCESS, "ERROR on sec_release: ret = %d", ret);
+}
+#endif // UNDER_CONSTRUCTION_HFN_THRESHOLD
+static void test_hfn_override_single_algorithms(void)
 {
     int ret = 0;
     int limit = SEC_JOB_RING_SIZE  - 1;
@@ -565,7 +1178,7 @@ static void test_single_algorithms(void)
 }
 
 
-static void test_combined_algos(void)
+static void test_hfn_override_combined_algos(void)
 {
     int ret = 0;
     int limit = SEC_JOB_RING_SIZE  - 1;
@@ -970,9 +1583,12 @@ static TestSuite * hfn_override_tests()
     teardown(suite, test_teardown);
 
     /* start adding unit tests */
-    add_test(suite, test_combined_algos);
-    add_test(suite, test_single_algorithms);
-
+    add_test(suite, test_hfn_override_combined_algos);
+    add_test(suite, test_hfn_override_single_algorithms);
+#ifdef UNDER_CONSTRUCTION_HFN_THRESHOLD
+    add_test(suite, test_hfn_threshold_reach);
+    add_test(suite, test_hfn_increment);
+#endif // UNDER_CONSTRUCTION_HFN_THRESHOLD
     return suite;
 }
 
@@ -1002,8 +1618,12 @@ int main(int argc, char *argv[])
 
     /* Run tests */
     
-    run_single_test(suite, "test_single_algorithms", reporter);
-    run_single_test(suite, "test_combined_algos", reporter);
+    run_single_test(suite, "test_hfn_override_single_algorithms", reporter);
+    run_single_test(suite, "test_hfn_override_combined_algos", reporter);
+#ifdef UNDER_CONSTRUCTION_HFN_OVERRIDE
+    run_single_test(suite, "test_hfn_threshold_reach", reporter);
+    run_single_test(suite, "test_hfn_increment", reporter);
+#endif // UNDER_CONSTRUCTION_HFN_OVERRIDE
 
     destroy_test_suite(suite);
     (*reporter->destroy)(reporter);

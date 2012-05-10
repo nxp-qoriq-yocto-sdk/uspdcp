@@ -578,11 +578,6 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
         
         ASSERT(SEC_JOB_RING_NUMBER_OF_ITEMS(SEC_JOB_RING_SIZE, head, tail + i) > 0);
 
-        SEC_DEBUG("Dump of JD");
-        SEC_PDCP_DUMP_DESC(job_ring->jobs[sw_idx].descr)
-        SEC_DEBUG("Dump of SD");
-        SEC_PDCP_DUMP_DESC( *((uint32_t*)job_ring->jobs[sw_idx].descr + 1) + 0x40000000 );
-
         /* mark completed, avoid matching on a recycled desc addr */
         job_ring->jobs[sw_idx].descr_phys_addr = 0;
 
@@ -598,6 +593,20 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
         {
             sec_error_code = 0;
             status = SEC_STATUS_HFN_THRESHOLD_REACHED;
+            SEC_INFO("SEC context[%p] in pkt[%p] out pkt[%p]."
+                          "HFN threshold reached.",
+                          job->sec_context, job->in_packet, job->out_packet);
+        }
+
+        // Test here for ICV check fail
+        // If so, this is not an error, signal to upper layer
+        if( ICV_CHECK_FAIL(sec_error_code) )
+        {
+            sec_error_code = 0;
+            status = SEC_STATUS_MAC_I_CHECK_FAILED;
+            SEC_ERROR("SEC context[%p] in pkt[%p] out pkt[%p]."
+                          "Integrity check FAILED!.",
+                          job->sec_context, job->in_packet, job->out_packet);
         }
 
 #else // SEC_HW_VERSION_4_4
