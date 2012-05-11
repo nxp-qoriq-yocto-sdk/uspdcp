@@ -473,14 +473,24 @@ static int create_c_plane_auth_only_desc(sec_context_t *ctx);
 static int create_c_plane_cipher_only_desc(sec_context_t *ctx);
 
 /** @brief Function for populating a shared descriptor with the
- * required information for executing a PDCP Control plane descriptor
- * which performs authentication and/or encryption using NULL algorithm
+ * required information for executing a PDCP User plane descriptor
+ * which performs encryption using NULL algorithm
  *
  * @param [in]      ctx         SEC context
  *
  *
  */
-static int create_null_desc(sec_context_t *ctx);
+static int create_u_plane_null_desc(sec_context_t *ctx);
+
+/** @brief Function for populating a shared descriptor with the
+ * required information for executing a PDCP Control plane descriptor
+ * which performs authentication and encryption using NULL algorithm
+ *
+ * @param [in]      ctx         SEC context
+ *
+ *
+ */
+static int create_c_plane_null_desc(sec_context_t *ctx);
 
 #endif // SEC_HW_VERSION_3_1
 /** @brief Fill PDB with initial data for this context: HFN threshold, HFN mask, etc
@@ -1711,7 +1721,7 @@ static int create_c_plane_cipher_only_desc(sec_context_t *ctx)
 
             *((uint32_t*)ctx->sh_desc + i++) = 0xac504108;      // retain SN only (5 bits)
             *((uint32_t*)ctx->sh_desc + i++) = 0x0000001f;      // M1 = M0 & 0x00000000_0000001f
-
+            *((uint32_t*)ctx->sh_desc + i++) = 0x5e080701;      // seq store, class 3, offset 7, length = 1, src=m0
             *((uint32_t*)ctx->sh_desc + i++) = 0xA8911108;      // math: (<math1> shld math1)->math1 len=8
 
 #ifdef UNDER_CONSTRUCTION_HFN_THRESHOLD
@@ -1730,20 +1740,34 @@ static int create_c_plane_cipher_only_desc(sec_context_t *ctx)
             *((uint32_t*)ctx->sh_desc + i++) = 0x79360808;      // move from desc buf to math2, wc=1,offset = 8, len 8
             *((uint32_t*)ctx->sh_desc + i++) = 0xa8412208;      // M2 = M2 | M1
 
-            *((uint32_t*)ctx->sh_desc + i++) = 0x5e080701;      // seq store, class 3, offset 7, length = 1, src=m0
-
             *((uint32_t*)ctx->sh_desc + i++) = 0x79600008;      // load, class1 ctx, math2, wc = 1, len 8, offset 0
 
             *((uint32_t*)ctx->sh_desc + i++) = 0xa828fa04;      // VSIL=SIL-0x00
-            *((uint32_t*)ctx->sh_desc + i++) = 0xa828fb04;      // VSOL=SOL-0x00
-
-            
+            if(ctx->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION)
+            {
+                *((uint32_t*)ctx->sh_desc + i++) = 0xa8084b04;      // VSOL=SIL+0x04
+                *((uint32_t*)ctx->sh_desc + i++) = 0x00000004;      // 
+            }
+            else
+            {
+                *((uint32_t*)ctx->sh_desc + i++) = 0xa8284b04;      // VSOL=SIL-0x04
+                *((uint32_t*)ctx->sh_desc + i++) = 0x00000004;      //
+            }
 
             *((uint32_t*)ctx->sh_desc + i++) = 0x82600c0c | \
                     ( (ctx->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION) ? \
             CMD_ALGORITHM_ENCRYPT : 0 );      // operation, optype = 2 (class 1), alg = 0x60 (snow), aai = 0xC0 (f8), as = 11 (int/fin), icv = 0, enc = 0
 
-            *((uint32_t*)ctx->sh_desc + i++) = 0x2B130000;      // seqfifold: class1 msgdata-last1-flush1 vlf
+            if(ctx->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION)
+            {
+               *((uint32_t*)ctx->sh_desc + i++) = 0x2B100000;      // seqfifold: class1 msgdata vlf
+               *((uint32_t*)ctx->sh_desc + i++) = 0x22930004;      // fifold: class1 msgdata-last1-flush1 len=4 imm
+               *((uint32_t*)ctx->sh_desc + i++) = 0x00000000;
+            }
+            else
+            {
+                *((uint32_t*)ctx->sh_desc + i++) = 0x2B130000;      // seqfifold: class1 msgdata-last1-flush1 vlf
+            }
             *((uint32_t*)ctx->sh_desc + i++) = 0x69300000;      // SEQ FIFO STORE, vlf
 
             break;
@@ -1760,7 +1784,7 @@ static int create_c_plane_cipher_only_desc(sec_context_t *ctx)
 
             *((uint32_t*)ctx->sh_desc + i++) = 0xac504108;      // retain SN only (5 bits)
             *((uint32_t*)ctx->sh_desc + i++) = 0x0000001f;      // M1 = M0 & 0x00000000_0000001f
-
+            *((uint32_t*)ctx->sh_desc + i++) = 0x5e080701;      // seq store, class 3, offset 7, length = 1, src=m0
             *((uint32_t*)ctx->sh_desc + i++) = 0xA8911108;      // math: (<math1> shld math1)->math1 len=8
 #ifdef UNDER_CONSTRUCTION_HFN_THRESHOLD
             *((uint32_t*)ctx->sh_desc + i++) = 0x79370404;      // move: descbuf+4[01] -> math3, len=4
@@ -1778,17 +1802,34 @@ static int create_c_plane_cipher_only_desc(sec_context_t *ctx)
             *((uint32_t*)ctx->sh_desc + i++) = 0x79360808;      // move from desc buf to math2, wc=1,offset = 8, len 8
             *((uint32_t*)ctx->sh_desc + i++) = 0xa8412208;      // M2 = M2 | M1
 
-            *((uint32_t*)ctx->sh_desc + i++) = 0x5e080701;      // seq store, class 3, offset 7, length = 1, src=m0
-
             *((uint32_t*)ctx->sh_desc + i++) = 0x79601010;      // load, class1 ctx, math2, wc = 1, len 16, offset 16
 
             *((uint32_t*)ctx->sh_desc + i++) = 0xa828fa04;      // VSIL=SIL-0x00
-            *((uint32_t*)ctx->sh_desc + i++) = 0xa828fb04;      // VSOL=SIL-0x00
+            if(ctx->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION)
+            {
+                *((uint32_t*)ctx->sh_desc + i++) = 0xa8084b04;      // VSOL=SIL+0x04
+                *((uint32_t*)ctx->sh_desc + i++) = 0x00000004;      // 
+            }
+            else
+            {
+                *((uint32_t*)ctx->sh_desc + i++) = 0xa8284b04;      // VSOL=SIL-0x04
+                *((uint32_t*)ctx->sh_desc + i++) = 0x00000004;      //
+            }
 
             *((uint32_t*)ctx->sh_desc + i++) = 0x8210000c | \
                     ( (ctx->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION) ? \
                        CMD_ALGORITHM_ENCRYPT : 0 );  // operation: optype = 2 (class 1), alg = 0x10 (aes), aai = 0x00 (ctr), as = 11 (int/fin), icv = 0, enc = 1
-            *((uint32_t*)ctx->sh_desc + i++) = 0x2b170000;  // seq fifo load, class1, vlf, LC1,LC2
+            
+            if(ctx->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION)
+            {
+                *((uint32_t*)ctx->sh_desc + i++) = 0x2B100000;      // seqfifold: class1 msgdata vlf
+                *((uint32_t*)ctx->sh_desc + i++) = 0x22930004;      // fifold: class1 msgdata-last1-flush1 len=4 imm
+                *((uint32_t*)ctx->sh_desc + i++) = 0x00000000;
+            }
+            else
+            {
+                *((uint32_t*)ctx->sh_desc + i++) = 0x2b130000;  // seq fifo load, class1, vlf, LC1
+            }
             *((uint32_t*)ctx->sh_desc + i++) = 0x69300000;  // SEQ FIFO STORE, vlf
 
             break;
@@ -1815,10 +1856,10 @@ static int create_c_plane_cipher_only_desc(sec_context_t *ctx)
     return SEC_SUCCESS;
 }
 
-static int create_null_desc(sec_context_t *ctx)
+static int create_u_plane_null_desc(sec_context_t *ctx)
 {
     int i = 0;
-    SEC_INFO("Creating U-PLANE/C-Plane descriptor with NULL alg.");
+    SEC_INFO("Creating U-PLANE/ descriptor with NULL alg.");
 
     *((uint32_t*)ctx->sh_desc + i++) = 0xBA800008;    // shared descriptor header -- desc len is 8; no sharing
     *((uint32_t*)ctx->sh_desc + i++) = 0xA80AFB04;    // Put SEQ-IN-Length into VSOL
@@ -1829,6 +1870,42 @@ static int create_null_desc(sec_context_t *ctx)
     *((uint32_t*)ctx->sh_desc + i++) = 0xA80AF004;    // MATH ADD VSIL + 0 -> MATH 0 (to put the length of the input frame into MATH 0)
     *((uint32_t*)ctx->sh_desc + i++) = 0x70820000;    // Move Length from Deco Alignment block to Output FIFO using length from MATH 0
 
+    SEC_PDCP_DUMP_DESC(ctx->sh_desc);
+
+    return SEC_SUCCESS;
+}
+
+static int create_c_plane_null_desc(sec_context_t *ctx)
+{
+    int i = 0;
+    SEC_INFO("Creating C-Plane descriptor with NULL/NULL alg.");
+
+    *((uint32_t*)ctx->sh_desc + i++) = 0xBA800000;    // shared descriptor header -- desc len TBC later; no sharing
+    
+    if(ctx->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION)
+    {
+        *((uint32_t*)ctx->sh_desc + i++) = 0xA80A4B04;    // Put SEQ-IN-Length into VSOL
+        *((uint32_t*)ctx->sh_desc + i++) = 0x00000004;    // and add 4 to it (4 NULL bytes at the end)
+    }
+    else
+    {
+        *((uint32_t*)ctx->sh_desc + i++) = 0xA82A4B04;    // Put SEQ-IN-Length into VSOL
+        *((uint32_t*)ctx->sh_desc + i++) = 0x00000004;    // and sub 4 to it (4 NULL bytes at the end)
+    }
+    *((uint32_t*)ctx->sh_desc + i++) = 0x69300000;    // SEQ FIFO STORE
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA82A4F04;    // MATH VSIL - imm -> No DEST (to set math size flags)
+    *((uint32_t*)ctx->sh_desc + i++) = 0x00000FFF;    // immediate value with maximum permitted length of frame to copy.  I arbitrarily set this to 4095...this can go up to 65535.
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA0C108F1;    // HALT with status if the length of the input frame (as in VSIL) is bigger than the length in the immediate value
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA80AF004;    // MATH ADD VSIL + 0 -> MATH 0 (to put the length of the input frame into MATH 0)
+    *((uint32_t*)ctx->sh_desc + i++) = 0x70820000;    // Move Length from Deco Alignment block to Output FIFO using length from MATH 0
+
+    if(ctx->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION)
+    {
+        *((uint32_t*)ctx->sh_desc + i++) = 0xA8600008;    // Clear M0 (M0 XOR M0 = 0)
+        *((uint32_t*)ctx->sh_desc + i++) = 0x78420004;    // Move 4 bytes of 0 to output FIFO
+    }
+
+    ctx->sh_desc->deschdr.command.sd.desclen = i;
     SEC_PDCP_DUMP_DESC(ctx->sh_desc);
 
     return SEC_SUCCESS;
@@ -1954,7 +2031,7 @@ int sec_pdcp_context_update_descriptor(sec_context_t *ctx,
  */
 static create_desc_fp c_plane_create_desc[NUM_CIPHER_ALGS][NUM_INT_ALGS] = {
         /*              NULL                                SNOW                                    AES */
-        /* NULL */{create_null_desc,                  create_c_plane_auth_only_desc,      create_c_plane_auth_only_desc     },
+        /* NULL */{create_c_plane_null_desc,          create_c_plane_auth_only_desc,      create_c_plane_auth_only_desc     },
         /* SNOW */{create_c_plane_cipher_only_desc,   create_c_plane_hw_acc_desc,         create_c_plane_mixed_desc         },
         /* AES  */{create_c_plane_cipher_only_desc,   create_c_plane_mixed_desc,          create_c_plane_hw_acc_desc        },
 };
@@ -1965,7 +2042,7 @@ static create_desc_fp c_plane_create_desc[NUM_CIPHER_ALGS][NUM_INT_ALGS] = {
  */
 static create_desc_fp u_plane_create_desc[NUM_CIPHER_ALGS] ={
         /*      NULL                   SNOW                     AES */
-        create_null_desc,   create_u_plane_hw_acc_desc,   create_u_plane_hw_acc_desc
+        create_u_plane_null_desc,   create_u_plane_hw_acc_desc,   create_u_plane_hw_acc_desc
 };
 
 #endif // SEC_HW_VERSION_3_1

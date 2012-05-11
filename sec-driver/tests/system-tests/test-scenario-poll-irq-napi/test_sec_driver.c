@@ -703,7 +703,7 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
                 (pdcp_context->thread_id + 1)%2);
         for(i = 0; i <  out_packet->length+out_packet->offset; i++)
         {
-            test_printf("%02x ", out_packet->address[i]);
+            test_printf("%02x ", ((uint8_t*)test_ptov(out_packet->address))[i]);
         }
         test_printf("\n");
 
@@ -721,7 +721,7 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
         test_printf("\nthread #%d:consumer: packet CORRECT! out pkt = . ", (pdcp_context->thread_id + 1)%2);
         for(i = 0; i <  out_packet->length+out_packet->offset; i++)
         {
-            test_printf("%02x ", out_packet->address[i]);
+            test_printf("%02x ", ((uint8_t*)test_ptov(out_packet->address))[i]);
         }
         test_printf("\n");
     }
@@ -952,6 +952,10 @@ static int is_packet_valid(pdcp_context_t *pdcp_context,
     assert(out_packet->length == data_out_len + hdr_len );
 
     test_printf("\nexpected pkt= ");
+    for(i = 0; i < hdr_len; i++)
+    {
+        test_printf("%02x ", test_hdr[pdcp_context->test_scenario][i]);
+    }
     for(i = 0; i < data_out_len; i++)
     {
         test_printf("%02x ", data_out[i]);
