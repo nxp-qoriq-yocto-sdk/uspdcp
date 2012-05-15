@@ -1,7 +1,7 @@
 ----------------------------------------------------------------------------------------------------
 ABOUT THIS FILE
 ----------------------------------------------------------------------------------------------------
-Date:	04 May 2012
+Date:    15 May 2012
 
 This Readme file contains details on SEC user space driver package contents as well as instructions
 showing how to compile and install SEC user space driver related binaries:
@@ -10,50 +10,47 @@ driver itself, unit-tests and system tests.
 SEC USER SPACE DRIVER PACKAGE DETAILS
 ----------------------------------------------------------------------------------------------------
 The package contains:
-	- User space components, in folder <us-drivers>:
-		* Utilitary libraries, in folder <utils>:
-			-> OF library used for parsing DTS
-			-> Cgreen test framework, used for implementing SEC user space driver unit-tests
-		* SEC user space driver components:
-			-> Public headers, in folder <include>:
-				--> fsl_sec.h                 - contains SEC user space driver API
-				--> fsl_sec_config.h 		  - contains configuration parameters for SEC user space driver
-				--> external_mem_management.h - contains API definitions for external memory management mechanism.
-											  - this API needs to be implemented when integrating SEC user space driver
-												into a software solution. Freescale delivers such a custom-and-not-supported
-												memory mangement mechanism, for the purpose of validating driver's correctness.
-			-> Source code, in folder <src>
-			-> Tests, in folder <tests>:
-				--> Unit-tests in folder <unit-tests>
-					Different tests are created for validating a specific functionality like:
-					PDCP context management, UIO interrupts, lists, API functions.
+    - User space components, in folder <us-drivers>:
+        * Utilitary libraries, in folder <utils>:
+            -> OF library used for parsing DTS
+            -> Cgreen test framework, used for implementing SEC user space driver unit-tests
+        * SEC user space driver components:
+            -> Public headers, in folder <include>:
+                --> fsl_sec.h                 - contains SEC user space driver API
+                --> fsl_sec_config.h           - contains configuration parameters for SEC user space driver
+            -> Source code, in folder <src>
+            -> Tests, in folder <tests>:
+                --> Unit-tests in folder <unit-tests>
+                    Different tests are created for validating a specific functionality like:
+                    PDCP context management, UIO interrupts, lists, API functions, HFN override,
+                    mixed descriptors, etc.
 
-				--> Systems-tests in folder <system-tests>:
-					---> <test-scenario-poll-irq-napi>
-						 This is a two-thread test application that allows testing PDCP data plane and control
-						 plane which testes all available combinations of protocol direction (Uplink/Downlink),
-						 protocol direction (Encapsulate/Decapsulate), with an option of selecting a random subset
-						 of these. All the obtained results are checked againsted pre-made reference testt vectors.
-						 Exercises all the available options for retrieving processed packets: poll, IRQ, NAPI.
-						 See <test-scenario-poll-irq-napi>/readme.txt for more details.
+                --> Systems-tests in folder <system-tests>:
+                    ---> <test-scenario-poll-irq-napi>
+                         This is a two-thread test application that allows testing PDCP data plane and control
+                         plane which testes all available combinations of protocol direction (Uplink/Downlink),
+                         protocol direction (Encapsulate/Decapsulate), with an option of selecting a random subset
+                         of these. All the obtained results are checked againsted pre-made reference testt vectors.
+                         Exercises all the available options for retrieving processed packets: poll, IRQ, NAPI.
+                         See <test-scenario-poll-irq-napi>/readme.txt for more details.
 
-					---> <test-scenario-benchmark>
-						 This is a two-thread test application that allows benchmarking PDCP data plane processing.
-						 Benchmark results consist of:
-							- core cycles/packet - spent in SEC user space driver APIs for sending and
-												   retrieving a packet to/from SEC engine.
-							- execution time
-							- CPU load
-						 See <test-scenario-benchmark>/readme.txt for more details.
+                    ---> <test-scenario-benchmark>
+                         This is a two-thread test application that allows benchmarking PDCP data plane processing.
+                         Benchmark results consist of:
+                            - core cycles/packet - spent in SEC user space driver APIs for sending and
+                                                   retrieving a packet to/from SEC engine.
+                            - execution time
+                            - CPU load
+                         See <test-scenario-benchmark>/readme.txt for more details.
 
-					---> <test-scenario-benchmark-single-th>
-						 This is a single-thread test application that allows benchmarking PDCP data plane processing.
-						 Benchmark results consist of:
-							- core cycles/packet - spent in SEC user space driver APIs for sending and
-												   retrieving a packet to/from SEC engine.
-							- execution time
-							- CPU load
-						 See <test-scenario-benchmark-single-th>/readme.txt for more details.
+                    ---> <test-scenario-benchmark-single-th>
+                         This is a single-thread test application that allows benchmarking PDCP data plane processing.
+                         Benchmark results consist of:
+                            - core cycles/packet - spent in SEC user space driver APIs for sending and
+                                                   retrieving a packet to/from SEC engine.
+                            - execution time
+                            - CPU load
+                         See <test-scenario-benchmark-single-th>/readme.txt for more details.
 
 
 ----------------------------------------------------------------------------------------------------
@@ -65,13 +62,13 @@ further reffered to as <psc9131-sdk>.
 
 * Extract SEC user space driver package in a directory <sec-us-driver-release>. Example:
 
-	tar -xzvf <sec_us_driver.tgz>
-	cd <sec-us-driver-release>
+    tar -xzvf <sec_us_driver.tgz>
+    cd <sec-us-driver-release>
 
 * Modify <sec-us-driver-release>/us-drivers/Makefile.config file with specific configuration options like:
 
-	-> PowerPC Cross compiler path. The SEC driver was tested with gcc-4.5.55-eglibc-2.11.55,
-	  which is the GNU toolchain installed by default with ltib for Freescale SDK 1.0.
+    -> PowerPC Cross compiler path. The SEC driver was tested with gcc-4.5.55-eglibc-2.11.55,
+      which is the GNU toolchain installed by default with ltib for Freescale SDK 1.0.
 
     -> WUSDK Kernel source path. Usually found under <WUSDK BSP release path>/src/linux-2.6
 
@@ -92,55 +89,55 @@ further reffered to as <psc9131-sdk>.
 CONFIGURE LINUX KERNEL
 ----------------------------------------------------------------------------------------------------
 * By default PSC 9131 Kernel has the required functionalities for PDCP SEC Driver enabled by default:
-	-> UIO package
-	-> udev
+    -> UIO package
+    -> udev
 
 ----------------------------------------------------------------------------------------------------
 HOW TO COMPILE AND DEPLOY SEC USER SPACE DRIVER
 ----------------------------------------------------------------------------------------------------
 * Compile:
 
-	Go to folder <sec-us-driver-release>/us-drivers and run the following command:
-	[us-drivers]$ make
+    Go to folder <sec-us-driver-release>/us-drivers and run the following command:
+    [us-drivers]$ make
 
-	The library for SEC user space driver as well as helper libraries are generated in folder:
-	us-drivers/lib-powerpc.
+    The library for SEC user space driver as well as helper libraries are generated in folder:
+    us-drivers/lib-powerpc.
 
-	The executables for test applications (unit-tests and system-tests) are generated in folder:
-	us-drivers/bin-powerpc.
+    The executables for test applications (unit-tests and system-tests) are generated in folder:
+    us-drivers/bin-powerpc.
 
 * Clean
 
-	Go to folder <sec-us-driver-release>/us-drivers and run:
-	[us-drivers]$ make distclean
+    Go to folder <sec-us-driver-release>/us-drivers and run:
+    [us-drivers]$ make distclean
 
 * Install
-	A. To install the sources in the PPC rootfs from the HOST machine,
-	 go to folder <sec-us-driver-release>/us-drivers and run:
+    A. To install the sources in the PPC rootfs from the HOST machine,
+     go to folder <sec-us-driver-release>/us-drivers and run:
 
-	[us-drivers]$ make install DESTDIR=<psc9131-sdk>/ltib/rootfs
+    [us-drivers]$ make install DESTDIR=<psc9131-sdk>/ltib/rootfs
 
-	where DESTDIR holds the path to the PPC root filesystem.
+    where DESTDIR holds the path to the PPC root filesystem.
 
-	The executables will be installed in folder $DESTDIR/usr/bin.
-	The libraries will be installed in folder $DESTDIR/usr/lib.
+    The executables will be installed in folder $DESTDIR/usr/bin.
+    The libraries will be installed in folder $DESTDIR/usr/lib.
 
-	Using any other directory path for DESTDIR will install the binaries
-	in that provided location.
+    Using any other directory path for DESTDIR will install the binaries
+    in that provided location.
 
-	B. To install the sources in the <sec-us-driver-release>/us-drivers/test-install folder,
-	go to folder <sec-us-driver-release>/us-drivers and run:
+    B. To install the sources in the <sec-us-driver-release>/us-drivers/test-install folder,
+    go to folder <sec-us-driver-release>/us-drivers and run:
 
-	[us-drivers]$ make install
+    [us-drivers]$ make install
 
-	The executables will be installed in folder <sec-us-driver-release>/us-drivers/test-install/usr/bin.
-	The libraries will be installed in folder <sec-us-driver-release>/us-drivers/test-install/usr/lib.
+    The executables will be installed in folder <sec-us-driver-release>/us-drivers/test-install/usr/bin.
+    The libraries will be installed in folder <sec-us-driver-release>/us-drivers/test-install/usr/lib.
 
-	NOTE: To deploy the SEC driver binaries on the PSC9131 RDB Linux target use scp or nfs.
+    NOTE: To deploy the SEC driver binaries on the PSC9131 RDB Linux target use scp or nfs.
 
 * Debug makefile
 
-	[us-drivers]$ make debug
+    [us-drivers]$ make debug
 
 ----------------------------------------------------------------------------------------------------
 HOW TO RUN TESTS FOR SEC USER SPACE DRIVER
@@ -148,24 +145,24 @@ HOW TO RUN TESTS FOR SEC USER SPACE DRIVER
 * Deploy the modified binaries on PSC9131 RDB board: uImage, psc9131rdb.dtb, rootfs.ext2.gz.uboot.
 
 * Copy system tests from install folder to PSC9131RDB Linux. More options are available:
-	A. Copy the binaries with scp or nfs.
-	In this case, run tests using current path where binaries were installed on PSC9131RDB.
-	B. Install binaries in ltib's rootfs directory and redeploy rootfs on PSC9131RDB board.
-	In this case, run tests using test name.
+    A. Copy the binaries with scp or nfs.
+    In this case, run tests using current path where binaries were installed on PSC9131RDB.
+    B. Install binaries in ltib's rootfs directory and redeploy rootfs on PSC9131RDB board.
+    In this case, run tests using test name.
 
 * Run unit tests:
-	[psc9131rdb]~ ./test_api
-	[psc9131rdb]~ ./test_contexts_pool
-	[psc9131rdb]~ ./test_lists
-	[psc9131rdb]~ ./test_uio_notify
-	[psc9131rdb]~ ./mixed_descs_tests
+    [psc9131rdb]~ ./test_api
+    [psc9131rdb]~ ./test_contexts_pool
+    [psc9131rdb]~ ./test_lists
+    [psc9131rdb]~ ./test_uio_notify
+    [psc9131rdb]~ ./mixed_descs_tests
 
 * Run system tests:
-	[psc9131rdb]~ ./test_sec_driver
+    [psc9131rdb]~ ./test_sec_driver
 
 * Run benchmarking tests:
-	[psc9131rdb]~ ./test_sec_driver_benchmark
-	[psc9131rdb]~ ./test_sec_driver_benchmark_single_th
+    [psc9131rdb]~ ./test_sec_driver_benchmark
+    [psc9131rdb]~ ./test_sec_driver_benchmark_single_th
 
 
 

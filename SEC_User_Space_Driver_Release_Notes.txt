@@ -1,8 +1,8 @@
 ----------------------------------------------------------------------------------------------------
 ABOUT THIS FILE
 ----------------------------------------------------------------------------------------------------
-Date:	21 February 2012
-SEC User Space Driver version:	2.3
+Date:    15 May 2012
+SEC User Space Driver version:    2.4
 
 This file contains SEC User Space Driver-related information about versioning, hardware, software,
 and tools dependencies, as well as known issues and a history of changes.
@@ -10,14 +10,14 @@ and tools dependencies, as well as known issues and a history of changes.
 SEC USER SPACE DRIVER - HARDWARE AND SOFTWARE DEPENDENCIES
 ----------------------------------------------------------------------------------------------------
 Hardware:
-	- PSC9131RDB board
+    - PSC9131RDB board
 
 Software:
-	- Freescale WUSDK Release 0.10
-	- Linux kernel 2.6.33.9 + PREEMPT_RT release 31 (patch from Linux community) + Freescale patches
+    - Freescale WUSDK Release 1.1
+    - Linux kernel 2.6.33.9 + PREEMPT_RT release 31 (patch from Linux community) + Freescale patches
 
 Tools:
-	- GNU toolchain for Freescale PSC9131 hardware platform: gcc-4.5.55-eglibc-2.11.55
+    - GNU toolchain for Freescale PSC9131 hardware platform: gcc-4.5.55-eglibc-2.11.55
 
 ----------------------------------------------------------------------------------------------------
 SEC USER SPACE DRIVER - LIMITATIONS
@@ -31,21 +31,29 @@ SEC USER SPACE DRIVER - ERRATA
 ----------------------------------------------------------------------------------------------------
 
 1. The following mixed algorithm combinations for PDCP Control Plane are not supported:
-	- AES-CTR encryption + SNOW f9 integrity
-	- SNOW f8 encryption + AES-CMAC integrity
+    - AES-CTR encryption + SNOW f9 integrity
+    - SNOW f8 encryption + AES-CMAC integrity
 
 2. The following mixed algorithm combinations for PDCP Control Plane are supported:
 
-	- AES-CTR encryption + NULL integrity
-	- SNOW f8 encryption + NULL integrity
-	- AES-CMAC integrity + NULL encryption
-	- SNOW f9 integrity + NULL encryption
+    - AES-CTR encryption + NULL integrity
+    - SNOW f8 encryption + NULL integrity
+    - AES-CMAC integrity + NULL encryption
+    - SNOW f9 integrity + NULL encryption
 
 but there is no support for HFN management according to ETSI TS 136 323, section 5.1.2.1.2
 
 ----------------------------------------------------------------------------------------------------
 SEC USER SPACE DRIVER - CHANGELOG
 ----------------------------------------------------------------------------------------------------
+Version 2.4
+    - Added support for HFN override per PDCP context. The user can specify the HFN to be used for
+      processing a particular packet.
+    - The sec_packet_t::address member no longer represents the virtual address of the buffer,
+      but the physical address. This change was driven by customer scenarios which included
+      scatter-gather packets from different memory partitions.
+    - Fix of a bug for NULL integrity processing where the 4 NULL bytes MAC-I was not
+      appended at the end of the message.
 Version 2.3
     - Added support for the following algorithm combinations for PDCP Control Plane
         - AES-CTR encryption + NULL integrity
@@ -56,23 +64,23 @@ Version 2.2
     - Updated memory management mechanism to take advantage of User space memory
       manager (USMMGR) feature from WUSDK Release 0.5
 Version 2.1
-	- First release of SEC User Space driver on PSC9131 RDB.
-	- Implements PDPC User Plane and control plane with following algorithms: SNOW, AES and NULL.
-	- Scatter Gather support
-	- Allows verious methods for retrieving processed packets: polling, interrupts and NAPI.
-	- Added support for IRQ coalescing.
-	- Synchronized ids used for PDCP crypto/integrity algorithms, from enum sec_crypto_alg_t,
-	  with those specified in 3GPP 33.401
-	- Requires an external memory management mechanism.
+    - First release of SEC User Space driver on PSC9131 RDB.
+    - Implements PDPC User Plane and control plane with following algorithms: SNOW, AES and NULL.
+    - Scatter Gather support
+    - Allows verious methods for retrieving processed packets: polling, interrupts and NAPI.
+    - Added support for IRQ coalescing.
+    - Synchronized ids used for PDCP crypto/integrity algorithms, from enum sec_crypto_alg_t,
+      with those specified in 3GPP 33.401
+    - Requires an external memory management mechanism.
 
 Version 2.0:
-	- First release of SEC User Space driver on P1010 RDB.
-	- Implements PDCP data plane and control plane, with following algorithms: SNOW, AES.
-	- Allows polling method for retrieving processed packets.
-	- Requires an external memory management mechanism.
+    - First release of SEC User Space driver on P1010 RDB.
+    - Implements PDCP data plane and control plane, with following algorithms: SNOW, AES.
+    - Allows polling method for retrieving processed packets.
+    - Requires an external memory management mechanism.
 
 Version 1.0:
-	- First release of SEC User Space driver on P2020 RDB.
-	- Implements PDCP data plane and control plane, with following algorithms: SNOW, AES, NULL.
-	- Allows verious methods for retrieving processed packets: polling, interrupts and NAPI.
-	- Requires an external memory management mechanism.
+    - First release of SEC User Space driver on P2020 RDB.
+    - Implements PDCP data plane and control plane, with following algorithms: SNOW, AES, NULL.
+    - Allows verious methods for retrieving processed packets: polling, interrupts and NAPI.
+    - Requires an external memory management mechanism.
