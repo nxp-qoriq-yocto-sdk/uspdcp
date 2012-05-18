@@ -1735,7 +1735,7 @@ sec_return_code_t sec_process_packet_hfn_ov(sec_context_handle_t sec_ctx_handle,
                 SEC_INVALID_INPUT_PARAM, "in_packet->total_length error (check in_packet->num_fragments)");
     SEC_ASSERT( (out_packet->total_length != 0 && out_packet->num_fragments != 0) ||
                 (out_packet->total_length == 0 && out_packet->num_fragments == 0),
-                SEC_INVALID_INPUT_PARAM, "out_packet->total_length error (check out_packet->num_fragments");
+                SEC_INVALID_INPUT_PARAM, "out_packet->total_length error (check out_packet->num_fragments)");
 #else // (SEC_ENABLE_SCATTER_GATHER == ON)
     SEC_ASSERT(in_packet->num_fragments == 0, SEC_INVALID_INPUT_PARAM, "Please enable Scatter Gather support");
     SEC_ASSERT(out_packet->num_fragments == 0, SEC_INVALID_INPUT_PARAM, "Please enable Scatter Gather support");
