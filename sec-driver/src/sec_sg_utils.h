@@ -89,7 +89,8 @@ extern "C"{
                                                 (dma_addr_t)(address) )
 #endif // defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
 
-#define SG_TBL_SET_LENGTH(sg_entry,len)         ((sg_entry).length = (len) )
+#define SG_TBL_SET_LENGTH(sg_entry,len)         ( (sg_entry).length = (len), \
+                                                  (sg_entry).final = 0 )
 #define SG_TBL_SET_OFFSET(sg_entry,off)         ((sg_entry).offset = (off) )
 #define SG_TBL_SET_FINAL(sg_entry)              ( (sg_entry).final = 1 )
 
