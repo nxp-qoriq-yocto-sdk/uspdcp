@@ -218,8 +218,7 @@ typedef struct sec_packet_s
                                          This is no longer true, now length represents just the length of
                                          PDCP header + PDCP payload */
     uint32_t        tail_offset;    /**< Offset from buffer head where tail room is reserved. */
-    uint32_t        total_length;   /**< Total Data Length in all fragments including the parent buffer.
-                                         This is valid only when num_fragments is non 0 */
+    uint32_t        total_length;   /**< Total Data Length in all fragments including the parent buffer. */
     uint32_t        num_fragments;  /**< Is set only in the first fragment from a s/g packet.
                                          It excludes the parent buffer. */
 
@@ -625,7 +624,7 @@ sec_return_code_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle,
  *       be sent to SEC twice for processing: once to do integrity check, second to do
  *       encryption/decryption. This will happen when the algorithm for integrity is
  *       different than the algorithm for confidentiality.
- *       When both algorithms are the same, the packet will be sent only once, on P9132 (SEC 4.4).
+ *       When both algorithms are the same, the packet will be sent only once, on BSC 913x (SEC 4.4).
  *       On P2020 (SEC 3.1) the control-plane packets will ALWAYS be sent to SEC twice.
  *
  * @note The input packet and output packet must not both point to the same memory location!
@@ -688,9 +687,16 @@ sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
  *                                 required for this packet.
  * @param [in]  in_packet          Input packet read by SEC.
  * @param [in]  out_packet         Output packet where SEC writes result.
- * @param [in]  hfn_ov_value       The value of HFN to be used by SEC for processing the input packet.
+ * @param [in]  hfn_ov_val         The value of HFN to be used by SEC for processing the input packet.
  *
- * @note It is the user responsability to provide an adequate bit-sized value for HFN
+ * @note It is the user responsability to provide an adequate bit-sized value for HFN, right aligned:
+ *       - For ::sec_pdcp_context_info_t::user_plane set to #PDCP_DATA_PLANE:
+ *         - For ::sec_pdcp_context_info_t::sn_size set to #SEC_PDCP_SN_SIZE_7, the user must provide
+ *           in the least significant 25 bits of hfn_ov_val the desired HFN value to be used.
+ *         - For ::sec_pdcp_context_info_t::sn_size set to #SEC_PDCP_SN_SIZE_12, the user must provide
+ *           in the least significant 20 bits of hfn_ov_val the desired HFN value to be used.
+ *       - For ::sec_pdcp_context_info_t::user_plane set to #PDCP_CONTROL_PLANE, the user must provide
+ *         in the least significant 27 bits of hfn_ov_val the desired HFN value to be used.
  *
  * @param [in]  ua_ctx_handle      The handle to a User Application packet context.
  *                                 This handle is opaque from the SEC driver's point of view and

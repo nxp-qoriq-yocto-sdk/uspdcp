@@ -52,6 +52,15 @@ The package contains:
                             - CPU load
                          See <test-scenario-benchmark-single-th>/readme.txt for more details.
 
+                    ---> <test-scenario-benchmark-sg>
+                         This is a two-thread test application that allows benchmarking PDCP data plane processing,
+                         using Scatter-Gather tables
+                         Benchmark results consist of:
+                            - core cycles/packet - spent in SEC user space driver APIs for sending and
+                                                   retrieving a packet to/from SEC engine.
+                            - execution time
+                            - CPU load
+                         See <test-scenario-benchmark-sg>/readme.txt for more details.
 
 ----------------------------------------------------------------------------------------------------
 HOW TO INSTALL SEC USER SPACE DRIVER
@@ -156,12 +165,14 @@ HOW TO RUN TESTS FOR SEC USER SPACE DRIVER
     [psc9131rdb]~ ./test_lists
     [psc9131rdb]~ ./test_uio_notify
     [psc9131rdb]~ ./mixed_descs_tests
+    [psc9131rdb]~ ./hfn_override_tests
 
 * Run system tests:
     [psc9131rdb]~ ./test_sec_driver
 
 * Run benchmarking tests:
     [psc9131rdb]~ ./test_sec_driver_benchmark
+    [psc9131rdb]~ ./test_sec_driver_benchmark_sg
     [psc9131rdb]~ ./test_sec_driver_benchmark_single_th
 
 

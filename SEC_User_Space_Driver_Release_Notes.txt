@@ -52,8 +52,17 @@ Version 2.4
     - The sec_packet_t::address member no longer represents the virtual address of the buffer,
       but the physical address. This change was driven by customer scenarios which included
       scatter-gather packets from different memory partitions.
+    - The sec_config_t structure has an additional member sec_config_t::sec_drv_vtop, which is a
+      pointer to a function to perform the virtual to physical translation for the memory region
+      provided by the user for CAAM's internal structures.
     - Fix of a bug for NULL integrity processing where the 4 NULL bytes MAC-I was not
       appended at the end of the message.
+    - Fix of a bug for Scatter Gather table creation which lead to CAAM ending the processing
+      earlier than at the end of the Scatter Gather table.
+    - Scatter Gather tables can now be created even if num_fragments is 0 and total_length != 0.
+    - Scatter Gather support is now on by default.
+    - CAAM debug functions (SEC_DEBUG, SEC_INFO, SEC_ERROR) will now print on stderr, instead
+      of stdout.
 Version 2.3
     - Added support for the following algorithm combinations for PDCP Control Plane
         - AES-CTR encryption + NULL integrity
