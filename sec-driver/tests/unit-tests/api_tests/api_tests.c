@@ -973,36 +973,6 @@ static void test_sec_process_packet_invalid_params(void)
     ////////////////////////////////////
     ////////////////////////////////////
 
-    // Invalid total length
-    tmp_num = in_packet->total_length;
-    in_packet->total_length = 100;
-
-    ret = sec_process_packet(ctx_handle, in_packet, out_packet, (ua_context_handle_t)&ua_data[packet_idx]);
-    assert_equal_with_message(ret, SEC_INVALID_INPUT_PARAM,
-                             "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
-                             SEC_INVALID_INPUT_PARAM, ret);
-
-    // Restore input packet total length
-    in_packet->total_length = tmp_num;
-
-    ////////////////////////////////////
-    ////////////////////////////////////
-
-    // Invalid total length
-    tmp_num = out_packet->total_length;
-    out_packet->total_length = 100;
-
-    ret = sec_process_packet(ctx_handle, in_packet, out_packet, (ua_context_handle_t)&ua_data[packet_idx]);
-    assert_equal_with_message(ret, SEC_INVALID_INPUT_PARAM,
-                             "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
-                             SEC_INVALID_INPUT_PARAM, ret);
-
-    // Restore input packet total length
-    out_packet->total_length = tmp_num;
-
-    ////////////////////////////////////
-    ////////////////////////////////////
-
     // Invalid offset
     tmp_num = out_packet->offset;
     out_packet->offset = out_packet->length;

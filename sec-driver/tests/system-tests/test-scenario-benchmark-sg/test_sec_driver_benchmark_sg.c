@@ -1355,9 +1355,23 @@ static void* pdcp_thread_routine(void* config)
                     memcpy(&out_packet[0],out_frag,sizeof(sec_packet_t));
                     
                     in_packet[0].total_length = rem_len;
-                    in_packet[0].length = rem_len < SCATTER_GATHER_BUF_SIZE ?
-                        rem_len : SCATTER_GATHER_BUF_SIZE;
                     
+                    if( ((total_packets_sent / SEC_JOB_RING_SIZE ) != 0) &&
+                        ((total_packets_sent / SEC_JOB_RING_SIZE ) % 2 == 1) )
+                    {
+                        rem_len = 0x60;
+                        in_packet[0].length = 
+                        in_packet[0].total_length = 
+                        out_packet[0].length = rem_len;
+                    
+                    }
+                    else
+                    {
+                        in_packet[0].total_length = rem_len;
+
+                        in_packet[0].length = rem_len < SCATTER_GATHER_BUF_SIZE ?
+                                              rem_len : SCATTER_GATHER_BUF_SIZE;
+                    }
                     rem_len -= in_packet[0].length;
                     
                     num_fragments = 0;
@@ -1377,7 +1391,7 @@ static void* pdcp_thread_routine(void* config)
                         rem_len-=len;
                     }
                     in_packet[0].num_fragments = num_fragments;
-
+                    
                     // if SEC process packet returns that the producer JR is full, do some polling
                     // on the consumer JR until the producer JR has free entries.
                     do{

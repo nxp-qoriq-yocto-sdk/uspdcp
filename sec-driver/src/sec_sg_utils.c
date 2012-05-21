@@ -100,6 +100,9 @@ sec_return_code_t   build_sg_context(sec_sg_context_t *sg_ctx,
     sg_tbl_en = (dir == SEC_SG_CONTEXT_TYPE_IN ? \
                        &sg_ctx->in_sg_tbl_en : &sg_ctx->out_sg_tbl_en);
 
+    // Reset the SG enable bit here, will enable later on if neccessary.
+    *sg_tbl_en = 0;    
+    
     if( num_fragments == 0 )
     {
         /* If there aren't multiple fragments in this list,

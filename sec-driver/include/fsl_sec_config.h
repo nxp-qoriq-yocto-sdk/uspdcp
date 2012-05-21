@@ -192,7 +192,7 @@ extern "C"{
  * ON - enable scatter gather support
  * OFF - disable scatter gather support
  */
-#define SEC_ENABLE_SCATTER_GATHER OFF
+#define SEC_ENABLE_SCATTER_GATHER ON
 
 /** Name of UIO device. Each user space SEC job ring will have a corresponding UIO device
  * with the name sec-channelX, where X is the job ring id.

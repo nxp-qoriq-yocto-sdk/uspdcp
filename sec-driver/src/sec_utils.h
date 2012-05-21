@@ -66,9 +66,9 @@
 #if SEC_DRIVER_LOGGING_LEVEL == SEC_DRIVER_LOG_INFO
 
 /** Log info messages to stdout */
-#define SEC_INFO(format, ...) printf("%s() (%s@%d): " format "\n", __FUNCTION__, __FILE__, __LINE__ , ##__VA_ARGS__) 
+#define SEC_INFO(format, ...) fprintf(stderr,"%s() (%s@%d): " format "\n", __FUNCTION__, __FILE__, __LINE__ , ##__VA_ARGS__) 
 /** Logging of error messages to stdout*/
-#define SEC_ERROR(format, ...) printf("%s() (%s@%d): " format "\n", __FUNCTION__, __FILE__, __LINE__ , ##__VA_ARGS__) 
+#define SEC_ERROR(format, ...) fprintf(stderr,"%s() (%s@%d): " format "\n", __FUNCTION__, __FILE__, __LINE__ , ##__VA_ARGS__) 
 /** No logging of debug messages */
 #define SEC_DEBUG(format, ...)
 
@@ -77,17 +77,17 @@
 /** Log info messages to stdout */
 #define SEC_INFO(format, ...)
 /** Log error messages to stdout */
-#define SEC_ERROR(format, ...) printf("%s() (%s@%d): " format "\n", __FUNCTION__, __FILE__, __LINE__ , ##__VA_ARGS__) 
+#define SEC_ERROR(format, ...) fprintf(stderr,"%s() (%s@%d): " format "\n", __FUNCTION__, __FILE__, __LINE__ , ##__VA_ARGS__) 
 /** No logging of debug messages */
 #define SEC_DEBUG(format, ...)
 
 #elif SEC_DRIVER_LOGGING_LEVEL == SEC_DRIVER_LOG_DEBUG
 /** Log info messages to stdout */
-#define SEC_INFO(format, ...) printf("%s() (%s@%d): " format "\n", __FUNCTION__, __FILE__, __LINE__ , ##__VA_ARGS__)
+#define SEC_INFO(format, ...) fprintf(stderr,"%s() (%s@%d): " format "\n", __FUNCTION__, __FILE__, __LINE__ , ##__VA_ARGS__)
 /** Logging of error messages to stdout*/
-#define SEC_ERROR(format, ...) printf("%s() (%s@%d): " format "\n", __FUNCTION__, __FILE__, __LINE__ , ##__VA_ARGS__)
+#define SEC_ERROR(format, ...) fprintf(stderr,"%s() (%s@%d): " format "\n", __FUNCTION__, __FILE__, __LINE__ , ##__VA_ARGS__)
 /** Logging of debug messages to stdout*/
-#define SEC_DEBUG(format, ...) printf("%s() (%s@%d): " format "\n", __FUNCTION__, __FILE__, __LINE__ , ##__VA_ARGS__)
+#define SEC_DEBUG(format, ...) fprintf(stderr,"%s() (%s@%d): " format "\n", __FUNCTION__, __FILE__, __LINE__ , ##__VA_ARGS__)
 
 #else
 #error "Invalid value for SEC_DRIVER_LOGGING_LEVEL!"
