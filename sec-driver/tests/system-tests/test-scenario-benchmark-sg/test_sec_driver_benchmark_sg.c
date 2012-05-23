@@ -277,6 +277,9 @@ static void* pdcp_thread_routine(void*);
 /** @brief Poll a specified SEC job ring for results */
 static int get_results(uint8_t job_ring, int limit, uint32_t *out_packets, uint32_t *core_cycles, uint8_t tid);
 
+/** @brief Get statistics for a specified SEC job ring */
+static void get_stats(uint8_t job_ring);
+
 /** @brief Get a free PDCP context from the pool of UA contexts.
  *  For simplicity, the pool is implemented as an array. */
 static int get_free_pdcp_context(pdcp_context_t * pdcp_contexts,
@@ -1131,7 +1134,7 @@ static int get_results(uint8_t job_ring, int limit, uint32_t *packets_out, uint3
     ret_code = sec_poll_job_ring(job_ring_descriptors[job_ring].job_ring_handle, limit, packets_out);
     diff_cycles = (GET_ATBL() - start_cycles);
     *core_cycles += diff_cycles;
-    profile_printf("thread #%d:sec_poll_job_ring cycles = %d. pkts = %d\n", tid, diff_cycles, *packets_out);
+    profile_printf("thread #%d:sec_poll_job_ring cycles = %d. pkts = %d", tid, diff_cycles, *packets_out);
 
     if (ret_code != SEC_SUCCESS)
     {
@@ -1142,6 +1145,22 @@ static int get_results(uint8_t job_ring, int limit, uint32_t *packets_out, uint3
     assert(!((limit > 0) && (*packets_out > limit)));
 
     return 0;
+}
+
+static void get_stats(uint8_t job_ring_id)
+{
+    sec_statistics_t stats;
+    int ret_code = 0;
+    
+    ret_code = sec_get_stats(job_ring_descriptors[job_ring_id].job_ring_handle,&stats);
+    assert(ret_code == SEC_SUCCESS);
+    
+    test_printf("JR consumer index (index from where the next job will be dequeued): %d",stats.sw_consumer_index);
+    test_printf("JR producer index (index where the next job will be enqueued): %d",stats.sw_producer_index);
+    test_printf("CAAM JR consumer index (index from where the next job will be dequeued): %d",stats.hw_consumer_index);
+    test_printf("CAAM JR producer index (index where the next job will be enqueued): %d",stats.hw_producer_index);
+    test_printf("Input slots available: %d",stats.slots_available);
+    test_printf("Jobs waiting to be dequeued by UA: %d",stats.jobs_waiting_dequeue);
 }
 
 static int start_sec_worker_threads(void)
@@ -1353,9 +1372,9 @@ static void* pdcp_thread_routine(void* config)
                     memcpy(&in_packet[0],in_frag,sizeof(sec_packet_t));
                     
                     memcpy(&out_packet[0],out_frag,sizeof(sec_packet_t));
-                    
+
                     in_packet[0].total_length = rem_len;
-                    
+#ifdef ONE_SCATTER_GATHER_FRAGMENT_MIX
                     if( ((total_packets_sent / SEC_JOB_RING_SIZE ) != 0) &&
                         ((total_packets_sent / SEC_JOB_RING_SIZE ) % 2 == 1) )
                     {
@@ -1366,6 +1385,7 @@ static void* pdcp_thread_routine(void* config)
                     
                     }
                     else
+#endif
                     {
                         in_packet[0].total_length = rem_len;
 
@@ -1404,9 +1424,17 @@ static void* pdcp_thread_routine(void* config)
                         diff_cycles = (GET_ATBL() - start_cycles);
                         th_config_local->core_cycles += diff_cycles;
 
-                        profile_printf("thread #%d:ctx #%p:sec_process_packet cycles = %d\n",
+                        profile_printf("thread #%d:ctx #%p:sec_process_packet cycles = %d",
                                 th_config_local->tid, pdcp_context, diff_cycles);
 
+                        test_printf("thread #%d: Consumer job ring statistics: ",
+                                    th_config_local->tid);
+                        get_stats(th_config_local->consumer_job_ring_id);
+                        
+                        test_printf("thread #%d: Producer job ring statistics: ",
+                                    th_config_local->tid);
+                        get_stats(th_config_local->producer_job_ring_id);
+                        
                         if(ret_code == SEC_JR_IS_FULL)
                         {
                             //printf("thread #%d: jr full\n", th_config_local->tid);

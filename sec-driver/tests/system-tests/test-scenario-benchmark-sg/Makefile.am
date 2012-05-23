@@ -11,7 +11,7 @@ AM_CFLAGS += -I$(IPC_DIR)/fsl_shm/include
 test_sec_driver_benchmark_sg_LDFLAGS := -L$(IPC_LIB_DIR) -lmem
 test_sec_driver_benchmark_sg_LDADD := sec-driver of
 
-AM_CFLAGS += -pthread -g -O0 -D_GNU_SOURCE
+AM_CFLAGS += -pthread -D_GNU_SOURCE
 
 test_sec_driver_benchmark_sg_SOURCES := test_sec_driver_benchmark_sg.c
 

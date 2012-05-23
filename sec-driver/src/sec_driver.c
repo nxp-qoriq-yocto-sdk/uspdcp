@@ -1948,7 +1948,37 @@ sec_return_code_t sec_push_c_plane_packets(sec_job_ring_handle_t job_ring_handle
     return SEC_SUCCESS;
 }
 #endif
+#ifdef SEC_HW_VERSION_4_4
+sec_return_code_t sec_get_stats(sec_job_ring_handle_t job_ring_handle,sec_statistics_t* sec_stat)
+{
+    sec_job_ring_t * job_ring =  (sec_job_ring_t *)job_ring_handle;
+    // Validate driver state
+    SEC_ASSERT(g_driver_state == SEC_DRIVER_STATE_STARTED,
+               (g_driver_state == SEC_DRIVER_STATE_RELEASE) ?
+               SEC_DRIVER_RELEASE_IN_PROGRESS : SEC_DRIVER_NOT_INITIALIZED,
+               "Driver release is in progress or driver not initialized");
 
+    SEC_ASSERT(job_ring != NULL, SEC_INVALID_INPUT_PARAM, "job_ring_handle is NULL");
+    SEC_ASSERT(sec_stat != NULL, SEC_INVALID_INPUT_PARAM, "sec_stat is NULL");
+    
+    // Check job ring state
+    SEC_ASSERT(job_ring->jr_state == SEC_JOB_RING_STATE_STARTED,
+               SEC_JOB_RING_RESET_IN_PROGRESS,
+               "Job ring with id %d is currently resetting. "
+               "Can use it again after reset is over(when sec_poll function/s return)", job_ring->jr_id);
+    
+    sec_stat->sw_consumer_index = job_ring->cidx;
+    sec_stat->sw_producer_index = job_ring->pidx;
+    sec_stat->hw_consumer_index = job_ring->hw_cidx;
+    sec_stat->hw_producer_index = job_ring->hw_pidx;
+    sec_stat->slots_available = SEC_JOB_RING_NUMBER_OF_ITEMS(SEC_JOB_RING_SIZE,
+                                                             job_ring->hw_cidx,
+                                                             job_ring->hw_pidx);
+    sec_stat->jobs_waiting_dequeue = GET_JR_REG(ORSFR,job_ring);
+
+    return SEC_SUCCESS;
+}
+#endif // SEC_HW_VERSION_4_4
 /*================================================================================================*/
 
 #ifdef __cplusplus

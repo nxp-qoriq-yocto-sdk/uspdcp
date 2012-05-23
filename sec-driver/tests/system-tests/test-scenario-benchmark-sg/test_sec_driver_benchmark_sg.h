@@ -106,6 +106,11 @@
 // The buffer sizes will be 1..SCATTER_GATHER_BUF_SIZE
 #define RANDOM_SCATTER_GATHER_BUFFER_SIZE
 
+// Enable this to have 512 pkts with more than 1 SG fragment and 
+// next 512 pkts with one SG fragment, repeated over the number
+// of packets to send
+//#define ONE_SCATTER_GATHER_FRAGMENT_MIX
+
 /******************************************************************************/
 // END OF CONFIGURATION SECTION
 /******************************************************************************/

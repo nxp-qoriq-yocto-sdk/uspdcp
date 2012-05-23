@@ -223,6 +223,22 @@ typedef struct sec_packet_s
                                          It excludes the parent buffer. */
 
 }sec_packet_t;
+
+typedef struct sec_statistics_s
+{
+    uint32_t sw_consumer_index;     /**< Index in the software Job Ring from where
+                                         the next job will be dequeued. */
+    uint32_t sw_producer_index;     /**< Index in the software Job Ring where
+                                         the next job will be enqueued. */
+    uint32_t hw_consumer_index;     /**< Index in the hardware Job Ring from where
+                                         the next job will be dequeued. */
+    uint32_t hw_producer_index;     /**< Index in the hardware Job Ring where
+                                         the next job will be enqueued. */
+    uint32_t slots_available;       /**< Slots available for jobs to be enqueued. */
+    uint32_t jobs_waiting_dequeue;  /**< Number of jobs available to be dequeued by the UA. */
+    uint32_t reserved[10];          /**< Reserved for future additions. */
+}sec_statistics_t;
+
 #else // SEC_HW_VERSION_4_4
 typedef struct sec_packet_s
 {
@@ -800,6 +816,30 @@ const char* sec_get_error_message(sec_return_code_t return_code);
  */
 sec_return_code_t sec_push_c_plane_packets(sec_job_ring_handle_t job_ring_handle);
 
+/**
+    @}
+ */
+#endif
+#ifdef SEC_HW_VERSION_4_4
+/**
+    @addtogroup SecUserSpaceDriverManagementFunctions
+    @{
+ */
+/** @brief Retrieves statistics on a SEC Job Ring.
+ *
+ * This function retrieves some statistics from the CAAM driver. This can provide
+ * useful information, like the number of slots available, the number of jobs waiting
+ * to be dequeued or the indexes used for writing or reading from the Job Ring.
+ *
+ * @param [in]  job_ring_handle The Job Ring handle.
+ *
+ * @param [in]  jr_stats        Pointer to a statistics structure.
+ *
+ * @retval ::SEC_SUCCESS                    for successful execution.
+ *
+ */
+sec_return_code_t sec_get_stats(sec_job_ring_handle_t job_ring_handle,
+                                sec_statistics_t * jr_stats);
 /**
     @}
  */
