@@ -97,6 +97,8 @@ extern "C" {
 // The number of packets to send in a burst for each context
 #define PACKET_BURST_PER_CTX   1
 
+#define MAX_PDCP_HEADER_LEN     2
+
 #ifdef SEC_HW_VERSION_4_4
 
 #define IRQ_COALESCING_COUNT    10
@@ -116,7 +118,9 @@ extern "C" {
 #define GET_ATBL() \
     mfspr(SPR_ATBL)
 
-#ifdef SEC_HW_VERSION_4_4
+// Must be at least 8, for statistics reasons
+#define TEST_OFFSET 8
+
 /** Size in bytes of a cacheline. */
 #define CACHE_LINE_SIZE  32
 
@@ -124,7 +128,6 @@ extern "C" {
 #define dma_mem_memalign    test_memalign
 #define dma_mem_free        test_free
 
-#endif //SEC_HW_VERSION_4_4
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
 ==================================================================================================*/
@@ -210,11 +213,8 @@ static const sec_job_ring_descriptor_t *job_ring_descriptors = NULL;
 
 // UA pool of PDCP contexts for UL and DL.
 // For simplicity, use an array of contexts and a mutex to synchronize access to it.
-static pdcp_context_t pdcp_ul_contexts[PDCP_CONTEXT_NUMBER];
-static int no_of_used_pdcp_ul_contexts = 0;
-
-static pdcp_context_t pdcp_dl_contexts[PDCP_CONTEXT_NUMBER];
-static int no_of_used_pdcp_dl_contexts = 0;
+static pdcp_context_t pdcp_contexts[PDCP_CONTEXT_NUMBER];
+static int no_of_used_pdcp_contexts = 0;
 
 // There are 2 threads: one thread handles PDCP UL and one thread handles PDCP DL
 // One thread is producer on JR1 and consumer on JR2. The other thread is producer on JR2
@@ -222,12 +222,11 @@ static int no_of_used_pdcp_dl_contexts = 0;
 static thread_config_t th_config[THREADS_NUMBER];
 static pthread_t threads[THREADS_NUMBER];
 
-#ifdef SEC_HW_VERSION_4_4
-
 // FSL Userspace Memory Manager structure
 fsl_usmmgr_t g_usmmgr;
 
-#endif // SEC_HW_VERSION_4_4
+static users_params_t user_param = { 0, 0, SCENARIO_PDCP_INVALID, SCENARIO_DIR_INVALID};
+
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
 ==================================================================================================*/
@@ -271,7 +270,8 @@ static int stop_sec_worker_threads(void);
  * and deleting all contexts). When both worker threads finished their work, the main
  * thread instructs them to exit.
  *  */
-static void* pdcp_thread_routine(void*);
+static void* pdcp_tx_thread_routine(void*);
+static void* pdcp_rx_thread_routine(void*);
 
 
 /** @brief Poll a specified SEC job ring for results */
@@ -314,7 +314,7 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
                                       ua_context_handle_t ua_ctx_handle,
                                       uint32_t status,
                                       uint32_t error_info);
-#ifdef SEC_HW_VERSION_4_4
+
 /* Returns the physical address corresponding to the virtual
  * address passed as a parameter.
  */
@@ -332,12 +332,7 @@ static void * test_memalign(size_t align, size_t size);
 
 /* Frees a previously allocated FSL USMMGR memory region */
 static void test_free(void *ptr, size_t size);
-#else
 
-#define test_ptov(x)    (x)
-#define test_vtop(x)    (x)
-
-#endif // SEC_HW_VERSION_4_4
 /*==================================================================================================
                                         LOCAL MACROS
 ==================================================================================================*/
@@ -345,655 +340,32 @@ static void test_free(void *ptr, size_t size);
 /*==================================================================================================
                                       LOCAL VARIABLES
 ==================================================================================================*/
-#ifndef PDCP_TEST_SCENARIO
-#error "PDCP_TEST_SCENARIO is undefined!!!"
-#endif
+static uint8_t test_cipher_algorithm;
 
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_SNOW_F8_ENC
-//////////////////////////////////////////////////////////////////////////////
-#if PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F8_ENC
+static uint8_t test_integrity_algorithm;
 
-// Extracted from:
-// Specification of the 3GPP Confidentiality and Integrity Algorithms UEA2 & UIA2
-// Document 3: Implementors. Test Data
-// Version: 1.0
-// Date: 10th January 2006
-// Section 4. CONFIDENTIALITY ALGORITHM UEA2, Test Set 3
+static uint8_t test_user_plane;
 
-// Length of PDCP header
-#define PDCP_HEADER_LENGTH 2
+static uint8_t test_sn_size;
 
-static uint8_t snow_f8_enc_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
-                                    0x4E,0xA5,0xF1,0x45,0x10,0x10,0xD8,0x52};
-// PDCP header
-static uint8_t snow_f8_enc_pdcp_hdr[] = {0x8B, 0x26};
+static uint8_t pdcp_header_len;
 
-// PDCP payload not encrypted
-static uint8_t snow_f8_enc_data_in[] = {
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+static uint8_t test_crypto_key[MAX_KEY_LENGTH];
+#define test_crypto_key_len     sizeof(test_crypto_key)
 
+static uint8_t test_auth_key[MAX_KEY_LENGTH];
+#define test_auth_key_len     sizeof(test_auth_key)
 
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+static uint8_t test_pdcp_hdr[MAX_PDCP_HEADER_LEN];
 
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+static uint8_t test_data_in[PDCP_BUFFER_SIZE];
 
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+static uint8_t test_bearer;
 
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+static uint32_t test_hfn;
 
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
+static uint32_t test_hfn_threshold;
 
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,0x57,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,0xC4,0xA4,
-    0x9D,0x42,0x14,0x07,0xE8,0x89,0x0B,0x38,
-    };
-
-// PDCP payload encrypted
-/*static uint8_t snow_f8_enc_data_out[] = {0xBA,0x0F,0x31,0x30,0x03,0x34,0xC5,0x6B, // PDCP payload encrypted
-                                         0x52,0xA7,0x49,0x7C,0xBA,0xC0,0x46};
-                                         */
-
-// Radio bearer id
-static uint8_t snow_f8_enc_bearer = 0x3;
-
-// Start HFN
-static uint32_t snow_f8_enc_hfn = 0xFA556;
-
-// HFN threshold
-static uint32_t snow_f8_enc_hfn_threshold = 0xFF00000;
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_SNOW_F8_DEC
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F8_DEC
-
-// Extracted from:
-// Specification of the 3GPP Confidentiality and Integrity Algorithms UEA2 & UIA2
-// Document 3: Implementors. Test Data
-// Version: 1.0
-// Date: 10th January 2006
-// Section 4. CONFIDENTIALITY ALGORITHM UEA2, Test Set 3
-
-// Length of PDCP header
-#define PDCP_HEADER_LENGTH 2
-
-
-static uint8_t snow_f8_dec_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
-                                    0x4E,0xA5,0xF1,0x45,0x10,0x10,0xD8,0x52};
-// PDCP header
-static uint8_t snow_f8_dec_pdcp_hdr[] = {0x8B, 0x26};
-
-// PDCP payload not encrypted
-static uint8_t snow_f8_dec_data_out[] = {0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,
-                                         0x57,0xA4,0x9D,0x42,0x14,0x07,0xE8};
-
-// PDCP payload encrypted
-static uint8_t snow_f8_dec_data_in[] = { 0xBA,0x0F,0x31,0x30,0x03,0x34,0xC5,0x6B, // PDCP payload encrypted
-                                         0x52,0xA7,0x49,0x7C,0xBA,0xC0,0x46};
-// Radio bearer id
-static uint8_t snow_f8_dec_bearer = 0x3;
-
-// Start HFN
-static uint32_t snow_f8_dec_hfn = 0xFA556;
-
-// HFN threshold
-static uint32_t snow_f8_dec_hfn_threshold = 0xFF00000;
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_AES_CTR_ENC
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_AES_CTR_ENC
-
-// Extracted from:
-// document 3GPP TS 33.401 V9.6.0 (2010-12)
-// Annex C, 128-EEA2, Test Set 1
-
-// Length of PDCP header
-#define PDCP_HEADER_LENGTH 2
-
-
-static uint8_t aes_ctr_enc_key[] = {0xd3, 0xc5, 0xd5, 0x92, 0x32, 0x7f, 0xb1, 0x1c,
-                                    0x40, 0x35, 0xc6, 0x68, 0x0a, 0xf8, 0xc6, 0xd1};
-
-// PDCP header
-static uint8_t aes_ctr_enc_pdcp_hdr[] = {0x89, 0xB4};
-
-// PDCP payload not encrypted
-static uint8_t aes_ctr_enc_data_in[] = {0x98, 0x1b, 0xa6, 0x82, 0x4c, 0x1b, 0xfb, 0x1a,
-                                        0xb4, 0x85, 0x47, 0x20, 0x29, 0xb7, 0x1d, 0x80,
-                                        0x8c, 0xe3, 0x3e, 0x2c, 0xc3, 0xc0, 0xb5, 0xfc,
-                                        0x1f, 0x3d, 0xe8, 0xa6, 0xdc, 0x66, 0xb1, 0xf0};
-
-
-// PDCP payload encrypted
-static uint8_t aes_ctr_enc_data_out[] = {0xe9, 0xfe, 0xd8, 0xa6, 0x3d, 0x15, 0x53, 0x04,
-                                         0xd7, 0x1d, 0xf2, 0x0b, 0xf3, 0xe8, 0x22, 0x14,
-                                         0xb2, 0x0e, 0xd7, 0xda, 0xd2, 0xf2, 0x33, 0xdc,
-                                         0x3c, 0x22, 0xd7, 0xbd, 0xee, 0xed, 0x8e, 0x78};
-// Radio bearer id
-static uint8_t aes_ctr_enc_bearer = 0x15;
-// Start HFN
-static uint32_t aes_ctr_enc_hfn = 0x398A5;
-
-// HFN threshold
-static uint32_t aes_ctr_enc_hfn_threshold = 0xFF00000;
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_AES_CTR_DEC
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_AES_CTR_DEC
-
-// Extracted from:
-// document 3GPP TS 33.401 V9.6.0 (2010-12)
-// Annex C, 128-EEA2, Test Set 1
-
-// Length of PDCP header
-#define PDCP_HEADER_LENGTH 2
-
-
-static uint8_t aes_ctr_dec_key[] = {0xd3, 0xc5, 0xd5, 0x92, 0x32, 0x7f, 0xb1, 0x1c,
-                                    0x40, 0x35, 0xc6, 0x68, 0x0a, 0xf8, 0xc6, 0xd1};
-
-// PDCP header
-static uint8_t aes_ctr_dec_pdcp_hdr[] = {0x89, 0xB4};
-
-// PDCP payload encrypted
-static uint8_t aes_ctr_dec_data_in[] = {0xe9, 0xfe, 0xd8, 0xa6, 0x3d, 0x15, 0x53, 0x04,
-                                        0xd7, 0x1d, 0xf2, 0x0b, 0xf3, 0xe8, 0x22, 0x14,
-                                        0xb2, 0x0e, 0xd7, 0xda, 0xd2, 0xf2, 0x33, 0xdc,
-                                        0x3c, 0x22, 0xd7, 0xbd, 0xee, 0xed, 0x8e, 0x78};
-
-
-// PDCP payload not encrypted
-static uint8_t aes_ctr_dec_data_out[] = {0x98, 0x1b, 0xa6, 0x82, 0x4c, 0x1b, 0xfb, 0x1a,
-                                         0xb4, 0x85, 0x47, 0x20, 0x29, 0xb7, 0x1d, 0x80,
-                                         0x8c, 0xe3, 0x3e, 0x2c, 0xc3, 0xc0, 0xb5, 0xfc,
-                                         0x1f, 0x3d, 0xe8, 0xa6, 0xdc, 0x66, 0xb1, 0xf0};
-// Radio bearer id
-static uint8_t aes_ctr_dec_bearer = 0x15;
-// Start HFN
-static uint32_t aes_ctr_dec_hfn = 0x398A5;
-
-// HFN threshold
-static uint32_t aes_ctr_dec_hfn_threshold = 0xFF00000;
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_SNOW_F9_ENC
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F9_ENC
-
-// Extracted from:
-// Specification of the 3GPP Confidentiality and Integrity Algorithms UEA2 & UIA2
-// Document 3: Implementors. Test Data
-// Version: 1.0
-// Date: 10th January 2006
-// Section 5. INTEGRITY ALGORITHM UIA2, Test Set 4
-
-// Length of PDCP header
-#define PDCP_HEADER_LENGTH 1
-
-static uint8_t snow_f9_enc_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
-                                    0x4E,0xA5,0xF1,0x45,0x10,0x10,0xD8,0x52};
-
-//static uint8_t snow_f9_auth_enc_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
-//                                         0x4E,0xA5,0xF1,0x45,0x10,0x10,0xD8,0x52};
-
-static uint8_t snow_f9_auth_enc_key[] = {0xC7,0x36,0xC6,0xAA,0xB2,0x2B,0xFF,0xF9,
-                                         0x1E,0x26,0x98,0xD2,0xE2,0x2A,0xD5,0x7E};
-// PDCP header
-//static uint8_t snow_f9_enc_pdcp_hdr[] = {0x8B, 0x26};
-static uint8_t snow_f9_enc_pdcp_hdr[] = {0xD0};
-
-// PDCP payload not encrypted
-//static uint8_t snow_f9_enc_data_in[] = {0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,
-//                                        0x57,0xA4,0x9D,0x42,0x14,0x07,0xE8};
-
-static uint8_t snow_f9_enc_data_in[] = {0xA7 ,0xD4,0x63,0xDF,0x9F,0xB2,0xB2,
-                                        0x78,0x83,0x3F,0xA0,0x2E,0x23,0x5A,0xA1,
-                                        0x72,0xBD,0x97,0x0C,0x14,0x73,0xE1,0x29,
-                                        0x07,0xFB,0x64,0x8B,0x65,0x99,0xAA,0xA0,
-                                        0xB2,0x4A,0x03,0x86,0x65,0x42,0x2B,0x20,
-                                        0xA4,0x99,0x27,0x6A,0x50,0x42,0x70,0x09};
-
-// PDCP payload encrypted
-//static uint8_t snow_f9_enc_data_out[] = {0xBA,0x0F,0x31,0x30,0x03,0x34,0xC5,0x6B, // PDCP payload encrypted
-//                                         0x52,0xA7,0x49,0x7C,0xBA,0xC0,0x46};
-static uint8_t snow_f9_enc_data_out[] = {0x38,0xB5,0x54,0xC0};
-
-// Radio bearer id
-static uint8_t snow_f9_enc_bearer = 0x0;
-
-// Start HFN
-static uint32_t snow_f9_enc_hfn = 0xA3C9F2;
-
-// HFN threshold
-static uint32_t snow_f9_enc_hfn_threshold = 0xFF00000;
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_SNOW_F9_DEC
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F9_DEC
-
-// Extracted from:
-// Specification of the 3GPP Confidentiality and Integrity Algorithms UEA2 & UIA2
-// Document 3: Implementors. Test Data
-// Version: 1.0
-// Date: 10th January 2006
-// Section 5. INTEGRITY ALGORITHM UIA2, Test Set 4
-
-// Length of PDCP header
-#define PDCP_HEADER_LENGTH 1
-
-static uint8_t snow_f9_dec_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
-                                    0x4E,0xA5,0xF1,0x45,0x10,0x10,0xD8,0x52};
-
-static uint8_t snow_f9_auth_dec_key[] = {0xC7,0x36,0xC6,0xAA,0xB2,0x2B,0xFF,0xF9,
-                                         0x1E,0x26,0x98,0xD2,0xE2,0x2A,0xD5,0x7E};
-// PDCP header
-static uint8_t snow_f9_dec_pdcp_hdr[] = { 0xD0};
-
-// PDCP payload not encrypted
-//static uint8_t snow_f9_enc_data_in[] = {0xAD,0x9C,0x44,0x1F,0x89,0x0B,0x38,0xC4,
-//                                        0x57,0xA4,0x9D,0x42,0x14,0x07,0xE8};
-
-static uint8_t snow_f9_dec_data_in[] = {0xA7 ,0xD4,0x63,0xDF,0x9F,0xB2,0xB2,
-                                        0x78,0x83,0x3F,0xA0,0x2E,0x23,0x5A,0xA1,
-                                        0x72,0xBD,0x97,0x0C,0x14,0x73,0xE1,0x29,
-                                        0x07,0xFB,0x64,0x8B,0x65,0x99,0xAA,0xA0,
-                                        0xB2,0x4A,0x03,0x86,0x65,0x42,0x2B,0x20,
-                                        0xA4,0x99,0x27,0x6A,0x50,0x42,0x70,0x09,
-                                        // The MAC-I from packet
-                                        0x38,0xB5,0x54,0xC0};
-
-// PDCP payload encrypted
-//static uint8_t snow_f9_enc_data_out[] = {0xBA,0x0F,0x31,0x30,0x03,0x34,0xC5,0x6B, // PDCP payload encrypted
-//                                         0x52,0xA7,0x49,0x7C,0xBA,0xC0,0x46};
-static uint8_t snow_f9_dec_data_out[] = { 0x38,0xB5,0x54,0xC0};
-
-// Radio bearer id
-static uint8_t snow_f9_dec_bearer = 0x0;
-
-// Start HFN
-static uint32_t snow_f9_dec_hfn = 0xA3C9F2;
-
-// HFN threshold
-static uint32_t snow_f9_dec_hfn_threshold = 0xFF00000;
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_AES_CMAC_ENC
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_AES_CMAC_ENC
-
-// Test Set 2
-
-
-// Length of PDCP header
-#define PDCP_HEADER_LENGTH 1
-
-static uint8_t aes_cmac_enc_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
-                                    0x4E,0xA5,0xF1,0x45,0x10,0x10,0xD8,0x52};
-
-static uint8_t aes_cmac_auth_enc_key[] = {0xd3,0xc5,0xd5,0x92,0x32,0x7f,0xb1,0x1c,
-                                          0x40,0x35,0xc6,0x68,0x0a,0xf8,0xc6,0xd1};
-
-// PDCP header
-static uint8_t aes_cmac_enc_pdcp_hdr[] = { 0x48};
-
-// PDCP payload
-static uint8_t aes_cmac_enc_data_in[] = {0x45,0x83,0xd5,0xaf,0xe0,0x82,0xae};
-
-// PDCP payload encrypted
-static uint8_t aes_cmac_enc_data_out[] = {0xb9,0x37,0x87,0xe6};
-
-// Radio bearer id
-static uint8_t aes_cmac_enc_bearer = 0x1a;
-
-// Start HFN
-static uint32_t aes_cmac_enc_hfn = 0x1CC52CD;
-
-// HFN threshold
-static uint32_t aes_cmac_enc_hfn_threshold = 0xFF00000;
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_AES_CMAC_DEC
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_AES_CMAC_DEC
-
-// Test Set 2
-
-
-// Length of PDCP header
-#define PDCP_HEADER_LENGTH 1
-
-static uint8_t aes_cmac_dec_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
-                                    0x4E,0xA5,0xF1,0x45,0x10,0x10,0xD8,0x52};
-
-static uint8_t aes_cmac_auth_dec_key[] = {0xd3,0xc5,0xd5,0x92,0x32,0x7f,0xb1,0x1c,
-                                          0x40,0x35,0xc6,0x68,0x0a,0xf8,0xc6,0xd1};
-
-// PDCP header
-static uint8_t aes_cmac_dec_pdcp_hdr[] = { 0x48};
-
-// PDCP payload not encrypted
-static uint8_t aes_cmac_dec_data_in[] = {0x45,0x83,0xd5,0xaf,0xe0,0x82,0xae,
-                                         // The MAC-I from packet
-                                         0xb9,0x37,0x87,0xe6};
-
-// PDCP payload encrypted
-static uint8_t aes_cmac_dec_data_out[] = {0xb9,0x37,0x87,0xe6};
-
-// Radio bearer id
-static uint8_t aes_cmac_dec_bearer = 0x1a;
-
-// Start HFN
-static uint32_t aes_cmac_dec_hfn = 0x1CC52CD;
-
-// HFN threshold
-static uint32_t aes_cmac_dec_hfn_threshold = 0xFF00000;
-#else
-#error "Unsuported test scenario!"
-#endif
-
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_SNOW_F8_ENC
-//////////////////////////////////////////////////////////////////////////////
-#if PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F8_ENC
-
-
-#define test_crypto_key         snow_f8_enc_key
-#define test_crypto_key_len     sizeof(snow_f8_enc_key)
-
-#define test_auth_key           NULL
-#define test_auth_key_len       0
-
-#define test_data_in            snow_f8_enc_data_in
-#define test_data_out           snow_f8_enc_data_out
-
-#define test_pdcp_hdr           snow_f8_enc_pdcp_hdr
-#define test_bearer             snow_f8_enc_bearer
-#define test_sn_size            SEC_PDCP_SN_SIZE_12
-#define test_user_plane         PDCP_DATA_PLANE
-#define test_packet_direction   PDCP_DOWNLINK
-#define test_protocol_direction PDCP_ENCAPSULATION
-#define test_cipher_algorithm   SEC_ALG_SNOW
-#define test_integrity_algorithm SEC_ALG_NULL
-#define test_hfn                snow_f8_enc_hfn
-#define test_hfn_threshold      snow_f8_enc_hfn_threshold
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_SNOW_F8_DEC
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F8_DEC
-
-#define test_crypto_key         snow_f8_dec_key
-#define test_crypto_key_len     sizeof(snow_f8_dec_key)
-
-#define test_auth_key           NULL
-#define test_auth_key_len       0
-
-#define test_data_in            snow_f8_dec_data_in
-#define test_data_out           snow_f8_dec_data_out
-
-#define test_pdcp_hdr           snow_f8_dec_pdcp_hdr
-#define test_bearer             snow_f8_dec_bearer
-#define test_sn_size            SEC_PDCP_SN_SIZE_12
-#define test_user_plane         PDCP_DATA_PLANE
-#define test_packet_direction   PDCP_DOWNLINK
-#define test_protocol_direction PDCP_DECAPSULATION
-#define test_cipher_algorithm    SEC_ALG_SNOW
-#define test_integrity_algorithm SEC_ALG_NULL
-#define test_hfn                snow_f8_dec_hfn
-#define test_hfn_threshold      snow_f8_dec_hfn_threshold
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_AES_CTR_ENC
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_AES_CTR_ENC
-
-#define test_crypto_key         aes_ctr_enc_key
-#define test_crypto_key_len     sizeof(aes_ctr_enc_key)
-
-#define test_auth_key           NULL
-#define test_auth_key_len       0
-
-#define test_data_in            aes_ctr_enc_data_in
-#define test_data_out           aes_ctr_enc_data_out
-
-#define test_pdcp_hdr           aes_ctr_enc_pdcp_hdr
-#define test_bearer             aes_ctr_enc_bearer
-#define test_sn_size            SEC_PDCP_SN_SIZE_12
-#define test_user_plane         PDCP_DATA_PLANE
-#define test_packet_direction   PDCP_DOWNLINK
-#define test_protocol_direction PDCP_ENCAPSULATION
-#define test_cipher_algorithm    SEC_ALG_AES
-#define test_integrity_algorithm SEC_ALG_NULL
-#define test_hfn                aes_ctr_enc_hfn
-#define test_hfn_threshold      aes_ctr_enc_hfn_threshold
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_AES_CTR_DEC
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_AES_CTR_DEC
-
-#define test_crypto_key         aes_ctr_dec_key
-#define test_crypto_key_len     sizeof(aes_ctr_dec_key)
-
-#define test_auth_key           NULL
-#define test_auth_key_len       0
-
-#define test_data_in            aes_ctr_dec_data_in
-#define test_data_out           aes_ctr_dec_data_out
-
-#define test_pdcp_hdr           aes_ctr_dec_pdcp_hdr
-#define test_bearer             aes_ctr_dec_bearer
-#define test_sn_size            SEC_PDCP_SN_SIZE_12
-#define test_user_plane         PDCP_DATA_PLANE
-#define test_packet_direction   PDCP_DOWNLINK
-#define test_protocol_direction PDCP_DECAPSULATION
-#define test_cipher_algorithm    SEC_ALG_AES
-#define test_integrity_algorithm SEC_ALG_NULL
-#define test_hfn                aes_ctr_dec_hfn
-#define test_hfn_threshold      aes_ctr_dec_hfn_threshold
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_SNOW_F9_ENC
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F9_ENC
-
-#define test_crypto_key         snow_f9_enc_key
-#define test_crypto_key_len     sizeof(snow_f9_enc_key)
-
-#define test_auth_key           snow_f9_auth_enc_key
-#define test_auth_key_len       sizeof(snow_f9_auth_enc_key)
-
-#define test_data_in            snow_f9_enc_data_in
-#define test_data_out           snow_f9_enc_data_out
-
-#define test_pdcp_hdr           snow_f9_enc_pdcp_hdr
-#define test_bearer             snow_f9_enc_bearer
-#define test_sn_size            SEC_PDCP_SN_SIZE_5
-#define test_user_plane         PDCP_CONTROL_PLANE
-#define test_packet_direction   PDCP_DOWNLINK
-#define test_protocol_direction PDCP_ENCAPSULATION
-#define test_cipher_algorithm   SEC_ALG_NULL
-//#define test_cipher_algorithm   SEC_ALG_SNOW
-#define test_integrity_algorithm SEC_ALG_SNOW
-#define test_hfn                snow_f9_enc_hfn
-#define test_hfn_threshold      snow_f9_enc_hfn_threshold
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_SNOW_F9_DEC
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_SNOW_F9_DEC
-
-#define test_crypto_key         snow_f9_dec_key
-#define test_crypto_key_len     sizeof(snow_f9_dec_key)
-
-#define test_auth_key           snow_f9_auth_dec_key
-#define test_auth_key_len       sizeof(snow_f9_auth_dec_key)
-
-#define test_data_in            snow_f9_dec_data_in
-#define test_data_out           snow_f9_dec_data_out
-
-#define test_pdcp_hdr           snow_f9_dec_pdcp_hdr
-#define test_bearer             snow_f9_dec_bearer
-#define test_sn_size            SEC_PDCP_SN_SIZE_5
-#define test_user_plane         PDCP_CONTROL_PLANE
-#define test_packet_direction   PDCP_DOWNLINK
-#define test_protocol_direction PDCP_DECAPSULATION
-#define test_cipher_algorithm   SEC_ALG_NULL
-#define test_integrity_algorithm SEC_ALG_SNOW
-#define test_hfn                snow_f9_dec_hfn
-#define test_hfn_threshold      snow_f9_dec_hfn_threshold
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_AES_CMAC_ENC
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_AES_CMAC_ENC
-
-#define test_crypto_key         aes_cmac_enc_key
-#define test_crypto_key_len     sizeof(aes_cmac_enc_key)
-
-#define test_auth_key           aes_cmac_auth_enc_key
-#define test_auth_key_len       sizeof(aes_cmac_auth_enc_key)
-
-#define test_data_in            aes_cmac_enc_data_in
-#define test_data_out           aes_cmac_enc_data_out
-
-#define test_pdcp_hdr           aes_cmac_enc_pdcp_hdr
-#define test_bearer             aes_cmac_enc_bearer
-#define test_sn_size            SEC_PDCP_SN_SIZE_5
-#define test_user_plane         PDCP_CONTROL_PLANE
-#define test_packet_direction   PDCP_DOWNLINK
-#define test_protocol_direction PDCP_ENCAPSULATION
-#define test_cipher_algorithm   SEC_ALG_NULL
-#define test_integrity_algorithm SEC_ALG_AES
-#define test_hfn                aes_cmac_enc_hfn
-#define test_hfn_threshold      aes_cmac_enc_hfn_threshold
-
-//////////////////////////////////////////////////////////////////////////////
-// PDCP_TEST_AES_CMAC_DEC
-//////////////////////////////////////////////////////////////////////////////
-#elif PDCP_TEST_SCENARIO == PDCP_TEST_AES_CMAC_DEC
-
-#define test_crypto_key         aes_cmac_dec_key
-#define test_crypto_key_len     sizeof(aes_cmac_dec_key)
-
-#define test_auth_key           aes_cmac_auth_dec_key
-#define test_auth_key_len       sizeof(aes_cmac_auth_dec_key)
-
-#define test_data_in            aes_cmac_dec_data_in
-#define test_data_out           aes_cmac_dec_data_out
-
-#define test_pdcp_hdr           aes_cmac_dec_pdcp_hdr
-#define test_bearer             aes_cmac_dec_bearer
-#define test_sn_size            SEC_PDCP_SN_SIZE_5
-#define test_user_plane         PDCP_CONTROL_PLANE
-#define test_packet_direction   PDCP_DOWNLINK
-#define test_protocol_direction PDCP_DECAPSULATION
-#define test_cipher_algorithm   SEC_ALG_NULL
-#define test_integrity_algorithm SEC_ALG_AES
-#define test_hfn                aes_cmac_dec_hfn
-#define test_hfn_threshold      aes_cmac_dec_hfn_threshold
-#else
-#error "Unsuported test scenario!"
-#endif
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
@@ -1013,24 +385,54 @@ static void * test_memalign(size_t align, size_t size)
 
 static void test_free(void *ptr, size_t size)
 {
-   range_t r = {0,ptr,size};
+   range_t r;
+
+   r.vaddr = ptr;
    fsl_usmmgr_free(&r,g_usmmgr);
 }
 #endif // SEC_HW_VERSION_4_4
 
-static int get_free_pdcp_context(pdcp_context_t * pdcp_contexts,
-                                 int * no_of_used_pdcp_contexts,
+static void generate_test_vectors()
+{
+    int i = 0;
+
+    for (i = 0; i < pdcp_header_len; i++ )
+    {
+        test_pdcp_hdr[i] = rand();
+    }
+
+    for(i = 0; i < user_param.payload_size; i++ )
+    {
+        test_data_in[i] = rand();
+    }
+
+    for( i = 0; i < MAX_KEY_LENGTH; i++ )
+    {
+        test_crypto_key[i] = rand();
+        test_auth_key[i] = rand();
+    }
+
+    test_bearer = rand();
+
+    test_hfn = rand();
+
+    test_hfn_threshold = test_hfn + 1; /* Threshold reach indication will be
+                                          ignored on poll */
+}
+
+static int get_free_pdcp_context(pdcp_context_t * pdcp_contexts_pool,
+                                 int * used_contexts,
                                  pdcp_context_t ** pdcp_context)
 {
     int i = 0;
     int found = 0;
 
     assert(pdcp_context != NULL);
-    assert(pdcp_contexts != NULL);
-    assert(no_of_used_pdcp_contexts != NULL);
+    assert(pdcp_contexts_pool != NULL);
+    assert(used_contexts != NULL);
 
     // check if there are free contexts
-    if (*no_of_used_pdcp_contexts >= PDCP_CONTEXT_NUMBER)
+    if (*used_contexts >= PDCP_CONTEXT_NUMBER)
     {
         // no free contexts available
         return 2;
@@ -1038,11 +440,11 @@ static int get_free_pdcp_context(pdcp_context_t * pdcp_contexts,
 
     for (i = 0; i < PDCP_CONTEXT_NUMBER; i++)
     {
-        if (pdcp_contexts[i].usage == PDCP_CONTEXT_FREE)
+        if (pdcp_contexts_pool[i].usage == PDCP_CONTEXT_FREE)
         {
-            pdcp_contexts[i].usage = PDCP_CONTEXT_USED;
+            pdcp_contexts_pool[i].usage = PDCP_CONTEXT_USED;
 
-            (*no_of_used_pdcp_contexts)++;
+            (*used_contexts)++;
 
             found = 1;
             break;
@@ -1051,7 +453,7 @@ static int get_free_pdcp_context(pdcp_context_t * pdcp_contexts,
     assert(found == 1);
 
     // return the context chosen
-    *pdcp_context = &(pdcp_contexts[i]);
+    *pdcp_context = &(pdcp_contexts_pool[i]);
 
     return 0;
 }
@@ -1059,7 +461,7 @@ static int get_free_pdcp_context(pdcp_context_t * pdcp_contexts,
 static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
                                 sec_packet_t **in_packet,
                                 sec_packet_t **out_packet)
-{    
+{
     assert(pdcp_context != NULL);
     assert(in_packet != NULL);
     assert(out_packet != NULL);
@@ -1077,34 +479,50 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
     pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].usage = PDCP_BUFFER_USED;
     (*in_packet)->address = test_vtop(&(pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].buffer[0]));
 
-#ifdef SEC_HW_VERSION_3_1
-    // Needed 8 bytes before actual start of PDCP packet, for PDCP control-plane + AES algo testing.
-    (*in_packet)->offset = 8;
-    (*in_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
-#endif // SEC_HW_VERSION_3_1
     assert(pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].usage == PDCP_BUFFER_FREE);
     *out_packet = &(pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].pdcp_packet);
 
     pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].usage = PDCP_BUFFER_USED;
     (*out_packet)->address = test_vtop(&(pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].buffer[0]));
 
-#ifdef SEC_HW_VERSION_3_1
-    (*out_packet)->offset = 8;
-    (*out_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
-#endif // SEC_HW_VERSION_3_1
+    (*in_packet)->offset = TEST_OFFSET;
 
     // copy PDCP header
-    memcpy(test_ptov((*in_packet)->address) + (*in_packet)->offset, test_pdcp_hdr, sizeof(test_pdcp_hdr));
+    //memcpy(test_ptov((*in_packet)->address) + (*in_packet)->offset, test_pdcp_hdr, sizeof(test_pdcp_hdr));
+    memcpy( &(pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].buffer[0]) +
+            TEST_OFFSET,
+            test_pdcp_hdr,
+            pdcp_header_len);
+
     // copy input data
-    memcpy(test_ptov((*in_packet)->address) + (*in_packet)->offset + PDCP_HEADER_LENGTH,
-           test_data_in,
-           sizeof(test_data_in));
+    //memcpy(test_ptov((*in_packet)->address) + (*in_packet)->offset + PDCP_HEADER_LENGTH,
+    //       test_data_in,
+    //       sizeof(test_data_in));
+    memcpy( &(pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].buffer[0]) +
+            TEST_OFFSET + pdcp_header_len,
+            test_data_in,
+            user_param.payload_size);
 
-    (*in_packet)->length = sizeof(test_data_in) + PDCP_HEADER_LENGTH + (*in_packet)->offset;
-    assert((*in_packet)->length + 4 <= PDCP_BUFFER_SIZE);
 
-    (*out_packet)->length = sizeof(test_data_in) + PDCP_HEADER_LENGTH + (*out_packet)->offset;
-    assert((*out_packet)->length + 4 <= PDCP_BUFFER_SIZE);
+    (*in_packet)->length = user_param.payload_size + pdcp_header_len;
+    assert((*in_packet)->length + TEST_OFFSET <= PDCP_BUFFER_SIZE);
+
+    (*out_packet)->length = user_param.payload_size + pdcp_header_len;
+    (*out_packet)->offset = 0x00;
+
+    if( pdcp_context->pdcp_ctx_cfg_data.user_plane == PDCP_CONTROL_PLANE )
+    {
+        if( pdcp_context->pdcp_ctx_cfg_data.protocol_direction == PDCP_ENCAPSULATION )
+        {
+            (*out_packet)->length += 4;
+        }
+        else
+        {
+            (*out_packet)->length -= 4;
+        }
+    }
+
+    assert((*out_packet)->length <= PDCP_BUFFER_SIZE);
 
     pdcp_context->no_of_used_buffers++;
 
@@ -1129,8 +547,6 @@ static int get_results(uint8_t job_ring, int limit, uint32_t *packets_out, uint3
     assert(limit != 0);
     assert(packets_out != NULL);
 
-
-
     ret_code = sec_poll_job_ring(job_ring_descriptors[job_ring].job_ring_handle, limit, packets_out);
     diff_cycles = (GET_ATBL() - start_cycles);
     *core_cycles += diff_cycles;
@@ -1141,6 +557,9 @@ static int get_results(uint8_t job_ring, int limit, uint32_t *packets_out, uint3
         test_printf("sec_poll_job_ring::Error %d when polling for SEC results on Job Ring %d \n", ret_code, job_ring);
         return 1;
     }
+
+    usleep(10);
+
     // validate that number of packets notified does not exceed limit when limit is > 0.
     assert(!((limit > 0) && (*packets_out > limit)));
 
@@ -1151,10 +570,10 @@ static void get_stats(uint8_t job_ring_id)
 {
     sec_statistics_t stats;
     int ret_code = 0;
-    
+
     ret_code = sec_get_stats(job_ring_descriptors[job_ring_id].job_ring_handle,&stats);
     assert(ret_code == SEC_SUCCESS);
-    
+
     test_printf("JR consumer index (index from where the next job will be dequeued): %d",stats.sw_consumer_index);
     test_printf("JR producer index (index where the next job will be enqueued): %d",stats.sw_producer_index);
     test_printf("CAAM JR consumer index (index from where the next job will be dequeued): %d",stats.hw_consumer_index);
@@ -1176,15 +595,15 @@ static int start_sec_worker_threads(void)
     // PDCP UL thread is consumer on JR ID 0 and producer on JR ID 1
     th_config[0].consumer_job_ring_id = 0;
     th_config[0].producer_job_ring_id = 1;
-    th_config[0].pdcp_contexts = &pdcp_ul_contexts[0];
-    th_config[0].no_of_used_pdcp_contexts = &no_of_used_pdcp_ul_contexts;
+    th_config[0].pdcp_contexts = &pdcp_contexts[0];
+    th_config[0].no_of_used_pdcp_contexts = &no_of_used_pdcp_contexts;
     th_config[0].no_of_pdcp_contexts_to_test = PDCP_CONTEXT_NUMBER;
     th_config[0].work_done = 0;
     th_config[0].should_exit = 0;
     th_config[0].core_cycles = 0;
-    th_config[0].rx_packets_per_ctx = PACKET_NUMBER_PER_CTX_DL;
-    th_config[0].tx_packets_per_ctx = PACKET_NUMBER_PER_CTX_UL;
-    ret_code = pthread_create(&threads[0], NULL, &pdcp_thread_routine, (void*)&th_config[0]);
+    th_config[0].tx_packets_per_ctx = (user_param.direction == SCENARIO_DIR_UPLINK) ?
+        PACKET_NUMBER_PER_CTX_UL : PACKET_NUMBER_PER_CTX_DL;
+    ret_code = pthread_create(&threads[0], NULL, &pdcp_tx_thread_routine, (void*)&th_config[0]);
     assert(ret_code == 0);
 
     // start PDCP DL thread
@@ -1192,15 +611,14 @@ static int start_sec_worker_threads(void)
     // PDCP DL thread is consumer on JR ID 1 and producer on JR ID 0
     th_config[1].consumer_job_ring_id = 1;
     th_config[1].producer_job_ring_id = 0;
-    th_config[1].pdcp_contexts = &pdcp_dl_contexts[0];
-    th_config[1].no_of_used_pdcp_contexts = &no_of_used_pdcp_dl_contexts;
     th_config[1].no_of_pdcp_contexts_to_test = PDCP_CONTEXT_NUMBER;
     th_config[1].work_done = 0;
     th_config[1].should_exit = 0;
     th_config[1].core_cycles = 0;
-    th_config[1].rx_packets_per_ctx = PACKET_NUMBER_PER_CTX_UL;
-    th_config[1].tx_packets_per_ctx = PACKET_NUMBER_PER_CTX_DL;
-    ret_code = pthread_create(&threads[1], NULL, &pdcp_thread_routine, (void*)&th_config[1]);
+    th_config[1].rx_packets_per_ctx = (user_param.direction == SCENARIO_DIR_UPLINK) ? 
+        PACKET_NUMBER_PER_CTX_UL : PACKET_NUMBER_PER_CTX_DL;
+    
+    ret_code = pthread_create(&threads[1], NULL, &pdcp_rx_thread_routine, (void*)&th_config[1]);
     assert(ret_code == 0);
 
     return ret_code;
@@ -1236,30 +654,30 @@ static int stop_sec_worker_threads(void)
 //    assert(no_of_used_pdcp_ul_contexts == 0);
 
     test_printf("thread main: all worker threads are stopped\n");
-    profile_printf("thread 0 core cycles = %d\n", th_config[0].core_cycles);
-    profile_printf("thread 1 core cycles = %d\n", th_config[1].core_cycles);
+    printf("thread 0 core cycles = %d\n", th_config[0].core_cycles);
+    printf("thread 1 core cycles = %d\n", th_config[1].core_cycles);
+
     return ret_code;
 }
 
-static void* pdcp_thread_routine(void* config)
+static void* pdcp_tx_thread_routine(void* config)
 {
     thread_config_t *th_config_local = NULL;
     int ret_code = 0;
     int i = 0;
-    unsigned int packets_received = 0;
     pdcp_context_t *pdcp_context;
     //int total_no_of_contexts_deleted = 0;
     //int no_of_contexts_deleted = 0;
     int total_no_of_contexts_created = 0;
     unsigned int total_packets_to_send = 0;
     unsigned int total_packets_sent = 0;
-    unsigned int total_packets_to_receive = 0;
-    unsigned int total_packets_received = 0;
     unsigned int ctx_packet_count = 0;
     struct timeval start_time;
     struct timeval end_time;
     uint32_t start_cycles = 0;
     uint32_t diff_cycles = 0;
+    uint32_t pps;
+    uint32_t retries = 0;
 
     th_config_local = (thread_config_t*)config;
     assert(th_config_local != NULL);
@@ -1285,8 +703,17 @@ static void* pdcp_thread_routine(void* config)
         pdcp_context->pdcp_ctx_cfg_data.sn_size = test_sn_size;
         pdcp_context->pdcp_ctx_cfg_data.bearer = test_bearer;
         pdcp_context->pdcp_ctx_cfg_data.user_plane = test_user_plane;
-        pdcp_context->pdcp_ctx_cfg_data.packet_direction = test_packet_direction;
-        pdcp_context->pdcp_ctx_cfg_data.protocol_direction = test_protocol_direction;
+        if( user_param.direction == SCENARIO_DIR_UPLINK )
+        {
+            pdcp_context->pdcp_ctx_cfg_data.packet_direction = PDCP_UPLINK;
+            pdcp_context->pdcp_ctx_cfg_data.protocol_direction = PDCP_DECAPSULATION;
+        }
+        else
+        {
+            pdcp_context->pdcp_ctx_cfg_data.packet_direction = PDCP_DOWNLINK;
+            pdcp_context->pdcp_ctx_cfg_data.protocol_direction = PDCP_ENCAPSULATION;
+        }
+
         pdcp_context->pdcp_ctx_cfg_data.hfn = test_hfn;
         pdcp_context->pdcp_ctx_cfg_data.hfn_threshold = test_hfn_threshold;
 
@@ -1336,173 +763,211 @@ static void* pdcp_thread_routine(void* config)
     /////////////////////////////////////////////////////////////////////
 
     total_packets_to_send = PDCP_CONTEXT_NUMBER * th_config_local->tx_packets_per_ctx;
-    total_packets_to_receive = PDCP_CONTEXT_NUMBER * th_config_local->rx_packets_per_ctx;
 
     gettimeofday(&start_time, NULL);
     // Send a burst of packets for each context, until all the packets are sent to SEC
-#ifdef TEST_TYPE_INFINITE_LOOP
-    while(1)
+
+
+    while(total_packets_to_send != total_packets_sent)
     {
-#endif
-        while(total_packets_to_send != total_packets_sent)
+        for(i = 0; i < PDCP_CONTEXT_NUMBER; i++)
         {
-            for(i = 0; i < PDCP_CONTEXT_NUMBER; i++)
+            pdcp_context = &th_config_local->pdcp_contexts[i];
+            ctx_packet_count = 0;
+
+            while(ctx_packet_count < PACKET_BURST_PER_CTX)
             {
-                pdcp_context = &th_config_local->pdcp_contexts[i];
-                ctx_packet_count = 0;
+                // for each context, send to SEC a fixed number of packets for processing
+                sec_packet_t *in_frag;
+                sec_packet_t *out_frag;
 
-                while(ctx_packet_count < PACKET_BURST_PER_CTX)
+                sec_packet_t in_packet[16];
+                sec_packet_t out_packet[16];
+
+                int num_fragments;
+                int last_len, rem_len = pdcp_header_len + user_param.payload_size;
+                uint32_t last_address;
+                int idx;
+
+                // Get a free buffer, If none, then break the loop
+                if(get_free_pdcp_buffer(pdcp_context, &in_frag, &out_frag) != 0)
                 {
-                    // for each context, send to SEC a fixed number of packets for processing
-                    sec_packet_t *in_frag;
-                    sec_packet_t *out_frag;
+                    break;
+                }
 
-                    sec_packet_t in_packet[16];
-                    sec_packet_t out_packet[16];
-                    
-                    int num_fragments;
-                    int len, rem_len = sizeof(test_data_in) + PDCP_HEADER_LENGTH;
+                memcpy(&in_packet[0],in_frag,sizeof(sec_packet_t));
 
-                    // Get a free buffer, If none, then break the loop
-                    if(get_free_pdcp_buffer(pdcp_context, &in_frag, &out_frag) != 0)
+                memcpy(&out_packet[0],out_frag,sizeof(sec_packet_t));
+#ifdef RANDOM_SCATTER_GATHER_FRAGMENTS
+                  num_fragments = 0 + (rand() % (user_param.max_frags - 1) );
+#else
+                  num_fragments = user_param.max_frags - 1;
+#endif
+                in_packet[0].num_fragments = num_fragments;
+                in_packet[0].total_length = rem_len;
+
+                last_address = in_packet[0].address;
+                last_len = 0;
+
+                test_printf("Num of fragments : %d",num_fragments);
+
+                for(idx = 0; idx <= num_fragments - 1; idx++ )
+                {
+                    in_packet[idx].address = last_address +
+                                           last_len;
+                    in_packet[idx].length = 1 + (rand() % (rem_len - 1));
+
+                    last_address = in_packet[idx].address;
+                    last_len = in_packet[idx].length;
+
+                    rem_len -= in_packet[idx].length;
+
+                    test_printf("Fragment %d: len = %d, address = 0x%08x",
+                                idx,
+                                in_packet[idx].length,
+                                in_packet[idx].address);
+                }
+
+                // Last fragment must finish the packet
+                if(rem_len)
+                {
+                    in_packet[idx].address = last_address +
+                                           last_len;
+                    in_packet[idx].length = rem_len;
+
+                    test_printf("Last fragment %d: len = %d, address = 0x%08x",
+                                idx,
+                                in_packet[idx].length,
+                                in_packet[idx].address);
+                }
+                
+                // get_stats(th_config_local->producer_job_ring_id);
+try_again:
+                start_cycles = GET_ATBL();
+                ret_code = sec_process_packet(pdcp_context->sec_ctx,
+                        in_packet,
+                        out_packet,
+                        (ua_context_handle_t)pdcp_context);
+
+                diff_cycles = (GET_ATBL() - start_cycles);
+
+                th_config_local->core_cycles += diff_cycles;
+                
+                profile_printf("thread #%d:ctx #%p:sec_process_packet cycles = %d\n",
+                        th_config_local->tid, pdcp_context, diff_cycles);
+
+                if(ret_code != SEC_SUCCESS)
+                {
+                    if( ret_code == SEC_JR_IS_FULL )
                     {
-                        break;
-                    }
-                    
-                    memcpy(&in_packet[0],in_frag,sizeof(sec_packet_t));
-                    
-                    memcpy(&out_packet[0],out_frag,sizeof(sec_packet_t));
-
-                    in_packet[0].total_length = rem_len;
-#ifdef ONE_SCATTER_GATHER_FRAGMENT_MIX
-                    if( ((total_packets_sent / SEC_JOB_RING_SIZE ) != 0) &&
-                        ((total_packets_sent / SEC_JOB_RING_SIZE ) % 2 == 1) )
-                    {
-                        rem_len = 0x60;
-                        in_packet[0].length = 
-                        in_packet[0].total_length = 
-                        out_packet[0].length = rem_len;
-                    
+                        test_printf("thread #%d:producer: JR is full",th_config_local->tid);
+                        retries++;
+                        usleep(1);
+                        goto try_again;
                     }
                     else
-#endif
                     {
-                        in_packet[0].total_length = rem_len;
-
-                        in_packet[0].length = rem_len < SCATTER_GATHER_BUF_SIZE ?
-                                              rem_len : SCATTER_GATHER_BUF_SIZE;
-                    }
-                    rem_len -= in_packet[0].length;
-                    
-                    num_fragments = 0;
-                    
-                    while(rem_len)
-                    {
-#ifdef RANDOM_SCATTER_GATHER_BUFFER_SIZE
-                        len = SCATTER_GATHER_BUF_SIZE/2 + (rand() % (SCATTER_GATHER_BUF_SIZE - SCATTER_GATHER_BUF_SIZE/2));
-                        len = rem_len < len ? rem_len : len;
-#else
-                        len = rem_len < SCATTER_GATHER_BUF_SIZE ? rem_len : SCATTER_GATHER_BUF_SIZE;
-#endif                  
-                        ++num_fragments;
-                        in_packet[num_fragments].address = in_packet[num_fragments - 1].address + len;
-                        in_packet[num_fragments].length = len;
-
-                        rem_len-=len;
-                    }
-                    in_packet[0].num_fragments = num_fragments;
-                    
-                    // if SEC process packet returns that the producer JR is full, do some polling
-                    // on the consumer JR until the producer JR has free entries.
-                    do{
-                        start_cycles = GET_ATBL();
-                        ret_code = sec_process_packet(pdcp_context->sec_ctx,
-                                in_packet,
-                                out_packet,
-                                (ua_context_handle_t)pdcp_context);
-
-                        diff_cycles = (GET_ATBL() - start_cycles);
-                        th_config_local->core_cycles += diff_cycles;
-
-                        profile_printf("thread #%d:ctx #%p:sec_process_packet cycles = %d",
-                                th_config_local->tid, pdcp_context, diff_cycles);
-
-                        test_printf("thread #%d: Consumer job ring statistics: ",
-                                    th_config_local->tid);
-                        get_stats(th_config_local->consumer_job_ring_id);
-                        
-                        test_printf("thread #%d: Producer job ring statistics: ",
-                                    th_config_local->tid);
-                        get_stats(th_config_local->producer_job_ring_id);
-                        
-                        if(ret_code == SEC_JR_IS_FULL)
-                        {
-                            //printf("thread #%d: jr full\n", th_config_local->tid);
-                            // wait while the producer JR is empty, and in the mean time do some
-                            // polling on the consumer JR -> retrieve all available notifications
-                            ret_code = get_results(th_config_local->consumer_job_ring_id,
-                                    JOB_RING_POLL_UNLIMITED,
-                                    &packets_received,
-                                    &th_config_local->core_cycles,
-                                    th_config_local->tid);
-                            assert(ret_code == 0);
-                            total_packets_received += packets_received;
-                            usleep(10);
-                        }
-                        else if(ret_code != SEC_SUCCESS)
-                        {
-                            test_printf("thread #%d:producer: sec_process_packet return error %d for PDCP context no %d \n",
+                        test_printf("thread #%d:producer: sec_process_packet return error %d for PDCP context no %d \n",
                                     th_config_local->tid, ret_code, pdcp_context->id);
-                            assert(0);
-                        }
-                        else
-                        {
-                            break;
-                        }
-                    }while(1);
-
-                    ctx_packet_count++;
+                        assert(0);
+                    }
                 }
-                total_packets_sent += ctx_packet_count;
+                ctx_packet_count++;
             }
+            total_packets_sent += ctx_packet_count;
         }
-#ifdef TEST_TYPE_INFINITE_LOOP
-        usleep(1000);
     }
-#endif
 
     test_printf("thread #%d: polling until all contexts are deleted\n", th_config_local->tid);
+
+    gettimeofday(&end_time, NULL);
+
+    printf("Sent %d packets.\nStart Time %d sec %d usec."
+            "End Time %d sec %d usec.\n",
+            total_packets_sent, (int)start_time.tv_sec, (int)start_time.tv_usec,
+            (int)end_time.tv_sec, (int)end_time.tv_usec);
+
+    pps = 1000000 * total_packets_sent / (((int)end_time.tv_sec - (int)start_time.tv_sec)*1000000 + 
+                                           (int)end_time.tv_usec - (int)start_time.tv_usec);
+    printf("Packets / second : %d\n", pps);
+    printf("Bits / second : %d\n",pps*user_param.payload_size*8);
+    printf("Got JR full %d times\n",retries);
+            
+    // signal to main thread that the work is done
+    th_config_local->work_done = 1;
+/*
+    test_printf("thread #%d: work done, polling until exit signal is received\n", th_config_local->tid);
+
+    // continue polling on the consumer job ring, in case the other worker thread
+    // did not finish its work
+    while(th_config_local->should_exit == 0)
+    {
+        ret_code = get_results(th_config_local->consumer_job_ring_id,
+        		          JOB_RING_POLL_UNLIMITED,
+        		          &packets_received,
+                          &th_config_local->core_cycles);
+        assert(ret_code == 0);
+    }
+*/
+    test_printf("thread #%d: exit\n", th_config_local->tid);
+    pthread_exit(NULL);
+}
+
+static void* pdcp_rx_thread_routine(void* config)
+{
+    thread_config_t *th_config_local = NULL;
+    int ret_code = 0;
+    unsigned int packets_received = 0;
+    //int total_no_of_contexts_deleted = 0;
+    //int no_of_contexts_deleted = 0;
+    unsigned int total_packets_to_receive = 0;
+    unsigned int total_packets_received = 0;
+    struct timeval start_time;
+    struct timeval end_time;
+    uint32_t pps;
+
+    th_config_local = (thread_config_t*)config;
+    assert(th_config_local != NULL);
+
+    test_printf("thread #%d:producer: start work, no of contexts to be created/deleted %d\n",
+            th_config_local->tid, th_config_local->no_of_pdcp_contexts_to_test);
+
+    total_packets_to_receive = PDCP_CONTEXT_NUMBER * th_config_local->rx_packets_per_ctx;
+
+    gettimeofday(&start_time, NULL);
 
     // Poll the JR until no more packets are retrieved
     do
     {
         // poll the consumer JR
         ret_code = get_results(th_config_local->consumer_job_ring_id,
-        		          JOB_RING_POLL_UNLIMITED,
-        		          &packets_received,
-                          &th_config_local->core_cycles,
-                          th_config_local->tid);
+                               JOB_RING_POLL_UNLIMITED,
+                               &packets_received,
+                               &th_config_local->core_cycles,
+                               th_config_local->tid);
         assert(ret_code == 0);
         total_packets_received += packets_received;
         /*printf("thread #%d: pkts to receive %d. packets received %d\n",
                 th_config_local->tid,
                 total_packets_to_receive, total_packets_received);
         */
-        usleep(100);
-
+        //usleep(25);
     }while(total_packets_to_receive != total_packets_received);
-    /*printf("thread #%d: pkts to receive %d. packets received %d\n",
-            th_config_local->tid,
-           total_packets_to_receive, total_packets_received);
-    */
+
+    test_printf("thread #%d: polling until all contexts are deleted\n", th_config_local->tid);
 
     gettimeofday(&end_time, NULL);
 
-    printf("Sent %d packets. Received %d packets.\nStart Time %d sec %d usec."
+    printf("Received %d packets.\nStart Time %d sec %d usec."
             "End Time %d sec %d usec.\n",
-            total_packets_sent, total_packets_received, (int)start_time.tv_sec, (int)start_time.tv_usec,
+            total_packets_received, (int)start_time.tv_sec, (int)start_time.tv_usec,
             (int)end_time.tv_sec, (int)end_time.tv_usec);
 
+    pps = 1000000 * total_packets_received / (((int)end_time.tv_sec - (int)start_time.tv_sec)*1000000 + 
+                                           (int)end_time.tv_usec - (int)start_time.tv_usec);
+    printf("Packets / second : %d\n", pps);
+    printf("Bits / second : %d\n",pps*user_param.payload_size*8);
+            
     // signal to main thread that the work is done
     th_config_local->work_done = 1;
 /*
@@ -1528,95 +993,48 @@ static int setup_sec_environment(void)
     int i = 0;
     int ret_code = 0;
     time_t seconds;
+    int num_of_buffers;
 
     /* Get value from system clock and use it for seed generation  */
     time(&seconds);
     srand((unsigned int) seconds);
 
-    memset (pdcp_dl_contexts, 0, sizeof(pdcp_context_t) * PDCP_CONTEXT_NUMBER);
-    memset (pdcp_ul_contexts, 0, sizeof(pdcp_context_t) * PDCP_CONTEXT_NUMBER);
+    memset (pdcp_contexts, 0, sizeof(pdcp_context_t) * PDCP_CONTEXT_NUMBER);
 
-#ifdef SEC_HW_VERSION_3_1
-    // map the physical memory
-    ret_code = dma_mem_setup();
-    if (ret_code != 0)
-    {
-        test_printf("dma_mem_setup failed with ret = %d\n", ret_code);
-        return 1;
-    }
-    test_printf("dma_mem_setup: mapped virtual mem 0x%x to physical mem 0x%x\n", __dma_virt, DMA_MEM_PHYS);
-#endif
-
+    num_of_buffers = (user_param.direction == SCENARIO_DIR_UPLINK) ? 
+                        PACKET_NUMBER_PER_CTX_UL : PACKET_NUMBER_PER_CTX_DL;
     for (i = 0; i < PDCP_CONTEXT_NUMBER; i++)
     {
-        pdcp_dl_contexts[i].id = i;
+        pdcp_contexts[i].id = i;
         // allocate input buffers from memory zone DMA-accessible to SEC engine
-        pdcp_dl_contexts[i].input_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT,
-                                                             sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_DL);
+        pdcp_contexts[i].input_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT,
+                                                             sizeof(buffer_t) * num_of_buffers);
         // allocate output buffers from memory zone DMA-accessible to SEC engine
-        pdcp_dl_contexts[i].output_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT,
-                                                              sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_DL);
+        pdcp_contexts[i].output_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT,
+                                                              sizeof(buffer_t) * num_of_buffers);
 
-        pdcp_dl_contexts[i].pdcp_ctx_cfg_data.cipher_key = dma_mem_memalign(BUFFER_ALIGNEMENT,
+        pdcp_contexts[i].pdcp_ctx_cfg_data.cipher_key = dma_mem_memalign(BUFFER_ALIGNEMENT,
                                                                             MAX_KEY_LENGTH);
-        pdcp_dl_contexts[i].pdcp_ctx_cfg_data.integrity_key = dma_mem_memalign(BUFFER_ALIGNEMENT,
+        pdcp_contexts[i].pdcp_ctx_cfg_data.integrity_key = dma_mem_memalign(BUFFER_ALIGNEMENT,
                                                                                MAX_KEY_LENGTH);
-        pdcp_dl_contexts[i].no_of_buffers_to_process = PACKET_NUMBER_PER_CTX_DL;
+        pdcp_contexts[i].no_of_buffers_to_process = num_of_buffers;
 
-        // validate that the address of the freshly allocated buffer falls in the second memory are.
-        assert (pdcp_dl_contexts[i].input_buffers != NULL);
-        assert (pdcp_dl_contexts[i].output_buffers != NULL);
-        assert (pdcp_dl_contexts[i].pdcp_ctx_cfg_data.cipher_key != NULL);
-        assert (pdcp_dl_contexts[i].pdcp_ctx_cfg_data.integrity_key != NULL);
+        assert (pdcp_contexts[i].input_buffers != NULL);
+        assert (pdcp_contexts[i].output_buffers != NULL);
+        assert (pdcp_contexts[i].pdcp_ctx_cfg_data.cipher_key != NULL);
+        assert (pdcp_contexts[i].pdcp_ctx_cfg_data.integrity_key != NULL);
 
-#ifdef SEC_HW_VERSION_3_1
-        assert((dma_addr_t)pdcp_dl_contexts[i].input_buffers >= DMA_MEM_SEC_DRIVER);
-        assert((dma_addr_t)pdcp_dl_contexts[i].output_buffers >= DMA_MEM_SEC_DRIVER);
-        assert((dma_addr_t)pdcp_dl_contexts[i].pdcp_ctx_cfg_data.cipher_key >= DMA_MEM_SEC_DRIVER);
-        assert((dma_addr_t)pdcp_dl_contexts[i].pdcp_ctx_cfg_data.integrity_key >= DMA_MEM_SEC_DRIVER);
-#endif // SEC_HW_VERSION_3_1
-        memset(pdcp_dl_contexts[i].input_buffers, 0, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_DL);
-        memset(pdcp_dl_contexts[i].output_buffers, 0, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_DL);
 
-        pdcp_ul_contexts[i].id = i + PDCP_CONTEXT_NUMBER;
-        // allocate input buffers from memory zone DMA-accessible to SEC engine
-        pdcp_ul_contexts[i].input_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT,
-                                                             sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_UL);
-        // validate that the address of the freshly allocated buffer falls in the second memory are.
-        pdcp_ul_contexts[i].output_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT,
-                                                              sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_UL);
+        memset(pdcp_contexts[i].input_buffers, 0, sizeof(buffer_t) * num_of_buffers);
+        memset(pdcp_contexts[i].output_buffers, 0, sizeof(buffer_t) * num_of_buffers);
 
-        pdcp_ul_contexts[i].pdcp_ctx_cfg_data.cipher_key = dma_mem_memalign(BUFFER_ALIGNEMENT,
-                                                                            MAX_KEY_LENGTH);
-        pdcp_ul_contexts[i].pdcp_ctx_cfg_data.integrity_key = dma_mem_memalign(BUFFER_ALIGNEMENT,
-                                                                               MAX_KEY_LENGTH);
-        pdcp_ul_contexts[i].no_of_buffers_to_process = PACKET_NUMBER_PER_CTX_UL;
-
-        // validate that the address of the freshly allocated buffer falls in the second memory are.
-        assert (pdcp_ul_contexts[i].input_buffers != NULL);
-        assert (pdcp_ul_contexts[i].output_buffers != NULL);
-        assert (pdcp_ul_contexts[i].pdcp_ctx_cfg_data.cipher_key != NULL);
-        assert (pdcp_ul_contexts[i].pdcp_ctx_cfg_data.integrity_key != NULL);
-#ifdef SEC_HW_VERSION_3_1
-        assert((dma_addr_t)pdcp_ul_contexts[i].input_buffers >= DMA_MEM_SEC_DRIVER);
-        assert((dma_addr_t)pdcp_ul_contexts[i].output_buffers >= DMA_MEM_SEC_DRIVER);
-        assert((dma_addr_t)pdcp_ul_contexts[i].pdcp_ctx_cfg_data.cipher_key >= DMA_MEM_SEC_DRIVER);
-        assert((dma_addr_t)pdcp_ul_contexts[i].pdcp_ctx_cfg_data.integrity_key >= DMA_MEM_SEC_DRIVER);
-#endif // SEC_HW_VERSION_3_1
-
-        memset(pdcp_ul_contexts[i].input_buffers, 0, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_UL);
-        memset(pdcp_ul_contexts[i].output_buffers, 0, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_UL);
     }
 
     //////////////////////////////////////////////////////////////////////////////
     // 1. Initialize SEC user space driver requesting #JOB_RING_NUMBER Job Rings
     //////////////////////////////////////////////////////////////////////////////
-#ifdef SEC_HW_VERSION_3_1
-    sec_config_data.memory_area = (void*)__dma_virt;
-#else
     sec_config_data.memory_area = dma_mem_memalign(CACHE_LINE_SIZE,SEC_DMA_MEMORY_SIZE);
     sec_config_data.sec_drv_vtop = test_vtop;
-#endif
     assert(sec_config_data.memory_area != NULL);
 
     // Fill SEC driver configuration data
@@ -1648,7 +1066,8 @@ static int setup_sec_environment(void)
 static int cleanup_sec_environment(void)
 {
     int ret_code = 0, i;
-
+    int num_of_buffers = (user_param.direction == SCENARIO_DIR_UPLINK) ? 
+                        PACKET_NUMBER_PER_CTX_UL : PACKET_NUMBER_PER_CTX_DL;
     // release SEC driver
     ret_code = sec_release();
     if (ret_code != 0)
@@ -1660,52 +1079,234 @@ static int cleanup_sec_environment(void)
 
     for (i = 0; i < PDCP_CONTEXT_NUMBER; i++)
     {
-        dma_mem_free(pdcp_dl_contexts[i].input_buffers, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_DL);
-        dma_mem_free(pdcp_dl_contexts[i].output_buffers, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_DL);
+        dma_mem_free(pdcp_contexts[i].input_buffers, sizeof(buffer_t) * num_of_buffers);
+        dma_mem_free(pdcp_contexts[i].output_buffers, sizeof(buffer_t) * num_of_buffers);
 
-        dma_mem_free(pdcp_dl_contexts[i].pdcp_ctx_cfg_data.cipher_key, MAX_KEY_LENGTH);
-        dma_mem_free(pdcp_dl_contexts[i].pdcp_ctx_cfg_data.integrity_key, MAX_KEY_LENGTH);
-
-        dma_mem_free(pdcp_ul_contexts[i].input_buffers, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_UL);
-        dma_mem_free(pdcp_ul_contexts[i].output_buffers, sizeof(buffer_t) * PACKET_NUMBER_PER_CTX_UL);
-
-        dma_mem_free(pdcp_ul_contexts[i].pdcp_ctx_cfg_data.cipher_key, MAX_KEY_LENGTH);
-        dma_mem_free(pdcp_ul_contexts[i].pdcp_ctx_cfg_data.integrity_key, MAX_KEY_LENGTH);
-
+        dma_mem_free(pdcp_contexts[i].pdcp_ctx_cfg_data.cipher_key, MAX_KEY_LENGTH);
+        dma_mem_free(pdcp_contexts[i].pdcp_ctx_cfg_data.integrity_key, MAX_KEY_LENGTH);
     }
-#ifdef SEC_HW_VERSION_3_1
-    // unmap the physical memory
-    dma_mem_release();
-#else // SEC_HW_VERSION_3_1
+
     dma_mem_free(sec_config_data.memory_area,SEC_DMA_MEMORY_SIZE);
-#endif // SEC_HW_VERSION_3_1
+
 
     return 0;
 }
 /*==================================================================================================
                                         GLOBAL FUNCTIONS
 =================================================================================================*/
+void set_test_params()
+{
+    switch( user_param.scenario )
+    {
+        case SCENARIO_PDCP_CPLANE_AES_CTR_AES_CMAC:
+            test_cipher_algorithm = SEC_ALG_AES;
+            test_integrity_algorithm = SEC_ALG_AES;
+            test_user_plane = PDCP_CONTROL_PLANE;
+            test_sn_size = SEC_PDCP_SN_SIZE_5;
+            pdcp_header_len = 2;
+            break;
 
-int main(void)
+        case SCENARIO_PDCP_CPLANE_SNOW_F8_SNOW_F9:
+            test_cipher_algorithm = SEC_ALG_SNOW;
+            test_integrity_algorithm = SEC_ALG_SNOW;
+            test_user_plane = PDCP_CONTROL_PLANE;
+            test_sn_size = SEC_PDCP_SN_SIZE_5;
+            pdcp_header_len = 2;
+            break;
+
+        case SCENARIO_PDCP_CPLANE_AES_CTR_NULL:
+            test_cipher_algorithm = SEC_ALG_AES;
+            test_integrity_algorithm = SEC_ALG_NULL;
+            test_user_plane = PDCP_CONTROL_PLANE;
+            test_sn_size = SEC_PDCP_SN_SIZE_5;
+            pdcp_header_len = 2;
+            break;
+
+        case SCENARIO_PDCP_CPLANE_SNOW_F8_NULL:
+            test_cipher_algorithm = SEC_ALG_SNOW;
+            test_integrity_algorithm = SEC_ALG_NULL;
+            test_user_plane = PDCP_CONTROL_PLANE;
+            test_sn_size = SEC_PDCP_SN_SIZE_5;
+            pdcp_header_len = 2;
+            break;
+
+        case SCENARIO_PDCP_CPLANE_NULL_AES_CMAC:
+            test_cipher_algorithm = SEC_ALG_NULL;
+            test_integrity_algorithm  = SEC_ALG_AES;
+            test_user_plane = PDCP_CONTROL_PLANE;
+            test_sn_size = SEC_PDCP_SN_SIZE_5;
+            pdcp_header_len = 2;
+            break;
+        
+        case SCENARIO_PDCP_CPLANE_NULL_SNOW_F9:
+            test_cipher_algorithm = SEC_ALG_NULL;
+            test_integrity_algorithm = SEC_ALG_SNOW;
+            test_user_plane = PDCP_CONTROL_PLANE;
+            test_sn_size = SEC_PDCP_SN_SIZE_5;
+            pdcp_header_len = 2;
+            break;
+
+        case SCENARIO_PDCP_CPLANE_NULL_NULL:
+            test_cipher_algorithm = SEC_ALG_NULL;
+            test_integrity_algorithm = SEC_ALG_NULL;
+            test_user_plane = PDCP_CONTROL_PLANE;
+            test_sn_size = SEC_PDCP_SN_SIZE_5;
+            pdcp_header_len = 2;
+            break;
+
+        case SCENARIO_PDCP_UPLANE_SHORT_SN_AES_CTR:
+            test_cipher_algorithm = SEC_ALG_AES;
+            test_integrity_algorithm = SEC_ALG_NULL;
+            test_user_plane = PDCP_DATA_PLANE;
+            test_sn_size = SEC_PDCP_SN_SIZE_7;
+            pdcp_header_len = 1;
+            break;
+
+        case SCENARIO_PDCP_UPLANE_LONG_SN_AES_CTR:
+            test_cipher_algorithm = SEC_ALG_AES;
+            test_integrity_algorithm = SEC_ALG_NULL;
+            test_user_plane = PDCP_DATA_PLANE;
+            test_sn_size = SEC_PDCP_SN_SIZE_12;
+            pdcp_header_len = 2;
+            break;
+
+        case SCENARIO_PDCP_UPLANE_SHORT_SN_SNOW_F8:
+            test_cipher_algorithm = SEC_ALG_SNOW;
+            test_integrity_algorithm = SEC_ALG_NULL;
+            test_user_plane = PDCP_DATA_PLANE;
+            test_sn_size = SEC_PDCP_SN_SIZE_7;
+            pdcp_header_len = 1;
+            break;
+        
+        case SCENARIO_PDCP_UPLANE_LONG_SN_SNOW_F8:
+            test_cipher_algorithm = SEC_ALG_SNOW;
+            test_integrity_algorithm = SEC_ALG_NULL;
+            test_user_plane = PDCP_DATA_PLANE;
+            test_sn_size = SEC_PDCP_SN_SIZE_12;
+            pdcp_header_len = 1;
+            break;
+
+        case SCENARIO_PDCP_UPLANE_SHORT_SN_NULL:
+            test_cipher_algorithm = SEC_ALG_NULL;
+            test_integrity_algorithm = SEC_ALG_NULL;
+            test_user_plane = PDCP_DATA_PLANE;
+            test_sn_size = SEC_PDCP_SN_SIZE_7;
+            pdcp_header_len = 1;
+            break;
+            
+        
+        case SCENARIO_PDCP_UPLANE_LONG_SN_NULL:
+            test_cipher_algorithm  = SEC_ALG_NULL;
+            test_integrity_algorithm  = SEC_ALG_NULL;
+            test_user_plane = PDCP_DATA_PLANE;
+            test_sn_size = SEC_PDCP_SN_SIZE_12;
+            pdcp_header_len = 2;
+            
+            break;
+        case SCENARIO_PDCP_INVALID:
+        default:
+            /* Just to keep the compiler happy */
+            break;
+    }
+}
+
+int validate_params()
+{
+    if( user_param.scenario >= SCENARIO_PDCP_INVALID)
+    {
+        fprintf(stderr,"Invalid scenario %d\n",user_param.scenario);
+        return -1;
+    }
+
+    if ( user_param.direction >= SCENARIO_DIR_INVALID)
+    {
+        fprintf(stderr,"Invalid direction: %d\n",user_param.direction);
+        return -2;
+    }
+
+    if( user_param.max_frags > SEC_MAX_SG_TBL_ENTRIES )
+    {
+        fprintf(stderr,"Invalid number of fragments %d "
+                        "(must be less than %d)\n",
+                        user_param.max_frags,
+                        SEC_MAX_SG_TBL_ENTRIES);
+        return -3;
+    }
+    
+    if( user_param.payload_size >= PDCP_BUFFER_SIZE)
+    {
+        fprintf(stderr,"Invalid payload len %d "
+                       "(must be less than %d)",
+                        user_param.payload_size,
+                        PDCP_BUFFER_SIZE);
+        return -4;
+    }
+
+    return 0;
+}
+int main(int argc, char ** argv)
 {
     int ret_code = 0;
+    int c;
     cpu_set_t cpu_mask; /* processor 0 */
 
     /* bind process to processor 0 */
     CPU_ZERO(&cpu_mask);
-    CPU_SET(1, &cpu_mask);
+    CPU_SET(0, &cpu_mask);
     if(sched_setaffinity(0, sizeof(cpu_mask), &cpu_mask) < 0)
     {
         perror("sched_setaffinity");
     }
-#ifdef SEC_HW_VERSION_4_4
+    
+    while ((c = getopt (argc, argv, "s:d:f:p:hl")) != -1)
+    {
+        switch (c)
+        {
+            case 's':
+                user_param.scenario = atoi(optarg);
+                printf("Selected scenario %d\n",user_param.scenario);
+                break;
+            case 'd':
+                user_param.direction = atoi(optarg);
+                printf("Selected direction %d\n",user_param.direction);
+                break;
+            case 'f':
+                user_param.max_frags = atoi(optarg);
+                printf("Max # of fragments %d\n",user_param.max_frags);
+                break;
+            case 'p':
+                user_param.payload_size = atoi(optarg);
+                printf("Payload size %d\n",user_param.payload_size);
+                break;
+            case 'h':
+                printf("Usage: %s \n"
+                       "-s scenario\n"
+                       "-d direction\n"
+                       "-f max number of scatter gather frags\n"
+                       "-p <max payload size>\n",argv[0]);
+                return 0;
+            default:
+                abort();
+        }
+    }
+    
+    if( validate_params() )
+    {
+        fprintf(stderr,"Error in options! Please see %s -h\n",argv[0]);
+        return 0;
+    }
+    else
+    {
+        set_test_params();
+    }
+
     // Init FSL USMMGR
     g_usmmgr = fsl_usmmgr_init();
     if(g_usmmgr == NULL){
-        printf("ERROR on fsl_usmmgr_init");
+        perror("ERROR on fsl_usmmgr_init :");
         return -1;
     }
-#endif // SEC_HW_VERSION_4_4
+
     /////////////////////////////////////////////////////////////////////
     // 1. Initialize SEC environment
     /////////////////////////////////////////////////////////////////////
@@ -1715,6 +1316,11 @@ int main(void)
         test_printf("setup_sec_environment returned error\n");
         return 1;
     }
+
+    /////////////////////////////////////////////////////////////////////
+    // 1. Randomize input and keys
+    /////////////////////////////////////////////////////////////////////
+    generate_test_vectors();
 
     /////////////////////////////////////////////////////////////////////
     // 2. Start worker threads

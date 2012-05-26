@@ -45,31 +45,6 @@
 // START OF CONFIGURATION SECTION
 /******************************************************************************/
 
-//////////////////////////////////////////////////////////////////////////
-// !!!!!!!!!!!!!!!!!       IMPORTANT !!!!!!!!!!!!!!!!
-//Select one and only one algorithm at a time, from below
-//////////////////////////////////////////////////////////////////////////
-
-// Ciphering
-#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F8_ENC
-// Deciphering
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F8_DEC
-
-// Authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F9_ENC
-// Authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_SNOW_F9_DEC
-
-// Ciphering
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CTR_ENC
-// Deciphering
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CTR_DEC
-
-// Authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CMAC_ENC
-// Authentication
-//#define PDCP_TEST_SCENARIO  PDCP_TEST_AES_CMAC_DEC
-
 //////////////////////////////////////////////////////////////////////////////
 // Number of PDCP contexts options
 //////////////////////////////////////////////////////////////////////////////
@@ -90,26 +65,19 @@
 //////////////////////////////////////////////////////////////////////////////
 
 // Disable test application logging
-//#define test_printf(format, ...)
+#define test_printf(format, ...)
 // Disable test application logging for clock cycle measurements
-//#define profile_printf(format, ...)
+#define profile_printf(format, ...)
 
 // Enable test application logging
-#define test_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__)
+// #define test_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__)
 // Enable test application logging for clock cycle measurements
-#define profile_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__)
+// #define profile_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__)
 
-// The length of a single SG fragment
-#define SCATTER_GATHER_BUF_SIZE     128
 
-// Enable this to have Scatter Gather fragments of random lengths
-// The buffer sizes will be 1..SCATTER_GATHER_BUF_SIZE
-#define RANDOM_SCATTER_GATHER_BUFFER_SIZE
 
-// Enable this to have 512 pkts with more than 1 SG fragment and 
-// next 512 pkts with one SG fragment, repeated over the number
-// of packets to send
-//#define ONE_SCATTER_GATHER_FRAGMENT_MIX
+// Enable random number of Scatter Gather fragments
+#define RANDOM_SCATTER_GATHER_FRAGMENTS
 
 /******************************************************************************/
 // END OF CONFIGURATION SECTION
@@ -119,23 +87,40 @@
 /*==============================================================================
                                     ENUMS
 ==============================================================================*/
+enum scenario_direction_e{
+    SCENARIO_DIR_UPLINK = 0,
+    SCENARIO_DIR_DOWNLINK,
+    SCENARIO_DIR_INVALID
+};
 
+enum scenario_type_e{
+    SCENARIO_PDCP_CPLANE_AES_CTR_AES_CMAC = 0,
+    SCENARIO_PDCP_CPLANE_SNOW_F8_SNOW_F9,
+    SCENARIO_PDCP_CPLANE_AES_CTR_NULL,
+    SCENARIO_PDCP_CPLANE_SNOW_F8_NULL,
+    SCENARIO_PDCP_CPLANE_NULL_AES_CMAC,
+    SCENARIO_PDCP_CPLANE_NULL_SNOW_F9,
+    SCENARIO_PDCP_CPLANE_NULL_NULL,
+    SCENARIO_PDCP_UPLANE_SHORT_SN_AES_CTR,
+    SCENARIO_PDCP_UPLANE_LONG_SN_AES_CTR,
+    SCENARIO_PDCP_UPLANE_SHORT_SN_SNOW_F8,
+    SCENARIO_PDCP_UPLANE_LONG_SN_SNOW_F8,
+    SCENARIO_PDCP_UPLANE_SHORT_SN_NULL,
+    SCENARIO_PDCP_UPLANE_LONG_SN_NULL,
+    SCENARIO_PDCP_INVALID
+};
 /*==============================================================================
                          STRUCTURES AND OTHER TYPEDEFS
 ==============================================================================*/
-
+typedef struct user_params_s{
+    uint8_t max_frags;
+    uint16_t payload_size;
+    enum scenario_type_e scenario;
+    enum scenario_direction_e direction;
+}users_params_t;
 /*==============================================================================
                                  CONSTANTS
 ==============================================================================*/
-/** List of algorithms supported by this test */
-#define PDCP_TEST_SNOW_F8_ENC   0
-#define PDCP_TEST_SNOW_F8_DEC   1
-#define PDCP_TEST_SNOW_F9_ENC   2
-#define PDCP_TEST_SNOW_F9_DEC   3
-#define PDCP_TEST_AES_CTR_ENC   4
-#define PDCP_TEST_AES_CTR_DEC   5
-#define PDCP_TEST_AES_CMAC_ENC  6
-#define PDCP_TEST_AES_CMAC_DEC  7
 
 /*==============================================================================
                          GLOBAL VARIABLE DECLARATIONS
