@@ -1722,8 +1722,8 @@ sec_return_code_t sec_process_packet_hfn_ov(sec_context_handle_t sec_ctx_handle,
 #endif // SEC_HW_VERSION_4_4
     SEC_ASSERT(in_packet->length != 0, SEC_INVALID_INPUT_PARAM, "in_packet->length is 0");
     SEC_ASSERT(out_packet->length != 0, SEC_INVALID_INPUT_PARAM, "out_packet->length is 0");
-    SEC_ASSERT(in_packet->offset < in_packet->length, SEC_INVALID_INPUT_PARAM, "in_packet->offset is greater than in_packet->length");
-    SEC_ASSERT(out_packet->offset < out_packet->length, SEC_INVALID_INPUT_PARAM, "out_packet->offset is greater than out_packet->length");
+    SEC_ASSERT((in_packet->offset & 0x1FFFFFFF) == in_packet->offset, SEC_INVALID_INPUT_PARAM, "in_packet->offset is invalid")
+    SEC_ASSERT((out_packet->offset & 0x1FFFFFFF) == out_packet->offset, SEC_INVALID_INPUT_PARAM, "out_packet->offset is invalid")
 #warning "There should be a validation for maximum packet length"
 #ifdef SEC_HW_VERSION_4_4
 #if (SEC_ENABLE_SCATTER_GATHER == ON)
@@ -1972,8 +1972,8 @@ sec_return_code_t sec_get_stats(sec_job_ring_handle_t job_ring_handle,sec_statis
     sec_stat->hw_consumer_index = job_ring->hw_cidx;
     sec_stat->hw_producer_index = job_ring->hw_pidx;
     sec_stat->slots_available = SEC_JOB_RING_NUMBER_OF_ITEMS(SEC_JOB_RING_SIZE,
-                                                             job_ring->hw_cidx,
-                                                             job_ring->hw_pidx);
+                                    job_ring->hw_cidx,
+                                    job_ring->hw_pidx);
     sec_stat->jobs_waiting_dequeue = GET_JR_REG(ORSFR,job_ring);
 
     return SEC_SUCCESS;

@@ -960,7 +960,7 @@ static void test_sec_process_packet_invalid_params(void)
 
     // Invalid offset
     tmp_num = in_packet->offset;
-    in_packet->offset = in_packet->length;
+    in_packet->offset = 0xFFFFFFFF;
 
     ret = sec_process_packet(ctx_handle, in_packet, out_packet, (ua_context_handle_t)&ua_data[packet_idx]);
     assert_equal_with_message(ret, SEC_INVALID_INPUT_PARAM,
@@ -975,7 +975,7 @@ static void test_sec_process_packet_invalid_params(void)
 
     // Invalid offset
     tmp_num = out_packet->offset;
-    out_packet->offset = out_packet->length;
+    out_packet->offset = 0xFFFFFFFF;
 
     ret = sec_process_packet(ctx_handle, in_packet, out_packet, (ua_context_handle_t)&ua_data[packet_idx]);
     assert_equal_with_message(ret, SEC_INVALID_INPUT_PARAM,
@@ -1138,7 +1138,7 @@ static void test_sec_process_packet_invalid_params(void)
 
     in_sg_packet[0] = *in_packet;
     tmp_num = in_packet->offset;
-    in_packet->offset = in_packet->length;
+    in_packet->offset = 0xFFFFFFFF;
     in_sg_packet[1] = *in_packet;
     in_packet->offset = tmp_num;
 
@@ -1161,7 +1161,7 @@ static void test_sec_process_packet_invalid_params(void)
 
     out_sg_packet[0] = *out_packet;
     tmp_num = out_packet->offset;
-    out_packet->offset = out_packet->length;
+    out_packet->offset = 0xFFFFFFFF;
     out_sg_packet[1] = *out_packet;
     out_packet->offset = tmp_num;
 

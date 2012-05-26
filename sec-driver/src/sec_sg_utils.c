@@ -124,11 +124,8 @@ sec_return_code_t   build_sg_context(sec_sg_context_t *sg_ctx,
                    i, total_length);
         SEC_ASSERT( packet[i].address != 0, SEC_INVALID_INPUT_PARAM,
                     "Fragment %d pointer is NULL",i);
-
-        SEC_ASSERT(packet[i].offset < packet[i].length, SEC_INVALID_INPUT_PARAM,
-                   "Fragment %i offset (%d) is larger than its length (%d)",
-                   i,packet[i].offset, packet[i].length);
-
+        SEC_ASSERT( (packet[i].offset & 0x1FFFFFFF) == packet[i].offset, SEC_INVALID_INPUT_PARAM, 
+                    "Fragment %d offset is invalid : %d",i,packet[i].offset)
         SG_TBL_SET_ADDRESS(sg_tbl[i],packet[i].address);
         SG_TBL_SET_OFFSET(sg_tbl[i], packet[i].offset);
         SG_TBL_SET_LENGTH(sg_tbl[i],packet[i].length);
