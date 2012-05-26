@@ -815,8 +815,11 @@ static void* pdcp_tx_thread_routine(void* config)
                 {
                     in_packet[idx].address = last_address +
                                            last_len;
+#ifdef RANDOM_SCATTER_GATHER_FRAGMENTS
                     in_packet[idx].length = 1 + (rand() % (rem_len - 1));
-
+#else
+                    in_packet[idx].length = rem_len / num_fragments;
+#endif
                     last_address = in_packet[idx].address;
                     last_len = in_packet[idx].length;
 
