@@ -1974,7 +1974,7 @@ sec_return_code_t sec_get_stats(sec_job_ring_handle_t job_ring_handle,sec_statis
     sec_stat->slots_available = SEC_JOB_RING_NUMBER_OF_ITEMS(SEC_JOB_RING_SIZE,
                                     job_ring->hw_cidx,
                                     job_ring->hw_pidx);
-    sec_stat->jobs_waiting_dequeue = GET_JR_REG(ORSFR,job_ring);
+    sec_stat->jobs_waiting_dequeue = SEC_JOB_RING_SIZE - sec_stat->slots_available;
 
     return SEC_SUCCESS;
 }

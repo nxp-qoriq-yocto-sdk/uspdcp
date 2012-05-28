@@ -236,7 +236,7 @@ typedef struct sec_statistics_s
                                          the next job will be enqueued. */
     uint32_t slots_available;       /**< Slots available for jobs to be enqueued. */
     uint32_t jobs_waiting_dequeue;  /**< Number of jobs available to be dequeued by the UA. */
-    uint32_t reserved[10];          /**< Reserved for future additions. */
+    uint32_t reserved[2];           /**< Reserved for future additions. */
 }sec_statistics_t;
 
 #else // SEC_HW_VERSION_4_4
