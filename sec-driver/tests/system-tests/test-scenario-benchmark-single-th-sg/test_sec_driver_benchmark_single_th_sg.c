@@ -86,6 +86,7 @@ extern "C" {
 #define DOWNLINK_PPS        19000
 
 // The maximum number of packets processed on UL in a second.
+// #define UPLINK_PPS          10000
 #define UPLINK_PPS          10000
 
 // The maximum number of packets processed per DL context
@@ -830,7 +831,7 @@ static void* pdcp_thread_routine(void* config)
                                 in_packet[idx].address);
                 }
                 
-                // get_stats(th_config_local->producer_job_ring_id);
+                get_stats(th_config_local->producer_job_ring_id);
 try_again:
                 start_cycles = GET_ATBL();
                 ret_code = sec_process_packet(pdcp_context->sec_ctx,

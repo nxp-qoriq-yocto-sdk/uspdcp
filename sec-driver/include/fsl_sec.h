@@ -226,17 +226,13 @@ typedef struct sec_packet_s
 
 typedef struct sec_statistics_s
 {
-    uint32_t sw_consumer_index;     /**< Index in the software Job Ring from where
+    uint32_t consumer_index;        /**< Index in the Job Ring from where
                                          the next job will be dequeued. */
-    uint32_t sw_producer_index;     /**< Index in the software Job Ring where
-                                         the next job will be enqueued. */
-    uint32_t hw_consumer_index;     /**< Index in the hardware Job Ring from where
-                                         the next job will be dequeued. */
-    uint32_t hw_producer_index;     /**< Index in the hardware Job Ring where
+    uint32_t producer_index;        /**< Index in the Job Ring where
                                          the next job will be enqueued. */
     uint32_t slots_available;       /**< Slots available for jobs to be enqueued. */
     uint32_t jobs_waiting_dequeue;  /**< Number of jobs available to be dequeued by the UA. */
-    uint32_t reserved[10];          /**< Reserved for future additions. */
+    uint32_t reserved[2];           /**< Reserved for future additions. */
 }sec_statistics_t;
 
 #else // SEC_HW_VERSION_4_4

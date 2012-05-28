@@ -1967,14 +1967,12 @@ sec_return_code_t sec_get_stats(sec_job_ring_handle_t job_ring_handle,sec_statis
                "Job ring with id %d is currently resetting. "
                "Can use it again after reset is over(when sec_poll function/s return)", job_ring->jr_id);
     
-    sec_stat->sw_consumer_index = job_ring->cidx;
-    sec_stat->sw_producer_index = job_ring->pidx;
-    sec_stat->hw_consumer_index = job_ring->hw_cidx;
-    sec_stat->hw_producer_index = job_ring->hw_pidx;
+    sec_stat->consumer_index = job_ring->cidx;
+    sec_stat->producer_index = job_ring->pidx;
     sec_stat->slots_available = SEC_JOB_RING_NUMBER_OF_ITEMS(SEC_JOB_RING_SIZE,
                                     job_ring->hw_cidx,
                                     job_ring->hw_pidx);
-    sec_stat->jobs_waiting_dequeue = GET_JR_REG(ORSFR,job_ring);
+    sec_stat->jobs_waiting_dequeue = SEC_JOB_RING_SIZE - sec_stat->slots_available;
 
     return SEC_SUCCESS;
 }

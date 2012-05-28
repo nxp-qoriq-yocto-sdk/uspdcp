@@ -579,7 +579,7 @@ static void get_stats(uint8_t job_ring_id)
     test_printf("CAAM JR consumer index (index from where the next job will be dequeued): %d",stats.hw_consumer_index);
     test_printf("CAAM JR producer index (index where the next job will be enqueued): %d",stats.hw_producer_index);
     test_printf("Input slots available: %d",stats.slots_available);
-    test_printf("Jobs waiting to be dequeued by UA: %d",stats.jobs_waiting_dequeue);
+
 }
 
 static int start_sec_worker_threads(void)
@@ -844,7 +844,7 @@ static void* pdcp_tx_thread_routine(void* config)
                                 in_packet[idx].address);
                 }
                 
-                // get_stats(th_config_local->producer_job_ring_id);
+                get_stats(th_config_local->producer_job_ring_id);
 try_again:
                 start_cycles = GET_ATBL();
                 ret_code = sec_process_packet(pdcp_context->sec_ctx,
