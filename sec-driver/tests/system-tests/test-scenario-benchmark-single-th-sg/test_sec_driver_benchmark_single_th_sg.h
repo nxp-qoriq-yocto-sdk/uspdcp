@@ -1,4 +1,4 @@
-/* Copyright (c) 2011 Freescale Semiconductor, Inc.
+/* Copyright (c) 2012 Freescale Semiconductor, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -55,11 +55,6 @@
 #define PDCP_CONTEXT_NUMBER         (UE_NUMBER * DRB_PER_UE)
 //#define PDCP_CONTEXT_NUMBER         1
 
-
-// Enable this if test should run in infinite loop.
-// Use this for measurements of CPU load with <top> tool from Linux.
-//#define TEST_TYPE_INFINITE_LOOP
-
 //////////////////////////////////////////////////////////////////////////////
 // Logging Options
 //////////////////////////////////////////////////////////////////////////////
@@ -72,12 +67,8 @@
 // Enable test application logging
 // #define test_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__)
 // Enable test application logging for clock cycle measurements
-// #define profile_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__)
+//#define profile_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__)
 
-
-
-// Enable random number of Scatter Gather fragments
-//#define RANDOM_SCATTER_GATHER_FRAGMENTS
 
 /******************************************************************************/
 // END OF CONFIGURATION SECTION
@@ -87,36 +78,20 @@
 /*==============================================================================
                                     ENUMS
 ==============================================================================*/
-enum scenario_direction_e{
-    SCENARIO_DIR_UPLINK = 0,
-    SCENARIO_DIR_DOWNLINK,
-    SCENARIO_DIR_INVALID
-};
 
-enum scenario_type_e{
-    SCENARIO_PDCP_CPLANE_AES_CTR_AES_CMAC = 0,
-    SCENARIO_PDCP_CPLANE_SNOW_F8_SNOW_F9,
-    SCENARIO_PDCP_CPLANE_AES_CTR_NULL,
-    SCENARIO_PDCP_CPLANE_SNOW_F8_NULL,
-    SCENARIO_PDCP_CPLANE_NULL_AES_CMAC,
-    SCENARIO_PDCP_CPLANE_NULL_SNOW_F9,
-    SCENARIO_PDCP_CPLANE_NULL_NULL,
-    SCENARIO_PDCP_UPLANE_SHORT_SN_AES_CTR,
-    SCENARIO_PDCP_UPLANE_LONG_SN_AES_CTR,
-    SCENARIO_PDCP_UPLANE_SHORT_SN_SNOW_F8,
-    SCENARIO_PDCP_UPLANE_LONG_SN_SNOW_F8,
-    SCENARIO_PDCP_UPLANE_SHORT_SN_NULL,
-    SCENARIO_PDCP_UPLANE_LONG_SN_NULL,
-    SCENARIO_PDCP_INVALID
-};
 /*==============================================================================
                          STRUCTURES AND OTHER TYPEDEFS
 ==============================================================================*/
 typedef struct user_params_s{
+    char int_alg[PATH_MAX];
+    char enc_alg[PATH_MAX];
+    char direction[PATH_MAX];
+    char hdr_len[PATH_MAX];
+    char test_type[PATH_MAX];
     uint8_t max_frags;
     uint16_t payload_size;
-    enum scenario_type_e scenario;
-    enum scenario_direction_e direction;
+    uint32_t num_iter;
+    uint32_t opt_mask;
 }users_params_t;
 /*==============================================================================
                                  CONSTANTS

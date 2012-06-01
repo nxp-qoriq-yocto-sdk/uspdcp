@@ -1,4 +1,4 @@
-/* Copyright (c) 2011 Freescale Semiconductor, Inc.
+/* Copyright (c) 2012 Freescale Semiconductor, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,6 +45,7 @@ extern "C" {
 #include <unistd.h>
 #include <sched.h>
 #include <sys/time.h>
+#include <signal.h>
 
 #include "fsl_sec.h"
 // for mfspr related functions
@@ -67,6 +68,12 @@ extern "C" {
 // Number of SEC JRs used by this test application
 // @note: Currently this test application supports only 2 JRs (not less, not more)
 #define JOB_RING_NUMBER              2
+
+/* Job ring to use for DL */
+#define JOB_RING_ID_FOR_DL          0
+
+/* Job ring to use for UL */
+#define JOB_RING_ID_FOR_UL          1
 
 // Number of worker threads created by this application
 // One thread is producer on JR 1 and consumer on JR 2 (PDCP UL processing).
@@ -112,8 +119,12 @@ extern "C" {
 
 // Alignment in bytes for input/output packets allocated from DMA-memory zone
 #define BUFFER_ALIGNEMENT 32
-// Max length in bytes for a confidentiality /integrity key.
-#define MAX_KEY_LENGTH    32
+
+/* Maximium length, in bytes, for a confidentiality /integrity key */
+#define MAX_KEY_LENGTH    16
+
+/* Value used for conversion seconds->microseconds */
+#define MEGA              1000000
 
 // Read ATBL(Alternate Time Base Lower) Register
 #define GET_ATBL() \
@@ -124,6 +135,35 @@ extern "C" {
 
 /** Size in bytes of a cacheline. */
 #define CACHE_LINE_SIZE  32
+
+/** Length of the MAC_I */
+#define ICV_LEN 4
+
+/** Parameters for parsing user options */
+#define TYPE_SET      0x01
+#define INT_ALG_SET   0x02
+#define ENC_ALG_SET   0x04
+#define DIR_SET       0x08
+#define HDR_LEN_SET   0x10
+#define MAX_FRAGS_SET 0x20
+#define PAYLOAD_SET   0x40
+#define NUM_ITER_SET  0x80
+
+#define CPLANE_VALID_MASK       (TYPE_SET |           \
+                                INT_ALG_SET |         \
+                                ENC_ALG_SET |         \
+                                DIR_SET |             \
+                                MAX_FRAGS_SET |       \
+                                PAYLOAD_SET |         \
+                                NUM_ITER_SET)
+
+#define UPLANE_VALID_MASK       (TYPE_SET |           \
+                                ENC_ALG_SET |         \
+                                DIR_SET |             \
+                                HDR_LEN_SET |         \
+                                MAX_FRAGS_SET |       \
+                                PAYLOAD_SET |         \
+                                NUM_ITER_SET)
 
 // For keeping the code relatively the same between HW versions
 #define dma_mem_memalign    test_memalign
@@ -142,18 +182,27 @@ typedef enum pdcp_context_usage_e
     PDCP_CONTEXT_CAN_BE_DELETED
 }pdcp_context_usage_t;
 
-typedef enum pdcp_buffer_usage_e
+typedef enum packet_usage_e
 {
-    PDCP_BUFFER_FREE = 0,
-    PDCP_BUFFER_USED
-}pdcp_buffer_usage_t;
+    PACKET_FREE = 0,
+    PACKET_USED
+}packet_usage_t;
+
+/* Forward declaration */
+struct pdcp_context_s;
+
+typedef struct test_packet_s
+{
+    int id;                     /**< Buffer index to be used when put'ing input buffers */
+    packet_usage_t usage;       /**< Resource usage: free or in-use */
+    struct pdcp_context_s *ctx; /**< Context to which this packet belongs */
+    sec_packet_t *in_packet;    /**< Input packet array */
+    sec_packet_t *out_packet;   /**< Output packet array */
+}test_packet_t;
 
 typedef struct buffer_s
 {
-    volatile pdcp_buffer_usage_t usage;
     uint8_t buffer[PDCP_BUFFER_SIZE];
-    uint32_t offset;
-    sec_packet_t pdcp_packet;
 }buffer_t;
 
 typedef struct pdcp_context_s
@@ -168,13 +217,14 @@ typedef struct pdcp_context_s
     sec_job_ring_handle_t job_ring;
       // unique context id, needed just for tracking purposes in this test application
     int id;
-    // the id of the thread that handles this context
-    int thread_id;
-
-    // Pool of input and output buffers used for processing the
-    // packets associated to this context. (used an array for simplicity)
+    /* Pool of input and output packets used for processing the
+     * packets associated to this context. (used an array for simplicity)
+     */
+    test_packet_t *test_packets;
     buffer_t *input_buffers;
     buffer_t *output_buffers;
+    sec_packet_t *pdcp_in_packets;
+    sec_packet_t *pdcp_out_packets;
     int no_of_used_buffers; // index incremented by Producer Thread
     int no_of_buffers_processed; // index increment by Consumer Thread
     int no_of_buffers_to_process; // configurable random number of packets to be processed per context
@@ -184,24 +234,17 @@ typedef struct thread_config_s
 {
     // id of the thread
     int tid;
-    // the JR ID for which this thread is a producer
-    int producer_job_ring_id;
-    // the JR ID for which this thread is a consumer
-    int consumer_job_ring_id;
-    // the pool of contexts for this thread
-    pdcp_context_t * pdcp_contexts;
-    // no of used contexts from the pool
-    int * no_of_used_pdcp_contexts;
-    // a random number of pdcp contexts to create/delete at runtime
-    int no_of_pdcp_contexts_to_test;
+    /* No. of used DL contexts from the pool */
+    int * no_of_used_pdcp_dl_contexts;
+    /* No. of used UL contexts from the pool */
+    int * no_of_used_pdcp_ul_contexts;
     // default to zero. set to 1 by worker thread to notify
     // main thread that it completed its work
     volatile int work_done;
     // default to zero. set to 1 when main thread instructs the worked thread to exit.
     volatile int should_exit;
-    uint32_t core_cycles;
-    uint32_t rx_packets_per_ctx;
-    uint32_t tx_packets_per_ctx;
+    uint32_t process_cycles;
+    uint32_t poll_cycles;
 }thread_config_t;
 /*==================================================================================================
                                      GLOBAL VARIABLES
@@ -213,21 +256,21 @@ static sec_config_t sec_config_data;
 static const sec_job_ring_descriptor_t *job_ring_descriptors = NULL;
 
 // UA pool of PDCP contexts for UL and DL.
-// For simplicity, use an array of contexts and a mutex to synchronize access to it.
-static pdcp_context_t pdcp_contexts[PDCP_CONTEXT_NUMBER];
-static int no_of_used_pdcp_contexts = 0;
+static pdcp_context_t pdcp_ul_contexts[PDCP_CONTEXT_NUMBER];
+static int no_of_used_pdcp_ul_contexts = 0;
 
-// There are 2 threads: one thread handles PDCP UL and one thread handles PDCP DL
-// One thread is producer on JR1 and consumer on JR2. The other thread is producer on JR2
-// and consumer on JR1.
+static pdcp_context_t pdcp_dl_contexts[PDCP_CONTEXT_NUMBER];
+static int no_of_used_pdcp_dl_contexts = 0;
+
+/* One thread manages two JR: one for DL, one for UL */
 static thread_config_t th_config[THREADS_NUMBER];
 static pthread_t threads[THREADS_NUMBER];
 
 // FSL Userspace Memory Manager structure
 fsl_usmmgr_t g_usmmgr;
 
-static users_params_t user_param = { 0, 0, SCENARIO_PDCP_INVALID, SCENARIO_DIR_INVALID};
-
+/* Parameters given by the user and copied when parsing the cmd. line */
+static users_params_t user_param;
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
 ==================================================================================================*/
@@ -263,7 +306,7 @@ static int stop_sec_worker_threads(void);
  * - while (exit signal is received from UA)
  *    -> poll the consumer JR
  *
- * @see the description of pdcp_ready_packet_handler() for details on what the worker
+ * @see the description of done_cbk() for details on what the worker
  * thread does in the callback.
  *
  * The main thread waits for both worker threads to finish their work (meaning creating
@@ -273,24 +316,26 @@ static int stop_sec_worker_threads(void);
  *  */
 static void* pdcp_thread_routine(void*);
 
+
 /** @brief Poll a specified SEC job ring for results */
 static int get_results(uint8_t job_ring, int limit, uint32_t *out_packets, uint32_t *core_cycles, uint8_t tid);
 
-/** @brief Get statistics for a specified SEC job ring */
-static void get_stats(uint8_t job_ring);
-
 /** @brief Get a free PDCP context from the pool of UA contexts.
  *  For simplicity, the pool is implemented as an array. */
-static int get_free_pdcp_context(pdcp_context_t * pdcp_contexts,
+static int get_pdcp_context(pdcp_context_t * pdcp_contexts,
                                  int * no_of_used_pdcp_contexts,
                                  pdcp_context_t ** pdcp_context);
+
+static int put_pdcp_context(pdcp_context_t * pdcp_context,
+                            int * no_of_used_pdcp_contexts);
 
 /** @brief Get free PDCP input and output buffers from the pool of buffers
  *  of a certain context.
  *  For simplicity, the pool is implemented as an array and is defined per context. */
-static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
-                                sec_packet_t **in_packet,
-                                sec_packet_t **out_packet);
+static int get_test_packet(pdcp_context_t * pdcp_context,
+                           test_packet_t **test_packet);
+
+static int put_test_packet(test_packet_t *test_packet);
 
 /** @brief Callback called by SEC driver for each response.
  *
@@ -308,11 +353,11 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
  *
  * ua_ctx_handle -> is the address of the UA PDCP context associated to the response notified.
  */
-static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
-                                      const sec_packet_t *out_packet,
-                                      ua_context_handle_t ua_ctx_handle,
-                                      uint32_t status,
-                                      uint32_t error_info);
+static int done_cbk (const sec_packet_t *in_packet,
+                     const sec_packet_t *out_packet,
+                     ua_context_handle_t ua_ctx_handle,
+                     uint32_t status,
+                     uint32_t error_info);
 
 /* Returns the physical address corresponding to the virtual
  * address passed as a parameter.
@@ -339,25 +384,31 @@ static void test_free(void *ptr, size_t size);
 /*==================================================================================================
                                       LOCAL VARIABLES
 ==================================================================================================*/
-static uint8_t test_cipher_algorithm;
+static uint32_t test_cipher_algorithm = -1;
 
-static uint8_t test_integrity_algorithm;
+static uint32_t test_integrity_algorithm = -1;
 
-static uint8_t test_user_plane;
+static uint32_t test_user_plane = -1;
 
-static uint8_t test_sn_size;
+static uint32_t test_sn_size = -1;
 
-static uint8_t pdcp_header_len;
+static uint32_t test_direction = -1;
+
+static uint32_t test_pdcp_hdr_len = -1;
 
 static uint8_t test_crypto_key[MAX_KEY_LENGTH];
-#define test_crypto_key_len     sizeof(test_crypto_key)
 
 static uint8_t test_auth_key[MAX_KEY_LENGTH];
-#define test_auth_key_len     sizeof(test_auth_key)
 
-static uint8_t test_pdcp_hdr[MAX_PDCP_HEADER_LEN];
+/* Plaintext random data to be used for DL direction. */
+static uint8_t test_data_encap[PDCP_BUFFER_SIZE];
 
-static uint8_t test_data_in[PDCP_BUFFER_SIZE];
+/* Encapsulated data to be used for UL direction.
+ * It is genrated by the main thread by encapsulating the
+ * generated random plaintext data and then using it for
+ * testing the decapsulation.
+ */
+static uint8_t test_data_decap[PDCP_BUFFER_SIZE];
 
 static uint8_t test_bearer;
 
@@ -365,10 +416,17 @@ static uint32_t test_hfn;
 
 static uint32_t test_hfn_threshold;
 
+static uint32_t test_payload_size_encap = -1;
+
+static uint32_t test_payload_size_decap = -1;
+
+static uint32_t test_num_frags = -1;
+
+static uint32_t test_num_iter;
+
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
-#ifdef SEC_HW_VERSION_4_4
 static void * test_memalign(size_t align, size_t size)
 {
     int ret;
@@ -379,6 +437,7 @@ static void * test_memalign(size_t align, size_t size)
         printf("FSL USMMGR memalign failed: %d",ret);
         return NULL;
     }
+    // fprintf(stderr,"ALLOC:\n0x%08x, 0x%08x, %d\n",r.vaddr, r.phys_addr, size);
     return r.vaddr;
 }
 
@@ -387,44 +446,329 @@ static void test_free(void *ptr, size_t size)
    range_t r;
 
    r.vaddr = ptr;
+   // fprintf(stderr,"FREE:\n0x%08x, 0x%08x, %d\n",r.vaddr, test_vtop(r.vaddr), size);
    fsl_usmmgr_free(&r,g_usmmgr);
 }
-#endif // SEC_HW_VERSION_4_4
+
+static void populate_pdcp_context(pdcp_context_t *pdcp_context,
+                                  sec_out_cbk callback,
+                                  uint32_t proto_dir)
+{
+    test_packet_t *pkt;
+    sec_packet_t *in_packet;
+    sec_packet_t *out_packet;
+    uint32_t fragment_length;
+    uint32_t address;
+    uint32_t rem_len;
+    int pkt_idx;
+
+    assert(pdcp_context != NULL);
+    assert(callback != NULL);
+    assert(proto_dir == PDCP_ENCAPSULATION ||
+           proto_dir == PDCP_DECAPSULATION);
+
+    /* Set callback as per caller preference */
+    pdcp_context->pdcp_ctx_cfg_data.notify_packet = callback;
+    
+    /* Set protcol direction (ENCAP or DECAP) as per caller preferences */
+    pdcp_context->pdcp_ctx_cfg_data.protocol_direction = proto_dir;
+
+    pdcp_context->pdcp_ctx_cfg_data.bearer = test_bearer;
+    pdcp_context->pdcp_ctx_cfg_data.packet_direction = test_direction;
+
+    pdcp_context->pdcp_ctx_cfg_data.hfn = test_hfn;
+    pdcp_context->pdcp_ctx_cfg_data.hfn_threshold = test_hfn_threshold;
+
+    /* Enable HFN value override */
+    pdcp_context->pdcp_ctx_cfg_data.hfn_ov_en = 1;
+
+    pdcp_context->pdcp_ctx_cfg_data.user_plane = test_user_plane;
+    /* Configure confidentiality algorithm. This is valid for both Control
+     * and Data Plane
+     */
+    pdcp_context->pdcp_ctx_cfg_data.cipher_algorithm = test_cipher_algorithm;
+    pdcp_context->pdcp_ctx_cfg_data.cipher_key_len = MAX_KEY_LENGTH;
+    memcpy(pdcp_context->pdcp_ctx_cfg_data.cipher_key,
+           test_crypto_key,
+           MAX_KEY_LENGTH);
+    
+    if (test_user_plane == PDCP_CONTROL_PLANE)
+    {
+        /* Configure integrity algorithm */
+        pdcp_context->pdcp_ctx_cfg_data.integrity_algorithm = 
+            test_integrity_algorithm;
+        pdcp_context->pdcp_ctx_cfg_data.integrity_key_len = MAX_KEY_LENGTH;
+        memcpy(pdcp_context->pdcp_ctx_cfg_data.integrity_key,
+               test_auth_key,
+               MAX_KEY_LENGTH);
+        /* Set SN size to the only possible value */
+        pdcp_context->pdcp_ctx_cfg_data.sn_size = SEC_PDCP_SN_SIZE_5;
+    }
+    else
+    {
+        /* Configure SN size */
+        pdcp_context->pdcp_ctx_cfg_data.sn_size = test_sn_size;
+    }
+    
+    /* Populate input data */
+    for(pkt_idx = 0; pkt_idx < pdcp_context->no_of_buffers_to_process; pkt_idx++)
+    {
+        pkt = &pdcp_context->test_packets[pkt_idx];
+        
+        /* Set context information for packet */
+        pkt->id = pkt_idx;
+        pkt->usage = PACKET_FREE;
+        pkt->ctx = pdcp_context;
+
+        in_packet = pkt->in_packet;
+        out_packet = pkt->out_packet;
+
+        if (proto_dir == PDCP_ENCAPSULATION)
+        {
+            /* Populate the input buffer */
+            memcpy(pdcp_context->input_buffers[pkt_idx].buffer,
+                   test_data_encap,
+                   test_payload_size_encap);
+
+            // fragment_length = test_payload_size_encap / (test_num_frags - (test_payload_size_encap % test_num_frags ? 1 : 0));
+            fragment_length = test_payload_size_encap / test_num_frags +
+                              (test_payload_size_encap % test_num_frags ? 1 : 0);
+
+            /* First fragment is special */
+            in_packet->address = test_vtop(pdcp_context->input_buffers[pkt_idx].buffer);
+            in_packet->length = fragment_length;
+            in_packet->total_length = test_payload_size_encap;
+            in_packet->num_fragments = test_num_frags  - 1; /* Exclude first */
+
+            /* Store needed values for populating the next fragments */
+            address = in_packet->address + in_packet->length;
+            rem_len = in_packet->total_length - in_packet->length;
+            
+            while(rem_len != 0)
+            {
+                /* Next packet */
+                in_packet++;
+
+                /* Set address to last address + last length */
+                in_packet->address = address;
+                in_packet->offset = 0;
+
+                if (rem_len >= fragment_length)
+                {
+                    in_packet->length = fragment_length;
+                }
+                else
+                {
+                    in_packet->length = rem_len;
+                }
+
+                address += in_packet->length;
+                rem_len -= in_packet->length;
+            }
+            
+            /* Set offset for first fragment */
+            /* Revert to the beginning of the array */
+            in_packet = pkt->in_packet;
+            in_packet->offset = TEST_OFFSET;
+            in_packet->address -= TEST_OFFSET;
+            
+            /* Populate the output packet */
+            out_packet->address = test_vtop(pdcp_context->output_buffers[pkt_idx].buffer) - TEST_OFFSET;
+            out_packet->offset = TEST_OFFSET;
+            out_packet->num_fragments = 0;
+
+            out_packet->total_length = out_packet->length =
+                test_payload_size_decap;
+        }
+        else
+        {
+            /* Populate the input buffer */
+            memcpy(pdcp_context->input_buffers[pkt_idx].buffer,
+                   test_data_decap,
+                   test_payload_size_decap);
+            
+            out_packet->total_length = test_payload_size_encap;
+
+            // fragment_length = test_payload_size_encap / (test_num_frags - (test_payload_size_encap % test_num_frags ? 1 : 0));
+            fragment_length = test_payload_size_encap / test_num_frags +
+                              (test_payload_size_encap % test_num_frags ? 1 : 0);
+            
+            /* First fragment is special */
+            out_packet->address = test_vtop(pdcp_context->output_buffers[pkt_idx].buffer);
+            out_packet->length = fragment_length;
+            out_packet->num_fragments = test_num_frags - 1;
+
+            /* Store needed values for populating the next fragments */
+            address = out_packet->address + out_packet->length;
+            rem_len = out_packet->total_length - out_packet->length;
+            
+            while(rem_len != 0)
+            {
+                /* Next packet */
+                out_packet++;
+
+                /* Set address to last address + last length */
+                out_packet->address = address;
+                out_packet->offset = 0;
+
+                if (rem_len >= fragment_length)
+                {
+                    out_packet->length = fragment_length;
+                }
+                else
+                {
+                    out_packet->length = rem_len;
+                }
+
+                address += out_packet->length;
+                rem_len -= out_packet->length;
+            }
+            
+            /* Set offset for first fragment */
+            /* Revert to the beginning of the array */
+            out_packet = pkt->out_packet;
+            out_packet->offset = TEST_OFFSET;
+            out_packet->address -= TEST_OFFSET;
+            
+            /* Populate the input packet */
+            in_packet->address = test_vtop(pdcp_context->input_buffers[pkt_idx].buffer) - TEST_OFFSET;
+            in_packet->offset = TEST_OFFSET;
+            in_packet->num_fragments = 0;
+            in_packet->length = in_packet->total_length =
+                test_payload_size_decap;
+        }
+    }
+}
 
 static void generate_test_vectors()
 {
     int i = 0;
 
-    for (i = 0; i < pdcp_header_len; i++ )
+    for(i = 0; i < test_payload_size_encap; i++)
     {
-        test_pdcp_hdr[i] = rand();
-    }
-
-    for(i = 0; i < user_param.payload_size; i++ )
-    {
-        test_data_in[i] = rand();
+        test_data_encap[i] = rand() & 0xFF;
     }
 
     for( i = 0; i < MAX_KEY_LENGTH; i++ )
     {
-        test_crypto_key[i] = rand();
-        test_auth_key[i] = rand();
+        test_crypto_key[i] = rand() & 0xFF;
+        test_auth_key[i] = rand() & 0xFF;
     }
 
-    test_bearer = rand();
+    test_bearer = rand() &0x1F;
 
-    test_hfn = rand();
+    if(test_user_plane == PDCP_CONTROL_PLANE)
+    {
+        test_hfn = rand() & 0x07FFFFFF;
+    }
+    else
+    {
+        /* Data Plane */
+        if(test_pdcp_hdr_len == 1)
+        {
+            /* Short SN */
+            test_hfn = rand() & 0x01FFFFFF;
+        }
+        else
+        {
+            /* Long SN */
+            test_hfn = rand() & 0x000FFFFF;
+        }
+    }
 
     test_hfn_threshold = test_hfn + 1; /* Threshold reach indication will be
                                           ignored on poll */
+
 }
 
-static int get_free_pdcp_context(pdcp_context_t * pdcp_contexts_pool,
-                                 int * used_contexts,
-                                 pdcp_context_t ** pdcp_context)
+static int test_vector_encap_done(const sec_packet_t *in_packet,
+                                  const sec_packet_t *out_packet,
+                                  ua_context_handle_t ua_ctx_handle,
+                                  uint32_t status,
+                                  uint32_t error_info)
+{
+    uint8_t *vaddr = test_ptov(out_packet->address + out_packet->offset);
+
+    /* Copy the data to be used for UL direction */
+    memcpy(test_data_decap,
+           vaddr,
+           out_packet->length);
+
+    put_test_packet((test_packet_t*)ua_ctx_handle);
+
+    return SEC_RETURN_SUCCESS;
+}
+
+static void populate_pdcp_contexts()
+{
+    test_packet_t *temp_pkt;
+    pdcp_context_t *temp_ctx;
+    sec_out_cbk tmp_cbk;
+    uint32_t packets_out = 0;
+    uint32_t ret_code;
+    int i;
+    
+    /* First, populate DL contexts. */
+    for (i = 0; i < PDCP_CONTEXT_NUMBER; i++)
+    {
+        populate_pdcp_context(&pdcp_dl_contexts[i],
+                              done_cbk,
+                              PDCP_ENCAPSULATION);
+    }
+
+    /* Create a PDCP context for creating the vector to be used for UL direction */
+    ret_code = get_pdcp_context(&pdcp_dl_contexts[0],
+                                &no_of_used_pdcp_dl_contexts,
+                                &temp_ctx);
+    assert(ret_code == 0);
+
+    /* Modify callback */
+    tmp_cbk = temp_ctx->pdcp_ctx_cfg_data.notify_packet;
+    temp_ctx->pdcp_ctx_cfg_data.notify_packet = &test_vector_encap_done;
+
+    /* Create a SEC context in SEC driver on JR0 */
+    ret_code = sec_create_pdcp_context(job_ring_descriptors[0].job_ring_handle,
+                                       &temp_ctx->pdcp_ctx_cfg_data,
+                                       &temp_ctx->sec_ctx);
+    assert(ret_code == SEC_SUCCESS);
+
+    /* Get packets to be used for input and output */
+    ret_code = get_test_packet(temp_ctx,
+                               &temp_pkt);
+    assert(ret_code == 0);
+    
+    ret_code = sec_process_packet_hfn_ov(temp_ctx->sec_ctx,
+                                         temp_pkt->in_packet,
+                                         temp_pkt->out_packet,
+                                         test_hfn,
+                                         (ua_context_handle_t)temp_pkt);
+    assert(ret_code == SEC_SUCCESS);
+    usleep(1000);
+    
+    ret_code = sec_poll_job_ring(job_ring_descriptors[0].job_ring_handle,
+                            SEC_JOB_RING_SIZE  - 1,
+                            &packets_out);
+    assert(ret_code == SEC_SUCCESS);
+    
+    /* Revert the change and put the PDCP context */
+    temp_ctx->pdcp_ctx_cfg_data.notify_packet = tmp_cbk;
+    put_pdcp_context(temp_ctx,
+                     &no_of_used_pdcp_dl_contexts);
+    
+    /* Now the UL data should be ready */
+    for (i = 0; i < PDCP_CONTEXT_NUMBER; i++)
+    {
+        populate_pdcp_context(&pdcp_ul_contexts[i],
+                              done_cbk,
+                              PDCP_DECAPSULATION);
+    }
+}
+
+static int get_pdcp_context(pdcp_context_t * pdcp_contexts_pool,
+                            int * used_contexts,
+                            pdcp_context_t ** pdcp_context)
 {
     int i = 0;
-    int found = 0;
 
     assert(pdcp_context != NULL);
     assert(pdcp_contexts_pool != NULL);
@@ -445,95 +789,79 @@ static int get_free_pdcp_context(pdcp_context_t * pdcp_contexts_pool,
 
             (*used_contexts)++;
 
-            found = 1;
-            break;
+            // return the context chosen
+            *pdcp_context = &(pdcp_contexts_pool[i]);
+            
+            return 0;
         }
     }
-    assert(found == 1);
+    
+    /* No context available in the pool */
+    return 1;
+}
 
-    // return the context chosen
-    *pdcp_context = &(pdcp_contexts_pool[i]);
-
+static int put_pdcp_context(pdcp_context_t *pdcp_context,
+                            int * used_contexts)
+{
+    assert(pdcp_context != NULL);
+    assert(used_contexts != NULL);
+    
+    pdcp_context->usage = PDCP_CONTEXT_FREE;
+    
+    (*used_contexts)--;
+    
     return 0;
 }
 
-static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
-                                sec_packet_t **in_packet,
-                                sec_packet_t **out_packet)
+static int get_test_packet(pdcp_context_t *pdcp_context,
+                           test_packet_t **test_packet)
 {
+    int i;
     assert(pdcp_context != NULL);
-    assert(in_packet != NULL);
-    assert(out_packet != NULL);
-
+    assert(test_packet != NULL);
 
     if (pdcp_context->no_of_used_buffers >= pdcp_context->no_of_buffers_to_process)
     {
-        // no free buffer available
+        /* No free packet available */
         return 1;
     }
 
-    assert(pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].usage == PDCP_BUFFER_FREE);
-    *in_packet = &(pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].pdcp_packet);
-
-    pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].usage = PDCP_BUFFER_USED;
-    (*in_packet)->address = test_vtop(&(pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].buffer[0]));
-
-    assert(pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].usage == PDCP_BUFFER_FREE);
-    *out_packet = &(pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].pdcp_packet);
-
-    pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].usage = PDCP_BUFFER_USED;
-    (*out_packet)->address = test_vtop(&(pdcp_context->output_buffers[pdcp_context->no_of_used_buffers].buffer[0]));
-
-    (*in_packet)->offset = TEST_OFFSET;
-
-    // copy PDCP header
-    //memcpy(test_ptov((*in_packet)->address) + (*in_packet)->offset, test_pdcp_hdr, sizeof(test_pdcp_hdr));
-    memcpy( &(pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].buffer[0]) +
-            TEST_OFFSET,
-            test_pdcp_hdr,
-            pdcp_header_len);
-
-    // copy input data
-    //memcpy(test_ptov((*in_packet)->address) + (*in_packet)->offset + PDCP_HEADER_LENGTH,
-    //       test_data_in,
-    //       sizeof(test_data_in));
-    memcpy( &(pdcp_context->input_buffers[pdcp_context->no_of_used_buffers].buffer[0]) +
-            TEST_OFFSET + pdcp_header_len,
-            test_data_in,
-            user_param.payload_size);
-
-
-    (*in_packet)->length = user_param.payload_size + pdcp_header_len;
-    assert((*in_packet)->length + TEST_OFFSET <= PDCP_BUFFER_SIZE);
-
-    (*out_packet)->length = user_param.payload_size + pdcp_header_len;
-    (*out_packet)->offset = 0x00;
-
-    if( pdcp_context->pdcp_ctx_cfg_data.user_plane == PDCP_CONTROL_PLANE )
+    for(i = 0; i < pdcp_context->no_of_buffers_to_process; i++)
     {
-        if( pdcp_context->pdcp_ctx_cfg_data.protocol_direction == PDCP_ENCAPSULATION )
+        if(pdcp_context->test_packets[i].usage == PACKET_FREE)
         {
-            (*out_packet)->length += 4;
-        }
-        else
-        {
-            (*out_packet)->length -= 4;
+            *test_packet = &pdcp_context->test_packets[i];
+            (*test_packet)->usage = PACKET_USED;
+            
+            pdcp_context->no_of_used_buffers++;
+
+            return 0;
         }
     }
 
-    assert((*out_packet)->length <= PDCP_BUFFER_SIZE);
+    return 1;
+}
 
-    pdcp_context->no_of_used_buffers++;
+static int put_test_packet(test_packet_t *test_packet)
+{
+    assert(test_packet != NULL);
+    assert(test_packet->ctx->test_packets[test_packet->id].usage == PACKET_USED);
+    
+    test_packet->ctx->test_packets[test_packet->id].usage = PACKET_FREE;
+
+    test_packet->ctx->no_of_used_buffers--;
 
     return 0;
 }
 
-static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
-                                      const sec_packet_t *out_packet,
-                                      ua_context_handle_t ua_ctx_handle,
-                                      uint32_t status,
-                                      uint32_t error_info)
+static int done_cbk(const sec_packet_t *in_packet,
+                    const sec_packet_t *out_packet,
+                    ua_context_handle_t ua_ctx_handle,
+                    uint32_t status,
+                    uint32_t error_info)
 {
+    put_test_packet((test_packet_t*)ua_ctx_handle);
+
     return SEC_RETURN_SUCCESS;
 }
 
@@ -549,36 +877,17 @@ static int get_results(uint8_t job_ring, int limit, uint32_t *packets_out, uint3
     ret_code = sec_poll_job_ring(job_ring_descriptors[job_ring].job_ring_handle, limit, packets_out);
     diff_cycles = (GET_ATBL() - start_cycles);
     *core_cycles += diff_cycles;
-    profile_printf("thread #%d:sec_poll_job_ring cycles = %d. pkts = %d", tid, diff_cycles, *packets_out);
+    profile_printf("thread #%d:sec_poll_job_ring cycles = %d. pkts = %d\n", tid, diff_cycles, *packets_out);
 
     if (ret_code != SEC_SUCCESS)
     {
         test_printf("sec_poll_job_ring::Error %d when polling for SEC results on Job Ring %d \n", ret_code, job_ring);
         return 1;
     }
-
-    usleep(10);
-
     // validate that number of packets notified does not exceed limit when limit is > 0.
     assert(!((limit > 0) && (*packets_out > limit)));
 
     return 0;
-}
-
-static void get_stats(uint8_t job_ring_id)
-{
-    sec_statistics_t stats;
-    int ret_code = 0;
-
-    ret_code = sec_get_stats(job_ring_descriptors[job_ring_id].job_ring_handle,&stats);
-    assert(ret_code == SEC_SUCCESS);
-
-    test_printf("JR consumer index (index from where the next job will be dequeued): %d",stats.sw_consumer_index);
-    test_printf("JR producer index (index where the next job will be enqueued): %d",stats.sw_producer_index);
-    test_printf("CAAM JR consumer index (index from where the next job will be dequeued): %d",stats.hw_consumer_index);
-    test_printf("CAAM JR producer index (index where the next job will be enqueued): %d",stats.hw_producer_index);
-    test_printf("Input slots available: %d",stats.slots_available);
-    test_printf("Jobs waiting to be dequeued by UA: %d",stats.jobs_waiting_dequeue);
 }
 
 static int start_sec_worker_threads(void)
@@ -589,21 +898,16 @@ static int start_sec_worker_threads(void)
     assert (JOB_RING_NUMBER == 2);
     assert (THREADS_NUMBER == 1);
 
-    // start PDCP UL thread
+    /* Configure PDCP thread  for both UL and DL */
     th_config[0].tid = 0;
-    // PDCP UL thread is consumer on JR ID 0 and producer on JR ID 1
-    th_config[0].consumer_job_ring_id = 0;
-    th_config[0].producer_job_ring_id = 1;
-    th_config[0].pdcp_contexts = &pdcp_contexts[0];
-    th_config[0].no_of_used_pdcp_contexts = &no_of_used_pdcp_contexts;
-    th_config[0].no_of_pdcp_contexts_to_test = PDCP_CONTEXT_NUMBER;
+
+    th_config[0].no_of_used_pdcp_ul_contexts = &no_of_used_pdcp_ul_contexts;
+    th_config[0].no_of_used_pdcp_dl_contexts = &no_of_used_pdcp_dl_contexts;
     th_config[0].work_done = 0;
     th_config[0].should_exit = 0;
-    th_config[0].core_cycles = 0;
-    th_config[0].tx_packets_per_ctx = (user_param.direction == SCENARIO_DIR_UPLINK) ?
-        PACKET_NUMBER_PER_CTX_UL : PACKET_NUMBER_PER_CTX_DL;
+    th_config[0].process_cycles = 0;
+    th_config[0].poll_cycles = 0;
     ret_code = pthread_create(&threads[0], NULL, &pdcp_thread_routine, (void*)&th_config[0]);
-    assert(ret_code == 0);
 
     return ret_code;
 }
@@ -618,29 +922,93 @@ static int stop_sec_worker_threads(void)
     assert (THREADS_NUMBER == 1);
 
     // wait until both worker threads finish their work
-    while (!(th_config[0].work_done == 1) )
+    while (!(th_config[0].work_done == 1))
     {
         sleep(1);
     }
     // tell the working threads that they can stop polling now and exit
     th_config[0].should_exit = 1;
-    
+
     // wait for the threads to exit
     for (i = 0; i < THREADS_NUMBER; i++)
     {
         ret_code = pthread_join(threads[i], NULL);
-        assert(ret_code == 0);
+        if( ret_code != 0)
+            return ret_code;
     }
-
-    // double check that indeed the threads finished their work
 
     test_printf("thread main: all worker threads are stopped\n");
-    for (i = 0; i < THREADS_NUMBER; i++)
+
+    return ret_code;
+}
+
+static void pdcp_thread_ctx_send_packets(int tid,
+                                         int jr_id,
+                                         pdcp_context_t *pdcp_context,
+                                         uint32_t *process_cycles,
+                                         uint32_t *poll_cycles,
+                                         uint32_t *packets_received,
+                                         uint32_t *packets_sent)
+{
+    int ret_code = 0;
+    unsigned int ctx_packet_count = 0;
+    uint32_t start_cycles = 0;
+    uint32_t diff_cycles = 0;
+
+    while(ctx_packet_count < PACKET_BURST_PER_CTX)
     {
-        profile_printf("thread #%d core cycles = %d\n", i, th_config[i].core_cycles);
+        test_packet_t *test_packet;
+
+        /* Get a free packet, If none, then break the loop */
+        if(get_test_packet(pdcp_context, &test_packet) != 0)
+        {
+            break;
+        }
+
+        /* If sec_process_packet returns JR_FULL, do some polling
+         * on the consumer JR until the producer JR has free entries 
+         */
+        do{
+            start_cycles = GET_ATBL();
+            ret_code = sec_process_packet_hfn_ov(pdcp_context->sec_ctx,
+                                                 test_packet->in_packet,
+                                                 test_packet->out_packet,
+                                                 test_hfn,
+                                                 (ua_context_handle_t)test_packet);
+
+            diff_cycles = (GET_ATBL() - start_cycles);
+            *process_cycles += diff_cycles;
+
+            profile_printf("ctx #%p:sec_process_packet cycles = %d\n",
+                    pdcp_context, diff_cycles);
+
+            if(ret_code == SEC_JR_IS_FULL)
+            {
+                /* Wait while the producer JR is empty, and in the mean time do some
+                 * polling on the consumer JR -> retrieve all available notifications.
+                 */
+                ret_code = get_results(jr_id,
+                                       JOB_RING_POLL_UNLIMITED,
+                                       packets_received,
+                                       poll_cycles,
+                                       tid);
+                assert(ret_code == 0);
+            }
+            else if(ret_code != SEC_SUCCESS)
+            {
+                test_printf("thread #%d:producer: sec_process_packet return error %d for PDCP context no %d \n",
+                        tid, ret_code, pdcp_context->id);
+                assert(0);
+            }
+            else
+            {
+                break;
+            }
+        }while(1);
+
+        ctx_packet_count++;
     }
-    
-    return 0;
+    *packets_sent = ctx_packet_count;
 }
 
 static void* pdcp_thread_routine(void* config)
@@ -648,23 +1016,34 @@ static void* pdcp_thread_routine(void* config)
     thread_config_t *th_config_local = NULL;
     int ret_code = 0;
     int i = 0;
-    pdcp_context_t *pdcp_context;
-    //int total_no_of_contexts_deleted = 0;
-    //int no_of_contexts_deleted = 0;
-    int total_no_of_contexts_created = 0;
-    unsigned int total_packets_to_send = 0;
-    unsigned int total_packets_to_receive = 0;
+    int iter;
     unsigned int packets_received = 0;
+    pdcp_context_t *pdcp_context;
+    unsigned int total_packets_to_send = 0;
     unsigned int total_packets_sent = 0;
+    unsigned int total_packets_to_receive = 0;
     unsigned int total_packets_received = 0;
-    unsigned int ctx_packet_count = 0;
+    
+    unsigned int total_dl_packets_sent = 0;
+    unsigned int total_dl_packets_to_send = 0;
+    
+    unsigned int total_ul_packets_sent = 0;
+    unsigned int total_ul_packets_to_send = 0;
+
+    unsigned int total_dl_packets_received = 0;
+    unsigned int total_ul_packets_received = 0;
+    
+    unsigned int ctx_packets_received = 0;
+    unsigned int ctx_packets_sent = 0;
+    
     struct timeval start_time;
     struct timeval end_time;
-    uint32_t start_cycles = 0;
-    uint32_t diff_cycles = 0;
-    uint32_t pps;
-    uint32_t retries = 0;
 
+    uint32_t send_bps_ul, receive_bps_ul, send_pps_ul, receive_pps_ul;
+    uint32_t send_bps_dl, receive_bps_dl, send_pps_dl, receive_pps_dl;
+
+    uint32_t time_us;
+    
     th_config_local = (thread_config_t*)config;
     assert(th_config_local != NULL);
 
@@ -675,255 +1054,211 @@ static void* pdcp_thread_routine(void* config)
     // 1. Create a number of PDCP contexts
     /////////////////////////////////////////////////////////////////////
 
-    // Create a number of configurable contexts and affine them to the producer JR, send a random
-    // number of packets per each context
-    while(total_no_of_contexts_created < th_config_local->no_of_pdcp_contexts_to_test)
+    /* Create a number of configurable contexts and affine them to the producer JR */
+    for(i = 0; i < PDCP_CONTEXT_NUMBER; i++)
     {
-        ret_code = get_free_pdcp_context(th_config_local->pdcp_contexts,
-                th_config_local->no_of_used_pdcp_contexts,
-                &pdcp_context);
+        /* Create DL context */
+        ret_code = get_pdcp_context(pdcp_dl_contexts,
+                                    th_config_local->no_of_used_pdcp_dl_contexts,
+                                    &pdcp_context);
         assert(ret_code == 0);
 
         test_printf("thread #%d:producer: create pdcp context %d\n", th_config_local->tid, pdcp_context->id);
-        pdcp_context->pdcp_ctx_cfg_data.notify_packet = &pdcp_ready_packet_handler;
-        pdcp_context->pdcp_ctx_cfg_data.sn_size = test_sn_size;
-        pdcp_context->pdcp_ctx_cfg_data.bearer = test_bearer;
-        pdcp_context->pdcp_ctx_cfg_data.user_plane = test_user_plane;
-        if( user_param.direction == SCENARIO_DIR_UPLINK )
-        {
-            pdcp_context->pdcp_ctx_cfg_data.packet_direction = PDCP_UPLINK;
-            pdcp_context->pdcp_ctx_cfg_data.protocol_direction = PDCP_DECAPSULATION;
-        }
-        else
-        {
-            pdcp_context->pdcp_ctx_cfg_data.packet_direction = PDCP_DOWNLINK;
-            pdcp_context->pdcp_ctx_cfg_data.protocol_direction = PDCP_ENCAPSULATION;
-        }
 
-        pdcp_context->pdcp_ctx_cfg_data.hfn = test_hfn;
-        pdcp_context->pdcp_ctx_cfg_data.hfn_threshold = test_hfn_threshold;
+        /* Affine the context to the proper JR */
+        ret_code = sec_create_pdcp_context(job_ring_descriptors[JOB_RING_ID_FOR_DL].job_ring_handle,
+                                           &pdcp_context->pdcp_ctx_cfg_data,
+                                           &pdcp_context->sec_ctx);
+        assert(ret_code == 0);
 
-        // configure confidentiality algorithm
-        pdcp_context->pdcp_ctx_cfg_data.cipher_algorithm = test_cipher_algorithm;
-        uint8_t* temp_crypto_key = test_crypto_key;
-        if(temp_crypto_key != NULL)
-        {
-            memcpy(pdcp_context->pdcp_ctx_cfg_data.cipher_key,
-                    temp_crypto_key,
-                    test_crypto_key_len);
-            pdcp_context->pdcp_ctx_cfg_data.cipher_key_len = test_crypto_key_len;
-        }
+        /* Create UL context */
+        ret_code = get_pdcp_context(pdcp_ul_contexts,
+                                    th_config_local->no_of_used_pdcp_ul_contexts,
+                                    &pdcp_context);
+        assert(ret_code == 0);
 
-        // configure integrity algorithm
-        pdcp_context->pdcp_ctx_cfg_data.integrity_algorithm = test_integrity_algorithm;
-        uint8_t* temp_auth_key = test_auth_key;
+        test_printf("thread #%d:producer: create pdcp context %d\n", th_config_local->tid, pdcp_context->id);
 
-        if(temp_auth_key != NULL)
-        {
-            memcpy(pdcp_context->pdcp_ctx_cfg_data.integrity_key,
-                    temp_auth_key,
-                    test_auth_key_len);
-            pdcp_context->pdcp_ctx_cfg_data.integrity_key_len = test_auth_key_len;
-        }
-
-        pdcp_context->thread_id = th_config_local->tid;
-
-        // create a SEC context in SEC driver
-        ret_code = sec_create_pdcp_context (job_ring_descriptors[th_config_local->producer_job_ring_id].job_ring_handle,
-                &pdcp_context->pdcp_ctx_cfg_data,
-                &pdcp_context->sec_ctx);
+        /* Affine the context to the proper JR */
+        ret_code = sec_create_pdcp_context(job_ring_descriptors[JOB_RING_ID_FOR_UL].job_ring_handle,
+                                           &pdcp_context->pdcp_ctx_cfg_data,
+                                           &pdcp_context->sec_ctx);
         if (ret_code != SEC_SUCCESS)
         {
             test_printf("thread #%d:producer: sec_create_pdcp_context return error %d for PDCP context no %d \n",
                     th_config_local->tid, ret_code, pdcp_context->id);
             assert(0);
         }
-
-        total_no_of_contexts_created ++;
-
-
     }
 
     /////////////////////////////////////////////////////////////////////
     // 2. Send a number of packets on each of the PDCP contexts
     /////////////////////////////////////////////////////////////////////
+    
+    total_dl_packets_to_send = PDCP_CONTEXT_NUMBER * PACKET_NUMBER_PER_CTX_DL;
+    total_ul_packets_to_send = PDCP_CONTEXT_NUMBER * PACKET_NUMBER_PER_CTX_UL;
+    total_packets_to_send = total_dl_packets_to_send + total_ul_packets_to_send;
+    
+    total_packets_to_receive = PDCP_CONTEXT_NUMBER * (PACKET_NUMBER_PER_CTX_DL + PACKET_NUMBER_PER_CTX_UL);
 
-    total_packets_to_send = PDCP_CONTEXT_NUMBER * th_config_local->tx_packets_per_ctx;
-    total_packets_to_receive = PDCP_CONTEXT_NUMBER * th_config_local->tx_packets_per_ctx;
-
-    gettimeofday(&start_time, NULL);
-    // Send a burst of packets for each context, until all the packets are sent to SEC
-
-
-    while(total_packets_to_send != total_packets_sent)
+    for(iter = 0; test_num_iter == 0 ? 1 : iter < test_num_iter; iter++)
     {
-        for(i = 0; i < PDCP_CONTEXT_NUMBER; i++)
+        total_dl_packets_received = 0;
+        total_dl_packets_sent = 0;
+
+        total_ul_packets_received = 0;
+        total_ul_packets_sent = 0;
+
+        total_packets_sent = 0;
+
+        th_config_local->poll_cycles = 0;
+        th_config_local->process_cycles = 0;
+
+        gettimeofday(&start_time, NULL);
+        
+        /* Send packets on each context, until all the packets are sent to SEC */
+        while(total_packets_to_send != total_packets_sent)
         {
-            pdcp_context = &th_config_local->pdcp_contexts[i];
-            ctx_packet_count = 0;
-
-            while(ctx_packet_count < PACKET_BURST_PER_CTX)
+            for(i = 0; i < PDCP_CONTEXT_NUMBER; i++)
             {
-                // for each context, send to SEC a fixed number of packets for processing
-                sec_packet_t *in_frag;
-                sec_packet_t *out_frag;
-
-                sec_packet_t in_packet[16];
-                sec_packet_t out_packet[16];
-
-                int num_fragments;
-                int last_len, rem_len = pdcp_header_len + user_param.payload_size;
-                uint32_t last_address;
-                int idx;
-
-                // Get a free buffer, If none, then break the loop
-                if(get_free_pdcp_buffer(pdcp_context, &in_frag, &out_frag) != 0)
+                while(total_dl_packets_sent != total_dl_packets_to_send)
                 {
+                
+                    ctx_packets_received = 0;
+                    ctx_packets_sent = 0;
+                    
+                    /* Send some packets on DL context */
+                    pdcp_thread_ctx_send_packets(th_config_local->tid,
+                                                 JOB_RING_ID_FOR_DL,
+                                                 &pdcp_dl_contexts[i],
+                                                 &th_config_local->process_cycles,
+                                                 &th_config_local->poll_cycles,
+                                                 &ctx_packets_received,
+                                                 &ctx_packets_sent);
+
+                    total_dl_packets_received += ctx_packets_received;
+                    total_dl_packets_sent += ctx_packets_sent;
+                    
                     break;
                 }
-
-                memcpy(&in_packet[0],in_frag,sizeof(sec_packet_t));
-
-                memcpy(&out_packet[0],out_frag,sizeof(sec_packet_t));
-#ifdef RANDOM_SCATTER_GATHER_FRAGMENTS
-                num_fragments = 0 + (rand() % (user_param.max_frags - 1) );
-#else
-                num_fragments = user_param.max_frags - 1;
-#endif
-                in_packet[0].num_fragments = num_fragments;
-                in_packet[0].total_length = rem_len;
-
-                last_address = in_packet[0].address;
-                last_len = 0;
-
-                test_printf("Num of fragments : %d",num_fragments);
-
-                for(idx = 0; idx <= num_fragments - 1; idx++ )
+                
+                while(total_ul_packets_sent != total_ul_packets_to_send)
                 {
-                    in_packet[idx].address = last_address +
-                                           last_len;
-#ifdef RANDOM_SCATTER_GATHER_FRAGMENTS
-                    in_packet[idx].length = 1 + (rand() % (rem_len - 1));
-#else
-                    in_packet[idx].length = rem_len / num_fragments;
-#endif
-                    last_address = in_packet[idx].address;
-                    last_len = in_packet[idx].length;
+                    ctx_packets_received = 0;
+                    ctx_packets_sent = 0;
 
-                    rem_len -= in_packet[idx].length;
+                    /* Send some packets on UL context */
+                    pdcp_thread_ctx_send_packets(th_config_local->tid,
+                                                 JOB_RING_ID_FOR_UL,
+                                                 &pdcp_ul_contexts[i],
+                                                 &th_config_local->process_cycles,
+                                                 &th_config_local->poll_cycles,
+                                                 &ctx_packets_received,
+                                                 &ctx_packets_sent);
 
-                    test_printf("Fragment %d: len = %d, address = 0x%08x",
-                                idx,
-                                in_packet[idx].length,
-                                in_packet[idx].address);
-                }
-
-                // Last fragment must finish the packet
-                if(rem_len)
-                {
-                    in_packet[idx].address = last_address +
-                                           last_len;
-                    in_packet[idx].length = rem_len;
-
-                    test_printf("Last fragment %d: len = %d, address = 0x%08x",
-                                idx,
-                                in_packet[idx].length,
-                                in_packet[idx].address);
+                    total_ul_packets_received += ctx_packets_received;
+                    total_ul_packets_sent += ctx_packets_sent;
+                    
+                    break;
                 }
                 
-                get_stats(th_config_local->producer_job_ring_id);
-try_again:
-                start_cycles = GET_ATBL();
-                ret_code = sec_process_packet(pdcp_context->sec_ctx,
-                        in_packet,
-                        out_packet,
-                        (ua_context_handle_t)pdcp_context);
-
-                diff_cycles = (GET_ATBL() - start_cycles);
-
-                th_config_local->core_cycles += diff_cycles;
-                
-                profile_printf("thread #%d:ctx #%p:sec_process_packet cycles = %d\n",
-                        th_config_local->tid, pdcp_context, diff_cycles);
-
-                if(ret_code != SEC_SUCCESS)
-                {
-                    if( ret_code == SEC_JR_IS_FULL )
-                    {
-                        test_printf("thread #%d:producer: JR is full",th_config_local->tid);
-                        
-                        // poll the consumer JR
-                        ret_code = get_results(th_config_local->producer_job_ring_id,
-                                               JOB_RING_POLL_UNLIMITED,
-                                               &packets_received,
-                                               &th_config_local->core_cycles,
-                                               th_config_local->tid);
-                        assert(ret_code == 0);
-                        total_packets_received += packets_received;
-                        retries++;
-                        goto try_again;
-                    }
-                    else
-                    {
-                        test_printf("thread #%d:producer: sec_process_packet return error %d for PDCP context no %d \n",
-                                    th_config_local->tid, ret_code, pdcp_context->id);
-                        assert(0);
-                    }
-                }
-                ctx_packet_count++;
+                total_packets_received = total_dl_packets_received + 
+                                         total_ul_packets_received;
+                    
+                total_packets_sent = total_dl_packets_sent +
+                                     total_ul_packets_sent;
             }
-            total_packets_sent += ctx_packet_count;
         }
+        
+        test_printf("thread #%d: polling until all contexts are deleted\n", th_config_local->tid);
+
+        /* Poll the consumer JR until no more packets are retrieved. */
+        do
+        {
+            packets_received = 0;
+
+            /* Poll the DL JR */
+            ret_code = get_results(JOB_RING_ID_FOR_DL,
+                                   JOB_RING_POLL_UNLIMITED,
+                                   &packets_received,
+                                   &th_config_local->poll_cycles,
+                                   th_config_local->tid);
+            assert(ret_code == 0);
+            total_dl_packets_received += packets_received;
+
+            packets_received = 0;
+
+            /* Poll the UL JR */
+            ret_code = get_results(JOB_RING_ID_FOR_UL,
+                                   JOB_RING_POLL_UNLIMITED,
+                                   &packets_received,
+                                   &th_config_local->poll_cycles,
+                                   th_config_local->tid);
+            assert(ret_code == 0);
+            total_ul_packets_received += packets_received;
+
+            total_packets_received = total_dl_packets_received + 
+                                     total_ul_packets_received;
+        }while(total_packets_to_receive != total_packets_received);
+
+        gettimeofday(&end_time, NULL);
+
+        time_us = (end_time.tv_sec - start_time.tv_sec)*MEGA + 
+                  (end_time.tv_usec - start_time.tv_usec);
+
+        receive_pps_dl = MEGA / time_us * total_dl_packets_received ;
+        send_pps_dl = MEGA / time_us * total_dl_packets_sent;
+        receive_bps_dl = receive_pps_dl * (test_payload_size_decap - test_pdcp_hdr_len) * 8;
+        send_bps_dl = send_pps_dl * (test_payload_size_encap - test_pdcp_hdr_len) * 8;
+
+        receive_pps_ul = MEGA / time_us * total_ul_packets_received ;
+        send_pps_ul = MEGA / time_us * total_ul_packets_sent;
+        receive_bps_ul = receive_pps_ul * (test_payload_size_encap - test_pdcp_hdr_len) * 8;
+        send_bps_ul = send_pps_ul * (test_payload_size_decap - test_pdcp_hdr_len) * 8;
+
+        printf("Iteration %d:\n"
+               "Sent %d DL packets. Sent %d UL packets.\n"
+               "Received %d DL packets. Received %d UL packets.\n"
+               "Start Time %d sec %d usec. End Time %d sec %d usec.\n"
+               "Receive PPS DL: %u. Receive PPS UL: %u.\n"
+               "Send PPS DL: %u. Send PPS UL: %u.\n"
+               "Receive BPS DL: %u. Receive BPS UL: %u.\n"
+               "Send BPS DL: %u. Send BPS UL: %u.\n",
+               iter+1,
+               total_dl_packets_sent,
+               total_ul_packets_sent,
+               total_dl_packets_received,
+               total_ul_packets_received,
+               (int)start_time.tv_sec,
+               (int)start_time.tv_usec,
+               (int)end_time.tv_sec,
+               (int)end_time.tv_usec,
+               receive_pps_dl, receive_pps_ul,
+               send_pps_dl, send_pps_ul,
+               receive_bps_dl, receive_bps_ul,
+               send_bps_dl, send_bps_ul);
+        printf("Avg. process core cycles = %d\n", th_config_local->process_cycles / total_packets_sent);
+        printf("Avg. poll core cycles = %d\n", th_config_local->poll_cycles / total_packets_received);
+
+        /* Check if the user requested to end test */
+        if(th_config_local->should_exit)
+            break;
+
     }
 
-    do
+    /* Cleanup */
+    for(i = 0; i < PDCP_CONTEXT_NUMBER; i++)
     {
-        // Get the last packets
-        ret_code = get_results(th_config_local->producer_job_ring_id,
-                            JOB_RING_POLL_UNLIMITED,
-                            &packets_received,
-                            &th_config_local->core_cycles,
-                            th_config_local->tid);
-        assert(ret_code == 0);
-        total_packets_received += packets_received;
-    }while(total_packets_to_receive != total_packets_received);
-    
-    test_printf("thread #%d: polling until all contexts are deleted\n", th_config_local->tid);
+        put_pdcp_context(pdcp_dl_contexts,
+                         th_config_local->no_of_used_pdcp_dl_contexts);
+                         
+        put_pdcp_context(pdcp_ul_contexts,
+                         th_config_local->no_of_used_pdcp_ul_contexts);
+    }
 
-    gettimeofday(&end_time, NULL);
-
-    printf("Sent %d packets. Received %d packets\nStart Time %d sec %d usec."
-            "End Time %d sec %d usec.\n",
-            total_packets_sent, total_packets_received, (int)start_time.tv_sec, (int)start_time.tv_usec,
-            (int)end_time.tv_sec, (int)end_time.tv_usec);
-
-    pps = 1000000 * total_packets_sent / (((int)end_time.tv_sec - (int)start_time.tv_sec)*1000000 + 
-                                           (int)end_time.tv_usec - (int)start_time.tv_usec);
-    printf("TX Packets / second : %d\n", pps);
-    printf("TX Bits / second : %d\n",pps*user_param.payload_size*8);
-    printf("Got JR full %d times\n",retries);
-    
-    pps = 1000000 * total_packets_received / (((int)end_time.tv_sec - (int)start_time.tv_sec)*1000000 + 
-                                           (int)end_time.tv_usec - (int)start_time.tv_usec);
-    printf("RX Packets / second : %d\n", pps);
-    printf("RX Bits / second : %d\n",pps*user_param.payload_size*8);
-            
-    // signal to main thread that the work is done
+    /* Signal to main thread that the work is done */
     th_config_local->work_done = 1;
-/*
-    test_printf("thread #%d: work done, polling until exit signal is received\n", th_config_local->tid);
 
-    // continue polling on the consumer job ring, in case the other worker thread
-    // did not finish its work
-    while(th_config_local->should_exit == 0)
-    {
-        ret_code = get_results(th_config_local->consumer_job_ring_id,
-        		          JOB_RING_POLL_UNLIMITED,
-        		          &packets_received,
-                          &th_config_local->core_cycles);
-        assert(ret_code == 0);
-    }
-*/
     test_printf("thread #%d: exit\n", th_config_local->tid);
     pthread_exit(NULL);
 }
@@ -931,43 +1266,130 @@ try_again:
 static int setup_sec_environment(void)
 {
     int i = 0;
+    int pkt_idx;
     int ret_code = 0;
     time_t seconds;
-    int num_of_buffers;
 
     /* Get value from system clock and use it for seed generation  */
     time(&seconds);
     srand((unsigned int) seconds);
 
-    memset (pdcp_contexts, 0, sizeof(pdcp_context_t) * PDCP_CONTEXT_NUMBER);
+    memset (pdcp_dl_contexts, 0, sizeof(pdcp_context_t) * PDCP_CONTEXT_NUMBER);
+    memset (pdcp_ul_contexts, 0, sizeof(pdcp_context_t) * PDCP_CONTEXT_NUMBER);
 
-    num_of_buffers = (user_param.direction == SCENARIO_DIR_UPLINK) ? 
-                        PACKET_NUMBER_PER_CTX_UL : PACKET_NUMBER_PER_CTX_DL;
     for (i = 0; i < PDCP_CONTEXT_NUMBER; i++)
     {
-        pdcp_contexts[i].id = i;
-        // allocate input buffers from memory zone DMA-accessible to SEC engine
-        pdcp_contexts[i].input_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT,
-                                                             sizeof(buffer_t) * num_of_buffers);
-        // allocate output buffers from memory zone DMA-accessible to SEC engine
-        pdcp_contexts[i].output_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT,
-                                                              sizeof(buffer_t) * num_of_buffers);
+        /* DL contexts */
+        pdcp_dl_contexts[i].id = i;
 
-        pdcp_contexts[i].pdcp_ctx_cfg_data.cipher_key = dma_mem_memalign(BUFFER_ALIGNEMENT,
+        /* Allocate input buffers from memory zone DMA-accessible to SEC engine */
+        pdcp_dl_contexts[i].input_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT,
+            PDCP_BUFFER_SIZE * PACKET_NUMBER_PER_CTX_DL);
+        assert (pdcp_dl_contexts[i].input_buffers != NULL);
+        memset(pdcp_dl_contexts[i].input_buffers,
+               0,
+               PDCP_BUFFER_SIZE * PACKET_NUMBER_PER_CTX_DL);
+
+        /* Allocate output buffers from DMA-accessible to SEC engine */
+        pdcp_dl_contexts[i].output_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT,
+            PDCP_BUFFER_SIZE * PACKET_NUMBER_PER_CTX_DL);
+        assert (pdcp_dl_contexts[i].output_buffers != NULL);
+        memset(pdcp_dl_contexts[i].output_buffers,
+               0,
+               PDCP_BUFFER_SIZE * PACKET_NUMBER_PER_CTX_DL);
+
+        pdcp_dl_contexts[i].pdcp_ctx_cfg_data.cipher_key = dma_mem_memalign(BUFFER_ALIGNEMENT,
                                                                             MAX_KEY_LENGTH);
-        pdcp_contexts[i].pdcp_ctx_cfg_data.integrity_key = dma_mem_memalign(BUFFER_ALIGNEMENT,
+        assert (pdcp_dl_contexts[i].pdcp_ctx_cfg_data.cipher_key != NULL);
+
+        pdcp_dl_contexts[i].pdcp_ctx_cfg_data.integrity_key = dma_mem_memalign(BUFFER_ALIGNEMENT,
                                                                                MAX_KEY_LENGTH);
-        pdcp_contexts[i].no_of_buffers_to_process = num_of_buffers;
+        assert (pdcp_dl_contexts[i].pdcp_ctx_cfg_data.integrity_key != NULL);
 
-        assert (pdcp_contexts[i].input_buffers != NULL);
-        assert (pdcp_contexts[i].output_buffers != NULL);
-        assert (pdcp_contexts[i].pdcp_ctx_cfg_data.cipher_key != NULL);
-        assert (pdcp_contexts[i].pdcp_ctx_cfg_data.integrity_key != NULL);
+        /* Allocate array of packet structure to be returned when getting a buffer */
+        pdcp_dl_contexts[i].test_packets = malloc(sizeof(test_packet_t) * PACKET_NUMBER_PER_CTX_DL);
+        assert(pdcp_dl_contexts[i].test_packets != NULL);
+        memset(pdcp_dl_contexts[i].test_packets,
+               0x00,
+               sizeof(test_packet_t) * PACKET_NUMBER_PER_CTX_DL);
 
+        /* Allocate input and output packet arrays */
+        for(pkt_idx = 0; pkt_idx < PACKET_NUMBER_PER_CTX_DL; pkt_idx++)
+        {
+            /* Allocate array of input fragments */
+            pdcp_dl_contexts[i].test_packets[pkt_idx].in_packet = 
+                malloc(sizeof(sec_packet_t) * test_num_frags);
+            assert(pdcp_dl_contexts[i].test_packets[pkt_idx].in_packet != NULL);
+            memset(pdcp_dl_contexts[i].test_packets[pkt_idx].in_packet,
+                   0x00,
+                   sizeof(sec_packet_t) * test_num_frags);
+            
+            /* Allocate array of output fragments */
+            pdcp_dl_contexts[i].test_packets[pkt_idx].out_packet = 
+                malloc(sizeof(sec_packet_t));
+            assert(pdcp_dl_contexts[i].test_packets[pkt_idx].out_packet != NULL);
+            memset(pdcp_dl_contexts[i].test_packets[pkt_idx].out_packet,
+                   0x00,
+                   sizeof(sec_packet_t));
+        }
 
-        memset(pdcp_contexts[i].input_buffers, 0, sizeof(buffer_t) * num_of_buffers);
-        memset(pdcp_contexts[i].output_buffers, 0, sizeof(buffer_t) * num_of_buffers);
+        pdcp_dl_contexts[i].no_of_buffers_to_process = PACKET_NUMBER_PER_CTX_DL;
 
+        /* UL contexts */
+        pdcp_ul_contexts[i].id = i + PDCP_CONTEXT_NUMBER;
+        
+        /* Allocate input buffers from memory zone DMA-accessible to SEC engine */
+        pdcp_ul_contexts[i].input_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT,
+            PDCP_BUFFER_SIZE * PACKET_NUMBER_PER_CTX_UL);
+        assert (pdcp_ul_contexts[i].input_buffers != NULL);
+        memset(pdcp_ul_contexts[i].input_buffers,
+               0,
+               PDCP_BUFFER_SIZE * PACKET_NUMBER_PER_CTX_UL);
+
+        /* Allocate output buffers from memory zone DMA-accessible to SEC engine */
+        pdcp_ul_contexts[i].output_buffers = dma_mem_memalign(BUFFER_ALIGNEMENT,
+            PDCP_BUFFER_SIZE * PACKET_NUMBER_PER_CTX_UL);
+        assert (pdcp_ul_contexts[i].output_buffers != NULL);
+        memset(pdcp_ul_contexts[i].output_buffers,
+               0,
+               PDCP_BUFFER_SIZE * PACKET_NUMBER_PER_CTX_UL);
+        
+        pdcp_ul_contexts[i].pdcp_ctx_cfg_data.cipher_key = dma_mem_memalign(BUFFER_ALIGNEMENT,
+                                                                            MAX_KEY_LENGTH);
+        assert (pdcp_ul_contexts[i].pdcp_ctx_cfg_data.cipher_key != NULL);
+        pdcp_ul_contexts[i].pdcp_ctx_cfg_data.integrity_key = dma_mem_memalign(BUFFER_ALIGNEMENT,
+                                                                               MAX_KEY_LENGTH);
+        assert (pdcp_ul_contexts[i].pdcp_ctx_cfg_data.integrity_key != NULL);
+
+        /* Allocate array of packet structure to be returned when getting a buffer */
+        pdcp_ul_contexts[i].test_packets = malloc(sizeof(test_packet_t) * PACKET_NUMBER_PER_CTX_UL);
+        assert(pdcp_ul_contexts[i].test_packets != NULL);
+        memset(pdcp_ul_contexts[i].test_packets,
+               0x00,
+               sizeof(test_packet_t) * PACKET_NUMBER_PER_CTX_UL);
+        
+        /* Allocate input and output packet arrays */
+        for(pkt_idx = 0; pkt_idx < PACKET_NUMBER_PER_CTX_UL; pkt_idx++)
+        {
+            /* Allocate array of input fragments */
+            pdcp_ul_contexts[i].test_packets[pkt_idx].in_packet = 
+                malloc(sizeof(sec_packet_t));
+            assert(pdcp_ul_contexts[i].test_packets[pkt_idx].in_packet != NULL);
+            memset(pdcp_ul_contexts[i].test_packets[pkt_idx].in_packet,
+                   0x00,
+                   sizeof(sec_packet_t));
+            
+            /* Allocate array of output fragments */
+            pdcp_ul_contexts[i].test_packets[pkt_idx].out_packet = 
+                malloc(sizeof(sec_packet_t) * test_num_frags);
+            assert(pdcp_ul_contexts[i].test_packets[pkt_idx].out_packet != NULL);
+            memset(pdcp_ul_contexts[i].test_packets[pkt_idx].out_packet,
+                   0x00,
+                   sizeof(sec_packet_t) * test_num_frags);
+        }
+        pdcp_ul_contexts[i].no_of_buffers_to_process = PACKET_NUMBER_PER_CTX_UL;
+
+        
     }
 
     //////////////////////////////////////////////////////////////////////////////
@@ -1005,9 +1427,8 @@ static int setup_sec_environment(void)
 
 static int cleanup_sec_environment(void)
 {
-    int ret_code = 0, i;
-    int num_of_buffers = (user_param.direction == SCENARIO_DIR_UPLINK) ? 
-                        PACKET_NUMBER_PER_CTX_UL : PACKET_NUMBER_PER_CTX_DL;
+    int ret_code = 0, i, pkt_idx;
+
     // release SEC driver
     ret_code = sec_release();
     if (ret_code != 0)
@@ -1019,171 +1440,281 @@ static int cleanup_sec_environment(void)
 
     for (i = 0; i < PDCP_CONTEXT_NUMBER; i++)
     {
-        dma_mem_free(pdcp_contexts[i].input_buffers, sizeof(buffer_t) * num_of_buffers);
-        dma_mem_free(pdcp_contexts[i].output_buffers, sizeof(buffer_t) * num_of_buffers);
+        dma_mem_free(pdcp_dl_contexts[i].input_buffers,  PDCP_BUFFER_SIZE * PACKET_NUMBER_PER_CTX_DL);
+        dma_mem_free(pdcp_dl_contexts[i].output_buffers,  PDCP_BUFFER_SIZE * PACKET_NUMBER_PER_CTX_DL);
 
-        dma_mem_free(pdcp_contexts[i].pdcp_ctx_cfg_data.cipher_key, MAX_KEY_LENGTH);
-        dma_mem_free(pdcp_contexts[i].pdcp_ctx_cfg_data.integrity_key, MAX_KEY_LENGTH);
+        dma_mem_free(pdcp_dl_contexts[i].pdcp_ctx_cfg_data.cipher_key, MAX_KEY_LENGTH);
+        dma_mem_free(pdcp_dl_contexts[i].pdcp_ctx_cfg_data.integrity_key, MAX_KEY_LENGTH);
+
+        for(pkt_idx = 0; pkt_idx < PACKET_NUMBER_PER_CTX_DL; pkt_idx++)
+        {
+            /* Allocate array of input fragments */
+            free(pdcp_dl_contexts[i].test_packets[pkt_idx].in_packet);
+            free(pdcp_dl_contexts[i].test_packets[pkt_idx].out_packet);
+        }
+        free(pdcp_dl_contexts[i].test_packets);
+        
+        dma_mem_free(pdcp_ul_contexts[i].input_buffers, PDCP_BUFFER_SIZE * PACKET_NUMBER_PER_CTX_UL);
+        dma_mem_free(pdcp_ul_contexts[i].output_buffers, PDCP_BUFFER_SIZE * PACKET_NUMBER_PER_CTX_UL);
+
+        dma_mem_free(pdcp_ul_contexts[i].pdcp_ctx_cfg_data.cipher_key, MAX_KEY_LENGTH);
+        dma_mem_free(pdcp_ul_contexts[i].pdcp_ctx_cfg_data.integrity_key, MAX_KEY_LENGTH);
+        
+        for(pkt_idx = 0; pkt_idx < PACKET_NUMBER_PER_CTX_UL; pkt_idx++)
+        {
+            /* Allocate array of input fragments */
+            free(pdcp_ul_contexts[i].test_packets[pkt_idx].in_packet);
+            free(pdcp_ul_contexts[i].test_packets[pkt_idx].out_packet);
+        }
+        free(pdcp_ul_contexts[i].test_packets);
+
     }
-
+    
+    /* Release memory allocated for SEC internal structures. */
     dma_mem_free(sec_config_data.memory_area,SEC_DMA_MEMORY_SIZE);
 
+    /* Destroy FSL USMMGR object */
+    ret_code = fsl_usmmgr_exit(g_usmmgr);
+    if (ret_code)
+    {
+        perror("Error free'ing USMMGR object");
+        return -1;
+    }
 
     return 0;
 }
 /*==================================================================================================
                                         GLOBAL FUNCTIONS
 =================================================================================================*/
-void set_test_params()
-{
-    switch( user_param.scenario )
-    {
-        case SCENARIO_PDCP_CPLANE_AES_CTR_AES_CMAC:
-            test_cipher_algorithm = SEC_ALG_AES;
-            test_integrity_algorithm = SEC_ALG_AES;
-            test_user_plane = PDCP_CONTROL_PLANE;
-            test_sn_size = SEC_PDCP_SN_SIZE_5;
-            pdcp_header_len = 2;
-            break;
-
-        case SCENARIO_PDCP_CPLANE_SNOW_F8_SNOW_F9:
-            test_cipher_algorithm = SEC_ALG_SNOW;
-            test_integrity_algorithm = SEC_ALG_SNOW;
-            test_user_plane = PDCP_CONTROL_PLANE;
-            test_sn_size = SEC_PDCP_SN_SIZE_5;
-            pdcp_header_len = 2;
-            break;
-
-        case SCENARIO_PDCP_CPLANE_AES_CTR_NULL:
-            test_cipher_algorithm = SEC_ALG_AES;
-            test_integrity_algorithm = SEC_ALG_NULL;
-            test_user_plane = PDCP_CONTROL_PLANE;
-            test_sn_size = SEC_PDCP_SN_SIZE_5;
-            pdcp_header_len = 2;
-            break;
-
-        case SCENARIO_PDCP_CPLANE_SNOW_F8_NULL:
-            test_cipher_algorithm = SEC_ALG_SNOW;
-            test_integrity_algorithm = SEC_ALG_NULL;
-            test_user_plane = PDCP_CONTROL_PLANE;
-            test_sn_size = SEC_PDCP_SN_SIZE_5;
-            pdcp_header_len = 2;
-            break;
-
-        case SCENARIO_PDCP_CPLANE_NULL_AES_CMAC:
-            test_cipher_algorithm = SEC_ALG_NULL;
-            test_integrity_algorithm  = SEC_ALG_AES;
-            test_user_plane = PDCP_CONTROL_PLANE;
-            test_sn_size = SEC_PDCP_SN_SIZE_5;
-            pdcp_header_len = 2;
-            break;
-        
-        case SCENARIO_PDCP_CPLANE_NULL_SNOW_F9:
-            test_cipher_algorithm = SEC_ALG_NULL;
-            test_integrity_algorithm = SEC_ALG_SNOW;
-            test_user_plane = PDCP_CONTROL_PLANE;
-            test_sn_size = SEC_PDCP_SN_SIZE_5;
-            pdcp_header_len = 2;
-            break;
-
-        case SCENARIO_PDCP_CPLANE_NULL_NULL:
-            test_cipher_algorithm = SEC_ALG_NULL;
-            test_integrity_algorithm = SEC_ALG_NULL;
-            test_user_plane = PDCP_CONTROL_PLANE;
-            test_sn_size = SEC_PDCP_SN_SIZE_5;
-            pdcp_header_len = 2;
-            break;
-
-        case SCENARIO_PDCP_UPLANE_SHORT_SN_AES_CTR:
-            test_cipher_algorithm = SEC_ALG_AES;
-            test_integrity_algorithm = SEC_ALG_NULL;
-            test_user_plane = PDCP_DATA_PLANE;
-            test_sn_size = SEC_PDCP_SN_SIZE_7;
-            pdcp_header_len = 1;
-            break;
-
-        case SCENARIO_PDCP_UPLANE_LONG_SN_AES_CTR:
-            test_cipher_algorithm = SEC_ALG_AES;
-            test_integrity_algorithm = SEC_ALG_NULL;
-            test_user_plane = PDCP_DATA_PLANE;
-            test_sn_size = SEC_PDCP_SN_SIZE_12;
-            pdcp_header_len = 2;
-            break;
-
-        case SCENARIO_PDCP_UPLANE_SHORT_SN_SNOW_F8:
-            test_cipher_algorithm = SEC_ALG_SNOW;
-            test_integrity_algorithm = SEC_ALG_NULL;
-            test_user_plane = PDCP_DATA_PLANE;
-            test_sn_size = SEC_PDCP_SN_SIZE_7;
-            pdcp_header_len = 1;
-            break;
-        
-        case SCENARIO_PDCP_UPLANE_LONG_SN_SNOW_F8:
-            test_cipher_algorithm = SEC_ALG_SNOW;
-            test_integrity_algorithm = SEC_ALG_NULL;
-            test_user_plane = PDCP_DATA_PLANE;
-            test_sn_size = SEC_PDCP_SN_SIZE_12;
-            pdcp_header_len = 1;
-            break;
-
-        case SCENARIO_PDCP_UPLANE_SHORT_SN_NULL:
-            test_cipher_algorithm = SEC_ALG_NULL;
-            test_integrity_algorithm = SEC_ALG_NULL;
-            test_user_plane = PDCP_DATA_PLANE;
-            test_sn_size = SEC_PDCP_SN_SIZE_7;
-            pdcp_header_len = 1;
-            break;
-            
-        
-        case SCENARIO_PDCP_UPLANE_LONG_SN_NULL:
-            test_cipher_algorithm  = SEC_ALG_NULL;
-            test_integrity_algorithm  = SEC_ALG_NULL;
-            test_user_plane = PDCP_DATA_PLANE;
-            test_sn_size = SEC_PDCP_SN_SIZE_12;
-            pdcp_header_len = 2;
-            
-            break;
-        case SCENARIO_PDCP_INVALID:
-        default:
-            /* Just to keep the compiler happy */
-            break;
-    }
-}
-
 int validate_params()
 {
-    if( user_param.scenario >= SCENARIO_PDCP_INVALID)
+    int i;
+    struct{
+        char alg_name[PATH_MAX];
+        sec_crypto_alg_t alg;
+    }algos[] = {
+        {"SNOW", SEC_ALG_SNOW },
+        {"AES", SEC_ALG_AES },
+        {"NULL", SEC_ALG_NULL }
+    };
+    struct{
+        char test_type_name[PATH_MAX];
+        uint32_t test_type;
+    }test_types[] = {
+        { "CONTROL", PDCP_CONTROL_PLANE },
+        { "CPLANE", PDCP_CONTROL_PLANE },
+        { "DATA", PDCP_DATA_PLANE },
+        { "UPLANE", PDCP_DATA_PLANE }
+    };
+    struct{
+        char dir_name[PATH_MAX];
+        uint32_t dir;
+    }test_dirs[] = {
+        {"UL", PDCP_UPLINK },
+        {"UPLINK", PDCP_UPLINK },
+        {"DL", PDCP_DOWNLINK },
+        {"DOWNLINK", PDCP_DOWNLINK }
+    };
+    struct{
+        char hdr_len_name[PATH_MAX];
+        uint32_t sn_size;
+        uint8_t hdr_len;
+    }test_hdrs[] = {
+        {"SHORT", SEC_PDCP_SN_SIZE_7, 1},
+        {"7", SEC_PDCP_SN_SIZE_7, 1},
+        {"LONG", SEC_PDCP_SN_SIZE_12, 2},
+        {"12", SEC_PDCP_SN_SIZE_12, 2}
+    };
+
+    for (i = 0; i < ARRAY_SIZE(algos); i++)
     {
-        fprintf(stderr,"Invalid scenario %d\n",user_param.scenario);
+        if(!strncasecmp(user_param.int_alg, algos[i].alg_name,PATH_MAX))
+        {
+            test_integrity_algorithm = algos[i].alg;
+        }
+        
+        if(!strncasecmp(user_param.enc_alg, algos[i].alg_name,PATH_MAX))
+        {
+            test_cipher_algorithm = algos[i].alg;
+        }
+    }
+    
+    for (i = 0; i < ARRAY_SIZE(test_types); i++)
+    {
+        if(!strncasecmp(user_param.test_type, test_types[i].test_type_name, PATH_MAX))
+        {
+            test_user_plane = test_types[i].test_type;
+            break;
+        }
+    }
+    if (test_user_plane == -1)
+    {
+        fprintf(stderr,"Invalid test type: %s\n",user_param.test_type);
+        return -1;
+    }
+    
+    if (((test_user_plane == PDCP_CONTROL_PLANE) && 
+        (user_param.opt_mask != CPLANE_VALID_MASK)) ||
+        ((test_user_plane == PDCP_DATA_PLANE) && 
+        (user_param.opt_mask != UPLANE_VALID_MASK)))
+    {
+        fprintf(stderr,"Invalid combination of paramters selected!\n");
         return -1;
     }
 
-    if ( user_param.direction >= SCENARIO_DIR_INVALID)
+    if ((test_integrity_algorithm == -1) && 
+        (test_user_plane == PDCP_CONTROL_PLANE))
     {
-        fprintf(stderr,"Invalid direction: %d\n",user_param.direction);
-        return -2;
+        fprintf(stderr,"Invalid integrity algorithm: %s\n",user_param.int_alg);
+        return -1;
+    }
+    
+    if (test_cipher_algorithm == -1)
+    {
+        fprintf(stderr,"Invalid encryption algorithm: %s\n",user_param.enc_alg);
+        return -1;
     }
 
+    /* Some combinations are not valid */
+    if ((((test_integrity_algorithm == SEC_ALG_SNOW) &&
+        (test_cipher_algorithm == SEC_ALG_AES)) ||
+        ((test_integrity_algorithm == SEC_ALG_AES) &&
+        (test_cipher_algorithm == SEC_ALG_SNOW))) &&
+        test_user_plane == PDCP_CONTROL_PLANE)
+    {
+        fprintf(stderr,"Invalid algorithm combination for Control Plane: %s %s\n",
+            user_param.int_alg,
+            user_param.enc_alg);
+            return -1;
+    }
+
+    for (i = 0; i<ARRAY_SIZE(test_dirs); i++)
+    {
+        if(!strncasecmp(user_param.direction, test_dirs[i].dir_name,PATH_MAX))
+        {
+            test_direction = test_dirs[i].dir;
+            break;
+        }
+    }
+    
+    if (test_direction == -1)
+    {
+        fprintf(stderr, "Invalid direction: %s\n", user_param.direction);
+        return -1;
+    }
+
+    for (i = 0; i<ARRAY_SIZE(test_hdrs); i++)
+    {
+        if(!strncasecmp(user_param.hdr_len, test_hdrs[i].hdr_len_name,PATH_MAX))
+        {
+            test_sn_size = test_hdrs[i].sn_size;
+            test_pdcp_hdr_len = test_hdrs[i].hdr_len;
+            break;
+        }
+    }
+
+    if (test_user_plane == PDCP_CONTROL_PLANE)
+    {
+        test_pdcp_hdr_len = 1;
+        test_sn_size = SEC_PDCP_SN_SIZE_5;
+    }
+    else
+    {
+        if (test_pdcp_hdr_len == -1)
+        {
+            fprintf(stderr, "Invalid header length: %s\n", user_param.hdr_len);
+            return -1;
+        }
+    }
+    
     if( user_param.max_frags > SEC_MAX_SG_TBL_ENTRIES )
     {
         fprintf(stderr,"Invalid number of fragments %d "
                         "(must be less than %d)\n",
                         user_param.max_frags,
                         SEC_MAX_SG_TBL_ENTRIES);
-        return -3;
+        return -1;
     }
     
-    if( user_param.payload_size >= PDCP_BUFFER_SIZE)
+    test_num_frags = user_param.max_frags;
+    
+    /* Make sure that the user param fits in the allocated buffers */
+    if (user_param.payload_size >= PDCP_BUFFER_SIZE - test_pdcp_hdr_len - 
+            (test_user_plane == PDCP_CONTROL_PLANE ? ICV_LEN : 0 ) )
     {
         fprintf(stderr,"Invalid payload len %d "
-                       "(must be less than %d)",
+                       "(must be less than %d\n)",
                         user_param.payload_size,
-                        PDCP_BUFFER_SIZE);
-        return -4;
+                        PDCP_BUFFER_SIZE - test_pdcp_hdr_len - 
+                        (test_user_plane == PDCP_CONTROL_PLANE ? ICV_LEN : 0 ));
+        return -1;
     }
+
+    test_payload_size_encap = user_param.payload_size + test_pdcp_hdr_len;
+    test_payload_size_decap = user_param.payload_size + test_pdcp_hdr_len + 
+                    (test_user_plane == PDCP_CONTROL_PLANE ? ICV_LEN : 0);
+    
+    test_num_iter = user_param.num_iter;
 
     return 0;
 }
+
+void abort_loop()
+{
+    printf("Intercepted CTRL-C, wait for running thread to end\n");
+    th_config[0].should_exit = 1;
+    th_config[1].should_exit = 1;
+}
+
+
+void print_usage(char *prg_name)
+{
+    printf("Usage: %s"
+           " -t test_type"
+           " [-l hdr_len]"
+           " -d pkt_dir"
+           " -e encryption_alg"
+           " [-a integrity_alg]"
+           " -f number_of_fragments"
+           " -s payload_size"
+           " -n iterations"
+           "\n"
+           "\n\n\t-t Selects the test type to be used. It is used"
+           " for selecting PDCP Control Plane or PDCP User Plane"
+           " encapsulation/decapsulation"
+           "\n\t\tValid values:"
+           "\n\t\t\to CONTROL or CPLANE"
+           "\n\t\t\to DATA or UPLANE"
+           "\n\n\t-l Selects the header length. It is valid only for"
+           " PDCP Data Plane."
+           "\n\t\tValid values:"
+           "\n\t\t\to SHORT or 7 - Header Length is 1 byte and SN is assumed to be 7 bits"
+           "\n\t\t\to LONG or 12 - Header Lengt is 2 bytes and SN is assumed to be 12 bits"
+           "\n\n\t-d Selects the packet direction"
+           "\n\t\tValid values:"
+           "\n\t\t\to UL or UPLINK - The packets will have the direction bit set to 0"
+           "\n\t\t\to DL or DOWNLINK - The packets will have the direction bit set to 1"
+           "\n\n\t-e Select the encryption algorithm to be used."
+           "\n\t\tValid values are:"
+           "\n\t\t\to SNOW"
+           "\n\t\t\to AES"
+           "\n\t\t\to NULL"
+           "\n\n\t-a Select the integrity algorithm to be used."
+           "\n\t\tValid for Control Plane only, see -t option"
+           "\n\t\tValid values are:"
+           "\n\t\t\to SNOW"
+           "\n\t\t\to AES"
+           "\n\t\t\to NULL"
+           "\n\n\t-f Select the number of Scatter-Gather"
+           " fragments in which a packet is split"
+           "\n\t\tNOTE: It cannot exceed 16"
+           "\n\n\t-s Select the maximum payload size of the packets."
+           "\n\t\tNOTE: It does NOT include the header size."
+           "\n\n\t-n Number of iterations to be run."
+           "\n\t\tNOTE: Setting this to 0 will result in endless looping"
+           "\n\n\n",prg_name);
+}
+
 int main(int argc, char ** argv)
 {
     int ret_code = 0;
@@ -1198,54 +1729,82 @@ int main(int argc, char ** argv)
         perror("sched_setaffinity");
     }
     
-    while ((c = getopt (argc, argv, "s:d:f:p:hl")) != -1)
+    /* Make sure the user options are cleared */
+    memset(&user_param, 0x00, sizeof(users_params_t));
+
+    while ((c = getopt (argc, argv, "a:e:t:d:l:f:s:n:h")) != -1)
     {
         switch (c)
         {
-            case 's':
-                user_param.scenario = atoi(optarg);
-                printf("Selected scenario %d\n",user_param.scenario);
+            case 'a':
+                strncpy(user_param.int_alg, optarg, sizeof(user_param.int_alg) - 1);
+                printf("Selected integrity algorithm: %s\n", optarg);
+                user_param.opt_mask |= INT_ALG_SET;
+                break;
+            case 'e':
+                strncpy(user_param.enc_alg, optarg, sizeof(user_param.enc_alg) - 1);
+                printf("Selected encryption algorithm: %s\n",optarg);
+                user_param.opt_mask |= ENC_ALG_SET;
+                break;
+            case 't':
+                strncpy(user_param.test_type, optarg, sizeof(user_param.enc_alg) - 1);
+                printf("Selected test type: %s\n",optarg);
+                user_param.opt_mask |= TYPE_SET;
                 break;
             case 'd':
-                user_param.direction = atoi(optarg);
-                printf("Selected direction %d\n",user_param.direction);
+                strncpy(user_param.direction, optarg, sizeof(user_param.direction) - 1);
+                printf("Selected direction: %s\n", optarg);
+                user_param.opt_mask |= DIR_SET;
+                break;
+            case 'l':
+                strncpy(user_param.hdr_len, optarg, sizeof(user_param.hdr_len) - 1);
+                printf("Selected header length: %s\n",optarg);
+                user_param.opt_mask |= HDR_LEN_SET;
                 break;
             case 'f':
                 user_param.max_frags = atoi(optarg);
-                printf("Max # of fragments %d\n",user_param.max_frags);
+                printf("Selected number of Scatter-Gather fragments: %d\n",user_param.max_frags);
+                user_param.opt_mask |= MAX_FRAGS_SET;
                 break;
-            case 'p':
+            case 's':
                 user_param.payload_size = atoi(optarg);
                 printf("Payload size %d\n",user_param.payload_size);
+                user_param.opt_mask |= PAYLOAD_SET;
                 break;
+            case 'n':
+                user_param.num_iter = atoi(optarg);
+                printf("Number of iterations: %s\n",
+                    user_param.num_iter == 0 ? "infinite" : optarg);
+                user_param.opt_mask |= NUM_ITER_SET;
+                break;
+            case '?':
+                print_usage(argv[0]);
+                return 1;
             case 'h':
-                printf("Usage: %s \n"
-                       "-s scenario\n"
-                       "-d direction\n"
-                       "-f max number of scatter gather frags\n"
-                       "-p <max payload size>\n",argv[0]);
+                print_usage(argv[0]);
                 return 0;
             default:
-                abort();
+                print_usage(argv[0]);
+                return 1;
         }
     }
     
     if( validate_params() )
     {
-        fprintf(stderr,"Error in options! Please see %s -h\n",argv[0]);
-        return 0;
-    }
-    else
-    {
-        set_test_params();
+        fprintf(stderr,"Error in options!\n");
+        print_usage(argv[0]);
+        return 1;
     }
 
-    // Init FSL USMMGR
+    /* Init FSL USMMGR */
     g_usmmgr = fsl_usmmgr_init();
     if(g_usmmgr == NULL){
         perror("ERROR on fsl_usmmgr_init :");
         return -1;
     }
+
+    /* Install CTRL-C handler */
+    signal(SIGINT, abort_loop);
 
     /////////////////////////////////////////////////////////////////////
     // 1. Initialize SEC environment
@@ -1263,7 +1822,12 @@ int main(int argc, char ** argv)
     generate_test_vectors();
 
     /////////////////////////////////////////////////////////////////////
-    // 2. Start worker threads
+    // 2. Populate data to be sent/received
+    /////////////////////////////////////////////////////////////////////
+    populate_pdcp_contexts();
+
+    /////////////////////////////////////////////////////////////////////
+    // 3. Start worker threads
     /////////////////////////////////////////////////////////////////////
     ret_code = start_sec_worker_threads();
     if (ret_code != 0)
@@ -1273,7 +1837,7 @@ int main(int argc, char ** argv)
     }
 
     /////////////////////////////////////////////////////////////////////
-    // 3. Stop worker threads
+    // 4. Stop worker threads
     /////////////////////////////////////////////////////////////////////
     ret_code = stop_sec_worker_threads();
     if (ret_code != 0)
@@ -1283,7 +1847,7 @@ int main(int argc, char ** argv)
     }
 
     /////////////////////////////////////////////////////////////////////
-    // 4. Cleanup SEC environment
+    // 5. Cleanup SEC environment
     /////////////////////////////////////////////////////////////////////
     ret_code = cleanup_sec_environment();
     if (ret_code != 0)
@@ -1300,4 +1864,3 @@ int main(int argc, char ** argv)
 #ifdef __cplusplus
 }
 #endif
-
