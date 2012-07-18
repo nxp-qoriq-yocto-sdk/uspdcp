@@ -356,11 +356,16 @@ static void test_setup(void)
 
 static void test_teardown()
 {
+    int ret;
+
     dma_mem_free(sec_config_data.memory_area,SEC_DMA_MEMORY_SIZE);
-    
     dma_mem_free(cipher_key, MAX_KEY_LENGTH);
     dma_mem_free(integrity_key, MAX_KEY_LENGTH);
     dma_mem_free(test_packets, sizeof(buffer_t) * TEST_PACKETS_NUMBER);
+    
+    /* Destoy FSL USMMGR object */
+    ret = fsl_usmmgr_exit(g_usmmgr);
+    assert_equal_with_message(ret,0,"Failure to destroy the FSL USMMGR object: %d",ret);
 }
 #ifdef UNDER_CONSTRUCTION_HFN_THRESHOLD
 static void test_hfn_threshold_reach(void)

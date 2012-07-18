@@ -1989,7 +1989,17 @@ static int cleanup_sec_environment(void)
     // unmap the physical memory
     dma_mem_release();
 #else // SEC_HW_VERSION_3_1
+    /* Release memory allocated for SEC internal structures. */
     dma_mem_free(sec_config_data.memory_area,SEC_DMA_MEMORY_SIZE);
+    
+    /* Destroy FSL USMMGR object */
+    ret_code = fsl_usmmgr_exit(g_usmmgr);
+    if(ret_code != 0)
+    {
+        perror("Error free'ing USMMGR object");
+        return ret_code;
+    }
+    
 #endif // SEC_HW_VERSION_3_1
 
     return 0;

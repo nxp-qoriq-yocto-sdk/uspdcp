@@ -159,6 +159,10 @@ static void test_setup(void)
     // Fill SEC driver configuration data
     sec_config_data.memory_area = (void*)__dma_virt;
 #else
+    // Init FSL USMMGR
+    g_usmmgr = fsl_usmmgr_init();
+    assert_not_equal_with_message(g_usmmgr, NULL, "ERROR on fsl_usmmgr_init");
+
     // Fill SEC driver configuration data
     sec_config_data.memory_area = dma_mem_memalign(CACHE_LINE_SIZE,SEC_DMA_MEMORY_SIZE);
     sec_config_data.sec_drv_vtop = test_vtop;
@@ -182,10 +186,12 @@ static void test_teardown()
     // unmap the physical memory
     dma_mem_release();
 #else // SEC_HW_VERSION_3_1
-    // Destoy FSL USMMGR object
-    //ret = fsl_usmmgr_exit(g_usmmgr);
-    //assert_equal_with_message(ret,0,"Failure to destroy the FSL USMMGR: %d",ret);
+
     dma_mem_free(sec_config_data.memory_area,SEC_DMA_MEMORY_SIZE);
+    
+    /* Destroy FSL USMMGR object. */
+    ret = fsl_usmmgr_exit(g_usmmgr);
+    assert_equal_with_message(ret,0,"Failure to destroy the FSL USMMGR: %d",ret);
 #endif // SEC_HW_VERSION_3_1
 }
 
@@ -321,11 +327,7 @@ int main(int argc, char *argv[])
     /* create test suite */
     TestSuite * suite = uio_tests();
     TestReporter * reporter = create_text_reporter();
-#ifdef SEC_HW_VERSION_4_4
-    // Init FSL USMMGR
-    g_usmmgr = fsl_usmmgr_init();
-    assert_not_equal_with_message(g_usmmgr, NULL, "ERROR on fsl_usmmgr_init");
-#endif // SEC_HW_VERSION_4_4
+
     /* Run tests */
 
     job_ring_id = 0;
