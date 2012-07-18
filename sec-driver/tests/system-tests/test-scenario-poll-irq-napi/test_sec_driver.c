@@ -1431,14 +1431,14 @@ static int setup_sec_environment(void)
 
 static int cleanup_sec_environment(void)
 {
-    int ret = 0, i;
+    int ret_code = 0, i;
 
     // release SEC driver
-    ret = sec_release();
-    if (ret != 0)
+    ret_code = sec_release();
+    if (ret_code != 0)
     {
         test_printf("sec_release returned error\n");
-        return 1;
+        return ret_code;
     }
     test_printf("thread main: released SEC user space driver!!\n");
 
@@ -1461,7 +1461,17 @@ static int cleanup_sec_environment(void)
     // unmap the physical memory
     dma_mem_release();
 #else // SEC_HW_VERSION_3_1
+    /* Release memory allocated for SEC internal structures. */
     dma_mem_free(sec_config_data.memory_area,SEC_DMA_MEMORY_SIZE);
+
+    /* Destroy FSL USMMGR object */
+    ret_code = fsl_usmmgr_exit(g_usmmgr);
+    if (ret_code)
+    {
+        perror("Error free'ing USMMGR object");
+        return ret_code;
+    }
+    
 #endif // SEC_HW_VERSION_3_1
 
     return 0;

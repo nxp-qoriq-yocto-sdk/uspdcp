@@ -341,6 +341,10 @@ static void test_setup(void)
     // Fill SEC driver configuration data
     sec_config_data.memory_area = (void*)__dma_virt;
 #else
+    // Init FSL USMMGR
+    g_usmmgr = fsl_usmmgr_init();
+    assert_not_equal_with_message(g_usmmgr, NULL, "ERROR on fsl_usmmgr_init");
+
     sec_config_data.memory_area = dma_mem_memalign(CACHE_LINE_SIZE,SEC_DMA_MEMORY_SIZE);
     sec_config_data.sec_drv_vtop = test_vtop;
 #endif
@@ -390,22 +394,27 @@ static void test_setup(void)
 
 static void test_teardown()
 {
-#ifdef SEC_HW_VERSION_3_1
     int ret = 0;
-
-    // unmap the physical memory
-    dma_mem_release();
-#else // SEC_HW_VERSION_3_1
-    // Destoy FSL USMMGR object
-    //ret = fsl_usmmgr_exit(g_usmmgr);
-    //assert_equal_with_message(ret,0,"Failure to destroy the FSL USMMGR: %d",ret);
-    dma_mem_free(sec_config_data.memory_area,SEC_DMA_MEMORY_SIZE);
-#endif // SEC_HW_VERSION_3_1
 
     dma_mem_free(cipher_key, MAX_KEY_LENGTH);
     dma_mem_free(integrity_key, MAX_KEY_LENGTH);
     dma_mem_free(test_input_packets, sizeof(buffer_t) * TEST_PACKETS_NUMBER);
     dma_mem_free(test_output_packets, sizeof(buffer_t) * TEST_PACKETS_NUMBER);
+
+#ifdef SEC_HW_VERSION_3_1    
+    // unmap the physical memory
+    dma_mem_release();
+#else // SEC_HW_VERSION_3_1
+    /* Release memory allocated for SEC internal structures. */
+    dma_mem_free(sec_config_data.memory_area,SEC_DMA_MEMORY_SIZE);
+
+    /* Destoy FSL USMMGR object */
+    ret = fsl_usmmgr_exit(g_usmmgr);
+    assert_equal_with_message(ret,0,"Failure to destroy the FSL USMMGR object: %d",ret);
+    
+#endif // SEC_HW_VERSION_3_1
+
+    
 }
 
 static void test_sec_init_invalid_params(void)
@@ -2602,11 +2611,7 @@ int main(int argc, char *argv[])
     /* create test suite */
     TestSuite * suite = uio_tests();
     TestReporter * reporter = create_text_reporter();
-#ifdef SEC_HW_VERSION_4_4
-    // Init FSL USMMGR
-    g_usmmgr = fsl_usmmgr_init();
-    assert_not_equal_with_message(g_usmmgr, NULL, "ERROR on fsl_usmmgr_init");
-#endif // SEC_HW_VERSION_4_4
+
     /* Run tests */
 
     ////////////////////////////////////
