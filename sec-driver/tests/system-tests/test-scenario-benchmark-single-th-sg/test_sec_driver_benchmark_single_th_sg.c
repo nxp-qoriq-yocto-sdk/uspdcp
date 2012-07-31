@@ -195,9 +195,9 @@ typedef struct test_packet_s
 {
     int id;                     /**< Buffer index to be used when put'ing input buffers */
     packet_usage_t usage;       /**< Resource usage: free or in-use */
-    struct pdcp_context_s *ctx; /**< Context to which this packet belongs */
     sec_packet_t *in_packet;    /**< Input packet array */
     sec_packet_t *out_packet;   /**< Output packet array */
+    struct pdcp_context_s *ctx; /**< Context to which this packet belongs */
 }test_packet_t;
 
 typedef struct buffer_s
@@ -207,6 +207,7 @@ typedef struct buffer_s
 
 typedef struct pdcp_context_s
 {
+    int no_of_used_buffers; // index incremented by Producer Thread
     // the status of this context: free or used
     pdcp_context_usage_t usage;
     // handle to the SEC context (from SEC driver) associated to this PDCP context
@@ -223,9 +224,6 @@ typedef struct pdcp_context_s
     test_packet_t *test_packets;
     buffer_t *input_buffers;
     buffer_t *output_buffers;
-    sec_packet_t *pdcp_in_packets;
-    sec_packet_t *pdcp_out_packets;
-    int no_of_used_buffers; // index incremented by Producer Thread
     int no_of_buffers_processed; // index increment by Consumer Thread
     int no_of_buffers_to_process; // configurable random number of packets to be processed per context
 }pdcp_context_t;
@@ -243,8 +241,10 @@ typedef struct thread_config_s
     volatile int work_done;
     // default to zero. set to 1 when main thread instructs the worked thread to exit.
     volatile int should_exit;
-    uint32_t process_cycles;
-    uint32_t poll_cycles;
+    uint32_t dl_process_cycles;
+    uint32_t dl_poll_cycles;
+    uint32_t ul_process_cycles;
+    uint32_t ul_poll_cycles;
 }thread_config_t;
 /*==================================================================================================
                                      GLOBAL VARIABLES
@@ -867,13 +867,18 @@ static int done_cbk(const sec_packet_t *in_packet,
 
 static int get_results(uint8_t job_ring, int limit, uint32_t *packets_out, uint32_t *core_cycles, uint8_t tid)
 {
-    uint32_t start_cycles = GET_ATBL();
+    uint32_t start_cycles;
     uint32_t diff_cycles = 0;
     int ret_code = 0;
+    sec_statistics_t sec_stats;
 
     assert(limit != 0);
     assert(packets_out != NULL);
 
+    ret_code = sec_get_stats(job_ring_descriptors[job_ring].job_ring_handle, &sec_stats);
+    assert(ret_code == SEC_SUCCESS);
+
+    start_cycles = GET_ATBL();
     ret_code = sec_poll_job_ring(job_ring_descriptors[job_ring].job_ring_handle, limit, packets_out);
     diff_cycles = (GET_ATBL() - start_cycles);
     *core_cycles += diff_cycles;
@@ -905,8 +910,11 @@ static int start_sec_worker_threads(void)
     th_config[0].no_of_used_pdcp_dl_contexts = &no_of_used_pdcp_dl_contexts;
     th_config[0].work_done = 0;
     th_config[0].should_exit = 0;
-    th_config[0].process_cycles = 0;
-    th_config[0].poll_cycles = 0;
+    th_config[0].ul_process_cycles = 0;
+    th_config[0].ul_poll_cycles = 0;
+    th_config[0].dl_process_cycles = 0;
+    th_config[0].dl_poll_cycles = 0;
+
     ret_code = pthread_create(&threads[0], NULL, &pdcp_thread_routine, (void*)&th_config[0]);
 
     return ret_code;
@@ -987,12 +995,14 @@ static void pdcp_thread_ctx_send_packets(int tid,
                 /* Wait while the producer JR is empty, and in the mean time do some
                  * polling on the consumer JR -> retrieve all available notifications.
                  */
+                usleep(1);
                 ret_code = get_results(jr_id,
                                        JOB_RING_POLL_UNLIMITED,
                                        packets_received,
                                        poll_cycles,
                                        tid);
                 assert(ret_code == 0);
+
             }
             else if(ret_code != SEC_SUCCESS)
             {
@@ -1111,8 +1121,11 @@ static void* pdcp_thread_routine(void* config)
 
         total_packets_sent = 0;
 
-        th_config_local->poll_cycles = 0;
-        th_config_local->process_cycles = 0;
+        th_config_local->dl_poll_cycles = 0;
+        th_config_local->dl_process_cycles = 0;
+        
+        th_config_local->ul_poll_cycles = 0;
+        th_config_local->ul_process_cycles = 0;
 
         gettimeofday(&start_time, NULL);
         
@@ -1121,7 +1134,7 @@ static void* pdcp_thread_routine(void* config)
         {
             for(i = 0; i < PDCP_CONTEXT_NUMBER; i++)
             {
-                while(total_dl_packets_sent != total_dl_packets_to_send)
+                if(total_dl_packets_sent != total_dl_packets_to_send)
                 {
                 
                     ctx_packets_received = 0;
@@ -1131,18 +1144,16 @@ static void* pdcp_thread_routine(void* config)
                     pdcp_thread_ctx_send_packets(th_config_local->tid,
                                                  JOB_RING_ID_FOR_DL,
                                                  &pdcp_dl_contexts[i],
-                                                 &th_config_local->process_cycles,
-                                                 &th_config_local->poll_cycles,
+                                                 &th_config_local->dl_process_cycles,
+                                                 &th_config_local->dl_poll_cycles,
                                                  &ctx_packets_received,
                                                  &ctx_packets_sent);
 
                     total_dl_packets_received += ctx_packets_received;
                     total_dl_packets_sent += ctx_packets_sent;
-                    
-                    break;
                 }
                 
-                while(total_ul_packets_sent != total_ul_packets_to_send)
+                if(total_ul_packets_sent != total_ul_packets_to_send)
                 {
                     ctx_packets_received = 0;
                     ctx_packets_sent = 0;
@@ -1151,15 +1162,13 @@ static void* pdcp_thread_routine(void* config)
                     pdcp_thread_ctx_send_packets(th_config_local->tid,
                                                  JOB_RING_ID_FOR_UL,
                                                  &pdcp_ul_contexts[i],
-                                                 &th_config_local->process_cycles,
-                                                 &th_config_local->poll_cycles,
+                                                 &th_config_local->ul_process_cycles,
+                                                 &th_config_local->ul_poll_cycles,
                                                  &ctx_packets_received,
                                                  &ctx_packets_sent);
 
                     total_ul_packets_received += ctx_packets_received;
                     total_ul_packets_sent += ctx_packets_sent;
-                    
-                    break;
                 }
                 
                 total_packets_received = total_dl_packets_received + 
@@ -1168,6 +1177,7 @@ static void* pdcp_thread_routine(void* config)
                 total_packets_sent = total_dl_packets_sent +
                                      total_ul_packets_sent;
             }
+
         }
         
         test_printf("thread #%d: polling until all contexts are deleted\n", th_config_local->tid);
@@ -1181,7 +1191,7 @@ static void* pdcp_thread_routine(void* config)
             ret_code = get_results(JOB_RING_ID_FOR_DL,
                                    JOB_RING_POLL_UNLIMITED,
                                    &packets_received,
-                                   &th_config_local->poll_cycles,
+                                   &th_config_local->dl_poll_cycles,
                                    th_config_local->tid);
             assert(ret_code == 0);
             total_dl_packets_received += packets_received;
@@ -1192,7 +1202,7 @@ static void* pdcp_thread_routine(void* config)
             ret_code = get_results(JOB_RING_ID_FOR_UL,
                                    JOB_RING_POLL_UNLIMITED,
                                    &packets_received,
-                                   &th_config_local->poll_cycles,
+                                   &th_config_local->ul_poll_cycles,
                                    th_config_local->tid);
             assert(ret_code == 0);
             total_ul_packets_received += packets_received;
@@ -1237,8 +1247,10 @@ static void* pdcp_thread_routine(void* config)
                send_pps_dl, send_pps_ul,
                receive_bps_dl, receive_bps_ul,
                send_bps_dl, send_bps_ul);
-        printf("Avg. process core cycles = %d\n", th_config_local->process_cycles / total_packets_sent);
-        printf("Avg. poll core cycles = %d\n", th_config_local->poll_cycles / total_packets_received);
+        printf("Avg. UL process core cycles = %d\n", th_config_local->ul_process_cycles / total_ul_packets_sent);
+        printf("Avg. UL poll core cycles = %d\n", th_config_local->ul_poll_cycles / total_ul_packets_sent);
+        printf("Avg. DL process core cycles = %d\n", th_config_local->dl_process_cycles / total_dl_packets_sent);
+        printf("Avg. DL poll core cycles = %d\n", th_config_local->dl_poll_cycles / total_dl_packets_sent);
 
         /* Check if the user requested to end test */
         if(th_config_local->should_exit)
@@ -1318,7 +1330,7 @@ static int setup_sec_environment(void)
         {
             /* Allocate array of input fragments */
             pdcp_dl_contexts[i].test_packets[pkt_idx].in_packet = 
-                malloc(sizeof(sec_packet_t) * test_num_frags);
+                memalign(BUFFER_ALIGNEMENT,sizeof(sec_packet_t) * test_num_frags);
             assert(pdcp_dl_contexts[i].test_packets[pkt_idx].in_packet != NULL);
             memset(pdcp_dl_contexts[i].test_packets[pkt_idx].in_packet,
                    0x00,
@@ -1326,7 +1338,7 @@ static int setup_sec_environment(void)
             
             /* Allocate array of output fragments */
             pdcp_dl_contexts[i].test_packets[pkt_idx].out_packet = 
-                malloc(sizeof(sec_packet_t));
+                memalign(BUFFER_ALIGNEMENT,sizeof(sec_packet_t));
             assert(pdcp_dl_contexts[i].test_packets[pkt_idx].out_packet != NULL);
             memset(pdcp_dl_contexts[i].test_packets[pkt_idx].out_packet,
                    0x00,
@@ -1373,7 +1385,7 @@ static int setup_sec_environment(void)
         {
             /* Allocate array of input fragments */
             pdcp_ul_contexts[i].test_packets[pkt_idx].in_packet = 
-                malloc(sizeof(sec_packet_t));
+                memalign(BUFFER_ALIGNEMENT,sizeof(sec_packet_t));
             assert(pdcp_ul_contexts[i].test_packets[pkt_idx].in_packet != NULL);
             memset(pdcp_ul_contexts[i].test_packets[pkt_idx].in_packet,
                    0x00,
@@ -1381,7 +1393,7 @@ static int setup_sec_environment(void)
             
             /* Allocate array of output fragments */
             pdcp_ul_contexts[i].test_packets[pkt_idx].out_packet = 
-                malloc(sizeof(sec_packet_t) * test_num_frags);
+                memalign(BUFFER_ALIGNEMENT,sizeof(sec_packet_t) * test_num_frags);
             assert(pdcp_ul_contexts[i].test_packets[pkt_idx].out_packet != NULL);
             memset(pdcp_ul_contexts[i].test_packets[pkt_idx].out_packet,
                    0x00,
@@ -1396,8 +1408,9 @@ static int setup_sec_environment(void)
     // 1. Initialize SEC user space driver requesting #JOB_RING_NUMBER Job Rings
     //////////////////////////////////////////////////////////////////////////////
     sec_config_data.memory_area = dma_mem_memalign(CACHE_LINE_SIZE,SEC_DMA_MEMORY_SIZE);
-    sec_config_data.sec_drv_vtop = test_vtop;
     assert(sec_config_data.memory_area != NULL);
+
+    sec_config_data.sec_drv_vtop = test_vtop;
 
     // Fill SEC driver configuration data
     sec_config_data.work_mode = SEC_STARTUP_POLLING_MODE;

@@ -390,6 +390,7 @@ static inline void* test_ptov(dma_addr_t p)
 {
     return fsl_usmmgr_p2v(p,g_usmmgr);
 }
+
 /* Allocates an aligned memory area from the FSL USMMGR pool */
 static void * test_memalign(size_t align, size_t size);
 
@@ -1395,8 +1396,8 @@ static int setup_sec_environment(void)
     // 1. Initialize SEC user space driver requesting #JOB_RING_NUMBER Job Rings
     //////////////////////////////////////////////////////////////////////////////
     sec_config_data.memory_area = dma_mem_memalign(CACHE_LINE_SIZE,SEC_DMA_MEMORY_SIZE);
-    sec_config_data.sec_drv_vtop = test_vtop;
     assert(sec_config_data.memory_area != NULL);
+    sec_config_data.sec_drv_vtop = test_vtop;
 
     // Fill SEC driver configuration data
     sec_config_data.work_mode = SEC_STARTUP_POLLING_MODE;
