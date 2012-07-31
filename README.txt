@@ -1,7 +1,7 @@
 ----------------------------------------------------------------------------------------------------
 ABOUT THIS FILE
 ----------------------------------------------------------------------------------------------------
-Date:    15 May 2012
+Date:    31 July 2012
 
 This Readme file contains details on SEC user space driver package contents as well as instructions
 showing how to compile and install SEC user space driver related binaries:
@@ -53,14 +53,28 @@ The package contains:
                          See <test-scenario-benchmark-single-th>/readme.txt for more details.
 
                     ---> <test-scenario-benchmark-sg>
-                         This is a two-thread test application that allows benchmarking PDCP data plane processing,
-                         using Scatter-Gather tables
+                         This is a two-thread test application that allows benchmarking PDCP data plane and control plane
+                         processing, using Scatter-Gather tables
                          Benchmark results consist of:
                             - core cycles/packet - spent in SEC user space driver APIs for sending and
                                                    retrieving a packet to/from SEC engine.
                             - execution time
                             - CPU load
                          See <test-scenario-benchmark-sg>/readme.txt for more details.
+
+                    ---> <test-scenario-benchmark-single-th-sg>
+                         This is a single-thread test application that allows benchmarking PDCP data plane and control plane
+                         processing, using Scatter-Gather tables
+                         Benchmark results consist of:
+                            - core cycles/packet - spent in SEC user space driver APIs for sending and
+                                                   retrieving a packet to/from SEC engine.
+                            - execution time
+                            - CPU load
+                         See <test-scenario-benchmark-single-th-sg>/readme.txt for more details.
+                    ---> <test-scenario-b2b>
+                         This is a two-thread application that performs loopback encapsulation/decapsulation of PDCP
+                         data plane and control plane, using Scatter-Gather tables.
+                         See <test-scenario-b2b>/readme.txt for more details
 
 ----------------------------------------------------------------------------------------------------
 HOW TO INSTALL SEC USER SPACE DRIVER
@@ -174,6 +188,8 @@ HOW TO RUN TESTS FOR SEC USER SPACE DRIVER
     [psc9131rdb]~ ./test_sec_driver_benchmark
     [psc9131rdb]~ ./test_sec_driver_benchmark_sg
     [psc9131rdb]~ ./test_sec_driver_benchmark_single_th
+    [psc9131rdb]~ ./test_sec_driver_benchmark_single_th_sg
+    [psc9131rdb]~ ./test_sec_driver_b2b
 
 
 
