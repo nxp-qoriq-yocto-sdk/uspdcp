@@ -649,6 +649,9 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
     (descriptor)->deschdr.command.jd.shr_desc_len = (len);      \
 }
 
+#define PDCP_JD_SET_JOB_PTR(descriptor,ptr) \
+        (descriptor)->job_ptr = (ptr)
+
 #define PDCP_INIT_JD(descriptor)              { \
         /* CTYPE = job descriptor                               \
          * RSMS, DNR = 0
@@ -682,7 +685,7 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
          * RTO = 0
          */                                                     \
         (descriptor)->seq_in.command.word  = 0xF0400000; /**/   \
-}
+    }
 
 #define SEC_PDCP_INIT_CPLANE_SD(descriptor){ \
         /* CTYPE = shared job descriptor                        \
@@ -1054,6 +1057,7 @@ struct load_command_s{
         } fields;
     } PACKED command;
 } PACKED;
+
 /** Structure describing the PDB (Protocol Data Block)
  * needed by protocol acceleration descriptors for
  * PDCP Control Plane.
@@ -1143,8 +1147,8 @@ struct sec_pdcp_sd_t{
  */
 struct sec_descriptor_t {
     struct descriptor_header_s deschdr;
-#warning "Update for 36 bits addresses"
     dma_addr_t    sd_ptr;
+#warning "Update for 36 bits addresses"
     struct seq_out_command_s seq_out;
 #warning "Update for 36 bits addresses"
     dma_addr_t    seq_out_ptr;
@@ -1154,7 +1158,8 @@ struct sec_descriptor_t {
     uint32_t      in_ext_length;
     struct load_command_s load_dpovrd;
     uint32_t      dpovrd;
-} PACKED;
+    struct sec_job_t *job_ptr;
+} __CACHELINE_ALIGNED PACKED;
 
 #endif // SEC_HW_VERSION_3_1
 /*==============================================================================

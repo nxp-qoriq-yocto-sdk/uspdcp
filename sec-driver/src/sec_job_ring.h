@@ -145,15 +145,12 @@ typedef enum sec_job_ring_state_e
 struct sec_job_ring_t
 {
     /* TODO: Add wrapper macro to make it obvious this is the consumer index on the output ring */
-    volatile uint32_t cidx;                     /*< Consumer index for job ring (jobs array).
+    uint32_t cidx;                              /*< Consumer index for job ring (jobs array).
                                                     @note: cidx and pidx are accessed from different threads.
                                                     Place the cidx and pidx inside the structure so that
                                                     they lay on different cachelines, to avoid false
                                                     sharing between threads when the threads run on different cores! */
-#ifdef SEC_HW_VERSION_4_4
-    volatile uint32_t   hw_cidx;                /*< Index showing the last entry processed by
-                                                    the SEC 4.4 HW. */
-#endif // SEC_HW_VERSION_4_1
+
     struct sec_job_t jobs[SEC_JOB_RING_SIZE];   /*< Ring of jobs. SEC 3.1 ONLY: The same ring is used for
                                                     input jobs and output jobs because SEC engine writes
                                                     back output indication in input job.
@@ -165,11 +162,8 @@ struct sec_job_ring_t
                                                     a second time to SEC for processing */
 #endif
     // TODO: Add wrapper macro to make it obvious this is the producer index on the input ring
-    volatile uint32_t pidx;                     /*< Producer index for job ring (jobs array) */
+    uint32_t pidx;                              /*< Producer index for job ring (jobs array) */
 #ifdef SEC_HW_VERSION_4_4
-    volatile uint32_t   hw_pidx;                /*< Index showing the currently enqueued entry for
-                                                    processing by the user to the SEC 4.4 HW.*/
-
     dma_addr_t *input_ring;                     /*< Ring of output descriptors received from SEC.
                                                     Size of array is power of 2 to allow fast update of
                                                     producer/consumer indexes with bitwise operations. */
@@ -185,10 +179,10 @@ struct sec_job_ring_t
     uint32_t alternate_register_range;          /*< Can be #TRUE or #FALSE. Indicates if the registers for
                                                     this job ring are mapped to an alternate 4k page.*/
 #endif // SEC_HW_VERSION_3_1
-    volatile void *register_base_addr;          /*< Base address for SEC's register memory for this job ring.
+    void *register_base_addr;                   /*< Base address for SEC's register memory for this job ring.
                                                     @note On SEC 3.1 all channels share the same register address space,
                                                     so this member will have the exact same value for all of them. */
-    volatile sec_job_ring_state_t jr_state;     /*< The state of this job ring */
+    sec_job_ring_state_t jr_state;              /*< The state of this job ring */
     sec_contexts_pool_t ctx_pool;               /*< Pool of SEC contexts */
 #if defined(SEC_HW_VERSION_4_4) && (SEC_ENABLE_SCATTER_GATHER == ON)
     sec_sg_context_t sg_ctxs[SEC_JOB_RING_SIZE]; /*< Scatter Gather contexts for this jobring */

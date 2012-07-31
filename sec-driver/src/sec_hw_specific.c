@@ -278,12 +278,6 @@ int hw_reset_job_ring(sec_job_ring_t *job_ring)
             g_sec_vtop(job_ring->output_ring),
             hw_get_out_queue_base(job_ring));
 
-    // Set HW read index to 0
-    job_ring->hw_cidx = 0;
-
-    // Set HW write index to 0
-    job_ring->hw_pidx = 0;
-
 #endif // SEC_HW_VERSION_3_1
     return 0;
 }
