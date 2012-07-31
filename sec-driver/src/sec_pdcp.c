@@ -1964,6 +1964,8 @@ int sec_pdcp_context_update_descriptor(sec_context_t *ctx,
                    job->sec_context->sh_desc_phys,
                    SEC_PDCP_GET_DESC_LEN(job->sec_context->sh_desc));
 
+    PDCP_JD_SET_JOB_PTR(descriptor,job);
+
 #if (SEC_ENABLE_SCATTER_GATHER == ON)
     if( SG_CONTEXT_OUT_TBL_EN(job->sg_ctx ))
     {
@@ -2006,10 +2008,10 @@ int sec_pdcp_context_update_descriptor(sec_context_t *ctx,
                        offset,
                        length);
 
-/* In order to be compatible with QI scenarios, the DPOVRD value loaded
- * must be formated like this:
- * HFN_Ov_En(1b) | Res(1b) | HFN Value (right aligned)
- */
+    /* In order to be compatible with QI scenarios, the DPOVRD value loaded
+     * must be formated like this:
+     * HFN_Ov_En(1b) | Res(1b) | HFN Value (right aligned)
+     */
     descriptor->load_dpovrd.command.word = 0x16870004;   // ld: deco-povrd len=4 offs=0 imm
     if( job->sec_context->hfn_ov_en == TRUE)
     {

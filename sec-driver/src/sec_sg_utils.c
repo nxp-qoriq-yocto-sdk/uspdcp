@@ -110,7 +110,7 @@ sec_return_code_t   build_sg_context(sec_sg_context_t *sg_ctx,
          */
         return SEC_SUCCESS;
     }
-
+    
     total_length = packet[0].total_length;
 
     sg_tbl = (dir == SEC_SG_CONTEXT_TYPE_IN ?   \
@@ -129,6 +129,9 @@ sec_return_code_t   build_sg_context(sec_sg_context_t *sg_ctx,
         SG_TBL_SET_ADDRESS(sg_tbl[i],packet[i].address);
         SG_TBL_SET_OFFSET(sg_tbl[i], packet[i].offset);
         SG_TBL_SET_LENGTH(sg_tbl[i],packet[i].length);
+        
+        __builtin_prefetch(&sg_tbl[i+1]);
+        __builtin_prefetch(&packet[i+1]);
     }while( ++i <= num_fragments);
 
     SG_TBL_SET_FINAL(sg_tbl[--i]);

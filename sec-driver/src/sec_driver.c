@@ -193,7 +193,7 @@ pthread_key_t g_sec_errno = SEC_PTHREAD_KEY_INVALID;
  */
 uint32_t g_sec_errno_value = SEC_SUCCESS;
 #ifdef SEC_HW_VERSION_4_4
-/** Global V2P function for virtual to physical translation for the internal
+/** Global function for virtual to physical translation for the internal
  * SEC driver structures
  */
 sec_vtop g_sec_vtop = NULL;
@@ -376,6 +376,9 @@ static void hw_flush_job_ring(sec_job_ring_t * job_ring,
     int32_t discarded_packets_no = 0;
     int32_t number_of_jobs_available = 0;
     int ret;
+#ifdef SEC_HW_VERSION_4_4
+    dma_addr_t  current_desc = 0;
+#endif
 
     SEC_DEBUG("Jr[%p] pi[%d] ci[%d].Flushing jr id %d.packet status[%d]."
               "SEC error code[0x%x]. notify packet=[%d]",
@@ -406,7 +409,14 @@ static void hw_flush_job_ring(sec_job_ring_t * job_ring,
 #ifdef SEC_HW_VERSION_3_1
         job = &job_ring->jobs[job_ring->cidx];
 #else
-        job = &job_ring->jobs[job_ring->hw_cidx];
+        current_desc = job_ring->output_ring[job_ring->cidx].desc;
+        
+        /* Since the memory is continous, then P2V translation is a mere addition to
+           the base descriptor physical address */
+        current_desc = (current_desc - job_ring->jobs[0].descr_phys_addr) / sizeof(struct sec_descriptor_t);
+
+        job = (job_ring->descriptors + current_desc)->job_ptr;
+        SEC_ASSERT_RET_VOID( job != NULL,"Job ring retrieved from descriptor is NULL");
 #endif
         sec_context = job->sec_context;
 
@@ -427,8 +437,6 @@ static void hw_flush_job_ring(sec_job_ring_t * job_ring,
         // Increment the consumer index for the current job ring
         job_ring->cidx = SEC_CIRCULAR_COUNTER(job_ring->cidx, SEC_JOB_RING_SIZE);
 #ifdef SEC_HW_VERSION_4_4
-        job_ring->hw_cidx = SEC_CIRCULAR_COUNTER(job_ring->hw_cidx, SEC_JOB_RING_SIZE);
-
         hw_remove_one_entry(job_ring);
 #endif // SEC_HW_VERSON_4_4
         if(do_notify == TRUE)
@@ -499,11 +507,7 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
 #endif
     uint32_t do_driver_shutdown = FALSE;
 #ifdef SEC_HW_VERSION_4_4
-    int hw_idx;
-    int head = job_ring->pidx;
-    int sw_idx = job_ring->cidx;
-    int tail = job_ring->cidx;
-    int i;
+    dma_addr_t current_desc;
 
     /* check here if any JR error that cannot be written
     * in the output status word has occurred
@@ -536,56 +540,25 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
               job_ring, job_ring->pidx, job_ring->cidx,
               number_of_jobs_available, jobs_no_to_notify);
 
-    while(jobs_no_to_notify > notified_packets_no
-#ifdef SEC_HW_VERSION_4_4
-            && (SEC_JOB_RING_NUMBER_OF_ITEMS(SEC_JOB_RING_SIZE,head, tail) >= 1 )
-            && hw_get_no_finished_jobs(job_ring)
-#endif
-          )
+    while(jobs_no_to_notify > notified_packets_no)
     {
 #ifdef SEC_HW_VERSION_4_4
         status = SEC_STATUS_SUCCESS;
-        hw_idx = job_ring->hw_cidx;
 
-        for (i = 0;
-             SEC_JOB_RING_NUMBER_OF_ITEMS(SEC_JOB_RING_SIZE,head, tail + i) >= 1;
-             i++)
-        {
-                sw_idx = SEC_CIRCULAR_COUNTER(tail + i - 1,SEC_JOB_RING_SIZE);
-                SEC_DEBUG("I: %d,PIDX: %d,HW IDX: %d,SW IDX: %d,CIDX: %d,Tail: %d, Out descr ptr: 0x%08x, Searched PTR: %08x",
-                           i,
-                           job_ring->pidx,
-                           hw_idx,
-                           sw_idx,
-                           job_ring->cidx,
-                           tail,
-                           (uint32_t)job_ring->output_ring[hw_idx].desc,
-                           (uint32_t)job_ring->jobs[sw_idx].descr_phys_addr);
-                 if (job_ring->output_ring[hw_idx].desc ==
-                     job_ring->jobs[sw_idx].descr_phys_addr)
-                     break; /* found */
-        }
-
-        SEC_DEBUG("Found @ I: %d,PIDX: %d,HW IDX: %d,SW IDX: %d,CIDX: %d,Tail: %d, Out descr ptr: 0x%08x, Searched PTR: %08x",
-                  i,
-                  job_ring->pidx,
-                  hw_idx,
-                  sw_idx,
-                  job_ring->cidx,
-                  tail,
-                  (uint32_t)job_ring->output_ring[hw_idx].desc,
-                  (uint32_t)job_ring->jobs[sw_idx].descr_phys_addr);
+        /* Get completed descriptor */
+        current_desc = job_ring->output_ring[job_ring->cidx].desc;
         
-        ASSERT(SEC_JOB_RING_NUMBER_OF_ITEMS(SEC_JOB_RING_SIZE, head, tail + i) > 0);
+        /* Get job status here */
+        sec_error_code = job_ring->output_ring[job_ring->cidx].status;
 
-        /* mark completed, avoid matching on a recycled desc addr */
-        job_ring->jobs[sw_idx].descr_phys_addr = 0;
+        /* Since the memory is continous, then P2V translation is a mere addition to
+           the base descriptor physical address */
+        current_desc = (current_desc - job_ring->jobs[0].descr_phys_addr) / sizeof(struct sec_descriptor_t);
 
-        // Get completed job
-        job = &job_ring->jobs[sw_idx];
-
-        // Get job status here
-        sec_error_code = job_ring->output_ring[hw_idx].status;
+        job = (job_ring->descriptors + current_desc)->job_ptr;
+        
+        SEC_ASSERT (job != NULL, SEC_PROCESSING_ERROR,
+                    "Job ring retrieved from descriptor is NULL");
 
         // Test here for HFN gte HFN treshold
         // If so, this is not an error, signal to upper layer
@@ -598,8 +571,10 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
                           job->sec_context, job->in_packet, job->out_packet);
         }
 
-        // Test here for ICV check fail
-        // If so, this is not an error, signal to upper layer
+        /* 
+         * Test here for ICV check fail
+         * If so, this is not an error, signal to upper layer
+         */
         if( ICV_CHECK_FAIL(sec_error_code) )
         {
             sec_error_code = 0;
@@ -692,25 +667,7 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
         // AFTER saving job in temporary location!
         job_ring->cidx = SEC_CIRCULAR_COUNTER(job_ring->cidx, SEC_JOB_RING_SIZE);
 #ifdef SEC_HW_VERSION_4_4
-        /* Increment HW read index */
-        job_ring->hw_cidx = SEC_CIRCULAR_COUNTER(job_ring->hw_cidx, SEC_JOB_RING_SIZE);
-
-        /*
-         * if this job completed out-of-order, do not increment
-         * the tail.  Otherwise, increment tail by 1 plus the
-         * number of subsequent jobs already completed out-of-order
-         */
-        if( sw_idx == tail)
-        {
-            do{
-                tail = SEC_CIRCULAR_COUNTER(tail,SEC_JOB_RING_SIZE);
-            }while(SEC_JOB_RING_NUMBER_OF_ITEMS(SEC_JOB_RING_SIZE,head, tail) >= 1 &&
-                   job_ring->jobs[tail].descr_phys_addr == 0);
-
-            job_ring->cidx = tail;
-        }
-
-        /* Restore descriptor address */
+        /* Signal that the job has been processed and the slot is free */
         hw_remove_one_entry(job_ring);
 #endif // SEC_HW_VERSION_4_4
         // If context is retiring, set a suggestive status for the packets notified to UA.
@@ -730,10 +687,7 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
                                              saved_job.ua_handle,
                                              status,
                                              0); // no error
-#ifdef SEC_HW_VERSION_4_4
-        head = job_ring->pidx;
-        sw_idx = tail = job_ring->cidx;
-#endif // SEC_HW_VERSION_4_4
+
         // consume processed packet for this sec context
         CONTEXT_CONSUME_PACKET(sec_context);
         notified_packets_no++;
@@ -1175,6 +1129,7 @@ sec_return_code_t sec_init(const sec_config_t *sec_config_data,
 
     // Update V2P function
     g_sec_vtop = sec_config_data->sec_drv_vtop;
+
 #endif // SEC_HW_VERSION_4_4
     // Initialize per-thread-local errno variable
 
@@ -1446,9 +1401,11 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
 #endif // SEC_HW_VERSION_3_1
 
 #ifdef SEC_HW_VERSION_4_4
-    if( sec_ctx_info->hfn_ov_en == TRUE )
+    if (sec_ctx_info->hfn_ov_en == TRUE)
     {
         ctx->hfn_ov_en = TRUE;
+        SEC_DEBUG("Jr[%p].Context %p configured for HFN override",
+                  job_ring, ctx);
     }
 #endif // SEC_HW_VERSION_4_4
     // provide to UA a SEC ctx handle
@@ -1714,8 +1671,8 @@ sec_return_code_t sec_process_packet_hfn_ov(sec_context_handle_t sec_ctx_handle,
     SEC_ASSERT(in_packet != NULL, SEC_INVALID_INPUT_PARAM, "in_packet is NULL");
     SEC_ASSERT(out_packet != NULL, SEC_INVALID_INPUT_PARAM, "out_packet is NULL");
 #ifdef SEC_HW_VERSION_4_4
-    SEC_ASSERT(in_packet->address != 0, SEC_INVALID_INPUT_PARAM, "in_packet->address is NULL");
-    SEC_ASSERT(out_packet->address != 0, SEC_INVALID_INPUT_PARAM, "out_packet->address is NULL");
+    SEC_ASSERT(in_packet->address != 0, SEC_INVALID_INPUT_PARAM, "in_packet->address is 0");
+    SEC_ASSERT(out_packet->address != 0, SEC_INVALID_INPUT_PARAM, "out_packet->address is 0");
 #else // SEC_HW_VERSION_4_4
     SEC_ASSERT(in_packet->address != NULL, SEC_INVALID_INPUT_PARAM, "in_packet->address is NULL");
     SEC_ASSERT(out_packet->address != NULL, SEC_INVALID_INPUT_PARAM, "out_packet->address is NULL");
@@ -1776,8 +1733,7 @@ sec_return_code_t sec_process_packet_hfn_ov(sec_context_handle_t sec_ctx_handle,
         return SEC_JR_IS_FULL;
     }
 #else // SEC_HW_VERSION_3_1
-    if( (hw_get_available_slots(job_ring) == 0) ||
-         SEC_JOB_RING_IS_FULL(job_ring->pidx, job_ring->cidx,
+    if( SEC_JOB_RING_IS_FULL(job_ring->pidx, job_ring->cidx,
                               SEC_JOB_RING_SIZE,SEC_JOB_RING_SIZE ) )
     {
         SEC_DEBUG("Jr[%p] pi[%d] ci[%d].Job Ring is full.",
@@ -1831,10 +1787,6 @@ sec_return_code_t sec_process_packet_hfn_ov(sec_context_handle_t sec_ctx_handle,
 
     // update descriptor with pointers to input/output data and pointers to crypto information
     ASSERT(job->descr != NULL);
-#ifdef SEC_HW_VERSION_4_4
-    // Descriptor Phy Addr will be set to 0 during the search, must be updated here
-    job->descr_phys_addr = g_sec_vtop(job->descr);
-#endif // SEC_HW_VERSION_4_4
 
 #ifdef SEC_HW_VERSION_3_1
     // Update SEC descriptor. If HFN reached the configured threshold, then
@@ -1854,18 +1806,25 @@ sec_return_code_t sec_process_packet_hfn_ov(sec_context_handle_t sec_ctx_handle,
 
     // keep count of submitted packets for this sec context
     CONTEXT_ADD_PACKET(sec_context);
+#ifdef SEC_HW_VERSION_4_4
+    // Set ptr in input ring to current descriptor
+    job_ring->input_ring[job_ring->pidx] = job->descr_phys_addr;
 
+    // Notify HW that a new job is enqueued
+    hw_enqueue_packet_on_job_ring(job_ring);
+
+#endif // SEC_HW_VERSION_4_4
     // increment the producer index for the current job ring
     job_ring->pidx = SEC_CIRCULAR_COUNTER(job_ring->pidx, SEC_JOB_RING_SIZE);
 
-
+#ifdef SEC_HW_VERSION_3_1
     // Enqueue this descriptor into the Fetch FIFO of this JR
     // Need write memory barrier here so that descriptor is written before
     // packet is enqueued in SEC's job ring.
     // GCC's builtins offers full memory barrier, use it here.
 
     atomic_synchronize();
-#ifdef SEC_HW_VERSION_3_1
+
     // On SEC 3.1 there is no hardware support for NULL-crypto and NULL-auth.
     // Need to simulate this with memcpy.
     // TODO: remove this 'if'statement on 9132(SEC 4.1 knows about NULL-algo).
@@ -1881,15 +1840,6 @@ sec_return_code_t sec_process_packet_hfn_ov(sec_context_handle_t sec_ctx_handle,
                "Failed to process packet with NULL crypto / "
                "NULL authentication algorithms");
     }
-#else // SEC_HW_VERSION_3_1
-    // Set ptr in input ring to current descriptor
-    job_ring->input_ring[job_ring->hw_pidx] = job->descr_phys_addr;
-
-    // Increment SW managed HW write index
-    job_ring->hw_pidx = SEC_CIRCULAR_COUNTER(job_ring->hw_pidx,SEC_JOB_RING_SIZE);
-
-    // Notify HW that a new job is enqueued
-    hw_enqueue_packet_on_job_ring(job_ring);
 #endif // SEC_HW_VERSION_3_1
 
     return SEC_SUCCESS;
@@ -1970,8 +1920,8 @@ sec_return_code_t sec_get_stats(sec_job_ring_handle_t job_ring_handle,sec_statis
     sec_stat->consumer_index = job_ring->cidx;
     sec_stat->producer_index = job_ring->pidx;
     sec_stat->slots_available = SEC_JOB_RING_NUMBER_OF_ITEMS(SEC_JOB_RING_SIZE,
-                                    job_ring->hw_cidx,
-                                    job_ring->hw_pidx);
+                                    job_ring->cidx,
+                                    job_ring->pidx);
     sec_stat->jobs_waiting_dequeue = SEC_JOB_RING_SIZE - sec_stat->slots_available;
 
     return SEC_SUCCESS;

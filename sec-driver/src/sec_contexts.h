@@ -137,7 +137,7 @@ struct sec_context_t
      */
     list_node_t node;
     /** Producer index for packets submited on this context */
-    volatile uint32_t pi;
+    uint32_t pi;
     /** Validation pattern at start of structure.
      * @note The first member from sec_context_t structure MUST be the node element.
      *       This allows for an optimized conversion from list_node_t to sec_context_t! */
@@ -159,9 +159,9 @@ struct sec_context_t
      *  This state is needed in the sec_poll function, to decide which packet status
      *  to provide to UA when the notification callback is called.
      *  This field may seem redundant (because of the three lists) but it is not. */
-    volatile sec_context_usage_t state;
+    sec_context_usage_t state;
     /** Consumer index for packets processed on this context */
-    volatile uint32_t ci;
+    uint32_t ci;
     /** Crypto info received from UA.
      * TODO: replace with union when other protocols besides PDCP will be supported!*/
     const sec_pdcp_context_info_t *pdcp_crypto_info;
