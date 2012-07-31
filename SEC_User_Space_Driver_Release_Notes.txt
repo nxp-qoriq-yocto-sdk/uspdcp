@@ -34,18 +34,13 @@ SEC USER SPACE DRIVER - ERRATA
     - AES-CTR encryption + SNOW f9 integrity
     - SNOW f8 encryption + AES-CMAC integrity
 
-2. The following mixed algorithm combinations for PDCP Control Plane are supported:
-
-    - AES-CTR encryption + NULL integrity
-    - SNOW f8 encryption + NULL integrity
-    - AES-CMAC integrity + NULL encryption
-    - SNOW f9 integrity + NULL encryption
-
-but there is no support for HFN management according to ETSI TS 136 323, section 5.1.2.1.2
-
 ----------------------------------------------------------------------------------------------------
 SEC USER SPACE DRIVER - CHANGELOG
 ----------------------------------------------------------------------------------------------------
+Version 2.5
+    - Fixed issue in mixed-mode descriptors which would lock the SEC in case of frames with length
+      larger than 512 bytes.
+    - Added back-to-back scenario
 Version 2.4
     - Added support for HFN override per PDCP context. The user can specify the HFN to be used for
       processing a particular packet.
