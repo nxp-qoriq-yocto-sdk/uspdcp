@@ -693,11 +693,12 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
          * DNR = 0
          * ONE = 1
          * Start Index = 5, in order to jump over PDB
-         * ZRO,CIF,SC = 0
-         * PD = 0, SHARE = ALWAYS
+         * ZRO,CIF = 0
+         * SC = 1
+         * PD = 0, SHARE = WAIT
          * Descriptor Length = 10
          */                                                     \
-        (descriptor)->deschdr.command.word  = 0xB8850313;       \
+        (descriptor)->deschdr.command.word  = 0xB8851113;       \
         /* CTYPE = Key
          * Class = 2 (authentication)
          * SGF = 0
@@ -731,11 +732,12 @@ but do not reset FIFO with jobs. See SEC 3.1 reference manual for more details. 
          * ONE = 1
          * Start Index = 7, in order to jump over PDB and
          *                  key2 command
-         * ZRO,CIF,SC = 0
-         * PD = 0, SHARE = ALWAYS
+         * ZRO,CIF = 0
+         * SC = 1
+         * PD = 0, SHARE = WAIT
          * Descriptor Length = 10
          */                                                     \
-        (descriptor)->deschdr.command.word  = 0xB8870313;       \
+        (descriptor)->deschdr.command.word  = 0xB8871113;       \
         /* CTYPE = Key
          * Class = 2 (authentication)
          * SGF = 0

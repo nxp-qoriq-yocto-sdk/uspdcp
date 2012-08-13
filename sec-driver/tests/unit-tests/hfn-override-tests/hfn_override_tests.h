@@ -54,10 +54,18 @@ enum test_scenarios{
     TEST_SCENARIO_CTRL_PLANE_AES_CTR_AES_CMAC_UPLINK,
     /* Control Plane w/AES CTR encryption + AES CMAC integrity DOWNLINK */
     TEST_SCENARIO_CTRL_PLANE_AES_CTR_AES_CMAC_DOWNLINK,
+    /* Control Plane w/AES CTR encryption + SNOW f9 integrity UPLINK */
+    TEST_SCENARIO_CTRL_PLANE_AES_CTR_SNOW_F9_UPLINK,
+    /* Control Plane w/AES CTR encryption + SNOW f9 integrity DOWNLINK */
+    TEST_SCENARIO_CTRL_PLANE_AES_CTR_SNOW_F9_DOWNLINK,
     /* Control Plane w/SNOW f8 encryption + SNOW f9 integrity DOWNLINK */
     TEST_SCENARIO_CTRL_PLANE_SNOW_F8_SNOW_F9_DOWNLINK,
     /* Control Plane w/SNOW f8 encryption + SNOW f9 integrity UPLINK */
     TEST_SCENARIO_CTRL_PLANE_SNOW_F8_SNOW_F9_UPLINK,
+    /* Control Plane w/SNOW f8 encryption + AES CMAC integrity DOWNLINK */
+    TEST_SCENARIO_CTRL_PLANE_SNOW_F8_AES_CMAC_DOWNLINK,
+    /* Control Plane w/SNOW f8 encryption + AES CMAC integrity UPLINK */
+    TEST_SCENARIO_CTRL_PLANE_SNOW_F8_AES_CMAC_UPLINK,
     /* Control Plane w/SNOW f8 encryption + NULL integrity DOWNLINK */
     TEST_SCENARIO_CTRL_PLANE_SNOW_F8_NULL_DOWNLINK,
     /* Control Plane w/SNOW f8 encryption + NULL integrity UPLINK */
@@ -128,6 +136,18 @@ static struct test_param test_params[] = {
         .integrity_algorithm = SEC_ALG_AES,
     },
     {
+        /* Control Plane w/AES CTR encryption + SNOW f9 integrity UPLINK */
+        .type = PDCP_CONTROL_PLANE,
+        .cipher_algorithm = SEC_ALG_AES,
+        .integrity_algorithm = SEC_ALG_SNOW,
+    },
+    {
+        /* Control Plane w/AES CTR encryption + SNOW f9 integrity DOWNLINK */
+        .type = PDCP_CONTROL_PLANE,
+        .cipher_algorithm = SEC_ALG_AES,
+        .integrity_algorithm = SEC_ALG_SNOW,
+    },
+    {
         /* Control Plane w/SNOW f8 encryption + SNOW f9 integrity DOWNLINK */
         .type = PDCP_CONTROL_PLANE,
         .cipher_algorithm = SEC_ALG_SNOW,
@@ -138,6 +158,18 @@ static struct test_param test_params[] = {
         .type = PDCP_CONTROL_PLANE,
         .cipher_algorithm = SEC_ALG_SNOW,
         .integrity_algorithm = SEC_ALG_SNOW,
+    },
+    {
+        /* Control Plane w/SNOW f8 encryption + AES CMAC integrity DOWNLINK */
+        .type = PDCP_CONTROL_PLANE,
+        .cipher_algorithm = SEC_ALG_SNOW,
+        .integrity_algorithm = SEC_ALG_AES,
+    },
+    {
+        /* Control Plane w/SNOW f8 encryption + AES CMAC integrity UPLINK */
+        .type = PDCP_CONTROL_PLANE,
+        .cipher_algorithm = SEC_ALG_SNOW,
+        .integrity_algorithm = SEC_ALG_AES,
     },
     {
         /* Control Plane w/SNOW f8 encryption + NULL integrity DOWNLINK */
@@ -266,9 +298,17 @@ static uint8_t test_packet_direction[] = {
     PDCP_UPLINK,
     /* Control Plane w/AES CTR encryption + AES CMAC integrity DOWNLINK */
     PDCP_DOWNLINK,
+    /* Control Plane w/AES CTR encryption + SNOW f9 integrity UPLINK */
+    PDCP_UPLINK,
+    /* Control Plane w/AES CTR encryption + SNOW f9 integrity DOWNLINK */
+    PDCP_DOWNLINK,
     /* Control Plane w/SNOW f8 encryption + SNOW f9 integrity DOWNLINK */
     PDCP_DOWNLINK,
     /* Control Plane w/SNOW f8 encryption + SNOW f9 integrity UPLINK */
+    PDCP_UPLINK,
+    /* Control Plane w/SNOW f8 encryption + AES CMAC integrity DOWNLINK */
+    PDCP_DOWNLINK,
+    /* Control Plane w/SNOW f8 encryption + AES CMAC integrity UPLINK */
     PDCP_UPLINK,
     /* Control Plane w/SNOW f8 encryption + NULL integrity DOWNLINK */
     PDCP_DOWNLINK,
@@ -307,7 +347,7 @@ static uint8_t test_packet_direction[] = {
     /* User Plane w/NULL encryption DOWNLINK LONG SN */
     PDCP_DOWNLINK,
     /* User Plane w/NULL encryption DOWNLINK SHORT SN */
-    PDCP_DOWNLINK,
+    PDCP_DOWNLINK
 };
 
 static uint8_t test_data_sns[] = {
@@ -315,9 +355,17 @@ static uint8_t test_data_sns[] = {
     SEC_PDCP_SN_SIZE_5,
     /* Control Plane w/AES CTR encryption + AES CMAC integrity DOWNLINK */
     SEC_PDCP_SN_SIZE_5,
+    /* Control Plane w/AES CTR encryption + SNOW f9 integrity UPLINK */
+    SEC_PDCP_SN_SIZE_5,
+    /* Control Plane w/AES CTR encryption + SNOW f9 integrity DOWNLINK */
+    SEC_PDCP_SN_SIZE_5,
     /* Control Plane w/SNOW f8 encryption + SNOW f9 integrity DOWNLINK */
     SEC_PDCP_SN_SIZE_5,
     /* Control Plane w/SNOW f8 encryption + SNOW f9 integrity UPLINK */
+    SEC_PDCP_SN_SIZE_5,
+    /* Control Plane w/SNOW f8 encryption + AES CMAC integrity DOWNLINK */
+    SEC_PDCP_SN_SIZE_5,
+    /* Control Plane w/SNOW f8 encryption + AES CMAC integrity UPLINK */
     SEC_PDCP_SN_SIZE_5,
     /* Control Plane w/SNOW f8 encryption + NULL integrity DOWNLINK */
     SEC_PDCP_SN_SIZE_5,
@@ -356,7 +404,7 @@ static uint8_t test_data_sns[] = {
     /* User Plane w/NULL encryption DOWNLINK LONG SN */
     SEC_PDCP_SN_SIZE_12,
     /* User Plane w/NULL encryption DOWNLINK SHORT SN */
-    SEC_PDCP_SN_SIZE_7,
+    SEC_PDCP_SN_SIZE_7
 };
 
 static uint8_t test_crypto_key[] = {0x5a,0xcb,0x1d,0x64,0x4c,0x0d,0x51,0x20,0x4e,0xa5,0xf1,0x45,0x10,0x10,0xd8,0x52};
@@ -368,9 +416,17 @@ static uint8_t *test_hdr[] = {
     (uint8_t[]){0x8b},
     /* Control Plane w/AES CTR encryption + AES CMAC integrity DOWNLINK */
     (uint8_t[]){0x8b},
+    /* Control Plane w/AES CTR encryption + SNOW f9 integrity UPLINK */
+    (uint8_t[]){0x8b},
+    /* Control Plane w/AES CTR encryption + SNOW f9 integrity DOWNLINK */
+    (uint8_t[]){0x8b},
     /* Control Plane w/SNOW f8 encryption + SNOW f9 integrity DOWNLINK */
     (uint8_t[]){0x8b},
     /* Control Plane w/SNOW f8 encryption + SNOW f9 integrity UPLINK */
+    (uint8_t[]){0x8b},
+    /* Control Plane w/SNOW f8 encryption + AES CMAC integrity DOWNLINK */
+    (uint8_t[]){0x8b},
+    /* Control Plane w/SNOW f8 encryption + AES CMAC integrity UPLINK */
     (uint8_t[]){0x8b},
     /* Control Plane w/SNOW f8 encryption + NULL integrity DOWNLINK */
     (uint8_t[]){0x8b},
@@ -409,7 +465,7 @@ static uint8_t *test_hdr[] = {
     /* User Plane w/NULL encryption DOWNLINK LONG SN */
     (uint8_t[]){0x8b,0x26},
     /* User Plane w/NULL encryption DOWNLINK SHORT SN */
-    (uint8_t[]){0x8b},
+    (uint8_t[]){0x8b}
 };
 
 static uint32_t test_data_in_len = 15;
@@ -421,9 +477,17 @@ static uint32_t test_data_out_len[] = {
     19,
     /* Control Plane w/AES CTR encryption + AES CMAC integrity DOWNLINK */
     19,
+    /* Control Plane w/AES CTR encryption + SNOW f9 integrity UPLINK */
+    19,
+    /* Control Plane w/AES CTR encryption + SNOW f9 integrity DOWNLINK */
+    19,
     /* Control Plane w/SNOW f8 encryption + SNOW f9 integrity DOWNLINK */
     19,
     /* Control Plane w/SNOW f8 encryption + SNOW f9 integrity UPLINK */
+    19,
+    /* Control Plane w/SNOW f8 encryption + AES CMAC integrity DOWNLINK */
+    19,
+    /* Control Plane w/SNOW f8 encryption + AES CMAC integrity UPLINK */
     19,
     /* Control Plane w/SNOW f8 encryption + NULL integrity DOWNLINK */
     19,
@@ -462,7 +526,7 @@ static uint32_t test_data_out_len[] = {
     /* User Plane w/NULL encryption DOWNLINK LONG SN */
     15,
     /* User Plane w/NULL encryption DOWNLINK SHORT SN */
-    15,
+    15
 };
 
 static uint8_t *test_data_out[] = {
@@ -470,10 +534,18 @@ static uint8_t *test_data_out[] = {
     (uint8_t[]){0x2c,0x59,0x74,0xab,0xdc,0xd8,0x36,0xf6,0x1b,0x54,0x8d,0x46,0x93,0x1c,0xff,0xc1,0x92,0x1b,0xb4},
     /* Control Plane w/AES CTR encryption + AES CMAC integrity DOWNLINK */
     (uint8_t[]){0xf2,0xb9,0x9d,0x96,0x51,0xcc,0x1e,0xe8,0x55,0x3e,0x98,0xc5,0x58,0xec,0x4c,0xcf,0xce,0x0f,0x8b},
+    /* Control Plane w/AES CTR encryption + SNOW f9 integrity UPLINK */
+    (uint8_t[]){0x2c,0x59,0x74,0xab,0xdc,0xd8,0x36,0xf6,0x1b,0x54,0x8d,0x46,0x93,0x1c,0xff,0xba,0x30,0x54,0x32},
+    /* Control Plane w/AES CTR encryption + SNOW f9 integrity DOWNLINK */
+    (uint8_t[]){0xf2,0xb9,0x9d,0x96,0x51,0xcc,0x1e,0xe8,0x55,0x3e,0x98,0xc5,0x58,0xec,0x4c,0x0f,0xde,0x17,0xb8},
     /* Control Plane w/SNOW f8 encryption + SNOW f9 integrity DOWNLINK */
     (uint8_t[]){0x26,0xf3,0x67,0xf1,0x42,0x50,0x1a,0x85,0x02,0xb9,0x00,0xa8,0x9b,0xcf,0x06,0x4c,0xb2,0xc3,0x4a},
     /* Control Plane w/SNOW f8 encryption + SNOW f9 integrity UPLINK */
     (uint8_t[]){0x39,0xd1,0x2b,0xbd,0x2a,0x4c,0x91,0x59,0xff,0xfa,0xce,0x68,0xc0,0x7c,0x30,0x58,0xba,0x46,0x01},
+    /* Control Plane w/SNOW f8 encryption + AES CMAC integrity DOWNLINK */
+    (uint8_t[]){0x26,0xf3,0x67,0xf1,0x42,0x50,0x1a,0x85,0x02,0xb9,0x00,0xa8,0x9b,0xcf,0x06,0x8c,0xa2,0xdb,0x79},
+    /* Control Plane w/SNOW f8 encryption + AES CMAC integrity UPLINK */
+    (uint8_t[]){0x39,0xd1,0x2b,0xbd,0x2a,0x4c,0x91,0x59,0xff,0xfa,0xce,0x68,0xc0,0x7c,0x30,0x23,0x18,0x09,0x87},
     /* Control Plane w/SNOW f8 encryption + NULL integrity DOWNLINK */
     (uint8_t[]){0x26,0xf3,0x67,0xf1,0x42,0x50,0x1a,0x85,0x02,0xb9,0x00,0xa8,0x9b,0xcf,0x06,0xd1,0x2c,0x86,0x7c},
     /* Control Plane w/SNOW f8 encryption + NULL integrity UPLINK */
@@ -511,7 +583,7 @@ static uint8_t *test_data_out[] = {
     /* User Plane w/NULL encryption DOWNLINK LONG SN */
     (uint8_t[]){0xad,0x9c,0x44,0x1f,0x89,0x0b,0x38,0xc4,0x57,0xa4,0x9d,0x42,0x14,0x07,0xe8},
     /* User Plane w/NULL encryption DOWNLINK SHORT SN */
-    (uint8_t[]){0xad,0x9c,0x44,0x1f,0x89,0x0b,0x38,0xc4,0x57,0xa4,0x9d,0x42,0x14,0x07,0xe8},
+    (uint8_t[]){0xad,0x9c,0x44,0x1f,0x89,0x0b,0x38,0xc4,0x57,0xa4,0x9d,0x42,0x14,0x07,0xe8}
 };
 
 #ifdef UNDER_CONSTRUCTION_HFN_THRESHOLD
