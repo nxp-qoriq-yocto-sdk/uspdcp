@@ -212,15 +212,16 @@ typedef dma_addr_t (*sec_vtop)(void *v);
 typedef struct sec_packet_s
 {
     dma_addr_t      address;        /**< The PHYSICAL address of the buffer. */
-    uint32_t        offset;         /**< Offset within packet from where SEC will access (read or write) data. */
     uint32_t        length;         /**< Packet data length, excluding head room offset. In previous versions
                                          of the driver, this included the packet offset(headroom).
                                          This is no longer true, now length represents just the length of
                                          PDCP header + PDCP payload */
+    uint32_t        offset;         /**< Offset within packet from where SEC will access (read or write) data. */
     uint32_t        tail_offset;    /**< Offset from buffer head where tail room is reserved. */
     uint32_t        total_length;   /**< Total Data Length in all fragments including the parent buffer. */
     uint32_t        num_fragments;  /**< Is set only in the first fragment from a s/g packet.
                                          It excludes the parent buffer. */
+    uint32_t        pad[2];
 
 }sec_packet_t;
 

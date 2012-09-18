@@ -97,6 +97,7 @@
 #error "Invalid value for SEC_DRIVER_LOGGING!"
 #endif
 
+#ifdef DEBUG
 /**
  * Assert that cond is true. If !cond is true, display str and the vararg list in a printf-like syntax.
  * also, if !cond is true, return altRet.
@@ -130,7 +131,6 @@
         return ; \
     }
 
-
 /**
  * Check condition (possibly print error message) and continue execution.
  * Same as ##SEC_ASSERT(), only without the return instruction.
@@ -150,7 +150,14 @@
         ASSERT(cond); \
     }
 
+#else
 
+#define SEC_ASSERT(cond, altRet, str, ...)
+#define SEC_ASSERT_RET_VOID(cond, str, ...)
+#define SEC_ASSERT_CONT(cond, str, ...)
+#define SEC_ASSERT_STOP(cond, str, ...)
+
+#endif
 
 /** Shortcut for __attribute__ ((packed)) */
 #define PACKED              __attribute__ ((packed))
@@ -182,8 +189,12 @@
  */
 #define CTASSERT(a) extern char __dummy[(a)?1:-1];
 
+#ifdef DEBUG
 /** ASSERT definition */
 #define ASSERT(x)   assert(x)
+#else
+#define ASSERT(x)
+#endif
 
 #define likely(x)       __builtin_expect(!!(x), 1)
 #define unlikely(x)     __builtin_expect(!!(x), 0)

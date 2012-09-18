@@ -83,7 +83,9 @@ extern "C" {
     do{ \
         if(g_sec_errno != SEC_PTHREAD_KEY_INVALID) \
         { \
-            SEC_ASSERT(pthread_key_delete(g_sec_errno) == 0, \
+            int __temp_sec_driver_c_86 = pthread_key_delete(g_sec_errno); \
+            __temp_sec_driver_c_86 = __temp_sec_driver_c_86; \
+            SEC_ASSERT(__temp_sec_driver_c_86 == 0, \
                        SEC_INVALID_INPUT_PARAM, \
                        "Error deleting pthread key g_sec_errno"); \
         } \
@@ -413,7 +415,8 @@ static void hw_flush_job_ring(sec_job_ring_t * job_ring,
         
         /* Since the memory is continous, then P2V translation is a mere addition to
            the base descriptor physical address */
-        current_desc = (current_desc - job_ring->jobs[0].descr_phys_addr) / sizeof(struct sec_descriptor_t);
+        //current_desc = (current_desc - job_ring->jobs[0].descr_phys_addr) / sizeof(struct sec_descriptor_t);
+        current_desc = (current_desc - job_ring->jobs[0].descr_phys_addr) >> 6;
 
         job = (job_ring->descriptors + current_desc)->job_ptr;
         SEC_ASSERT_RET_VOID( job != NULL,"Job ring retrieved from descriptor is NULL");
@@ -594,6 +597,7 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
 
         // get the first un-notified job from the job ring
         job = &job_ring->jobs[job_ring->cidx];
+
 #endif // SEC_HW_VERSION_4_4
 #ifdef SEC_HW_VERSION_3_1
         // check if job is DONE
@@ -1748,14 +1752,14 @@ sec_return_code_t sec_process_packet_hfn_ov(sec_context_handle_t sec_ctx_handle,
     job = &job_ring->jobs[job_ring->pidx];
 #if defined(SEC_HW_VERSION_4_4) && (SEC_ENABLE_SCATTER_GATHER == ON)
 
-    ret = build_sg_context(job->sg_ctx,in_packet,SEC_SG_CONTEXT_TYPE_IN);
+    ret = build_sg_context(job->sg_ctx,in_packet,SEC_SG_CONTEXT_TYPE_IN,in_packet->num_fragments);
     if( ret != SEC_SUCCESS )
     {
         SEC_ERROR("Error creating Scatter-Gather table for input packet: %s",sec_get_error_message(ret));
         return ret;
     }
 
-    ret = build_sg_context(job->sg_ctx,out_packet,SEC_SG_CONTEXT_TYPE_OUT);
+    ret = build_sg_context(job->sg_ctx,out_packet,SEC_SG_CONTEXT_TYPE_OUT,out_packet->num_fragments);
     if( ret != SEC_SUCCESS )
     {
         SEC_ERROR("Error creating Scatter-Gather table for output packet: %s",sec_get_error_message(ret));
@@ -1851,6 +1855,9 @@ int32_t sec_get_last_error(void)
 
     ret = pthread_getspecific(g_sec_errno);
     SEC_ASSERT(ret != NULL, -1, "Using non initialized pthread key for local errno!");
+    if (ret == NULL)
+        return -1;
+
     return *(uint32_t*)ret;
 }
 

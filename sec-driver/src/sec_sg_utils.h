@@ -81,28 +81,28 @@ extern "C"{
  */
 #define SG_CONTEXT_GET_TBL_OUT(sg_ctx)               ( (sg_ctx)->out_sg_tbl )
 
-#if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
 #warning "Update for 36 bits addresses"
+#if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
 #error "36 bit not supported"
 #else
-#define SG_TBL_SET_ADDRESS(sg_entry,address)    ((sg_entry).addr_ls = \
-                                                (dma_addr_t)(address) )
+#define SG_TBL_SET_ADDRESS(sg_entry,address)    (*(uint64_t*)&(sg_entry) = (address))
 #endif // defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
 
-#define SG_TBL_SET_LENGTH(sg_entry,len)         ( (sg_entry).length = (len), \
-                                                  (sg_entry).final = 0 )
-#define SG_TBL_SET_OFFSET(sg_entry,off)         ((sg_entry).offset = (off) )
+#define SG_TBL_SET_LENGTH_OFF(sg_entry,len,off) (*((uint64_t*)&(sg_entry) + 1) = (((uint64_t)(len)) << 32) | \
+                                                                                   (uint64_t)(off) )
+
 #define SG_TBL_SET_FINAL(sg_entry)              ( (sg_entry).final = 1 )
 
 #if (SEC_DRIVER_LOGGING == ON) && (SEC_DRIVER_LOGGING_LEVEL == SEC_DRIVER_LOG_DEBUG)
 #define DUMP_SG_TBL(sg_tbl) {                                               \
     int __i = 0;                                                            \
+    SEC_DEBUG("Dumping SG table @ %p\n",(sg_tbl));                          \
     do{                                                                     \
         int __j = 0;                                                        \
         for(__j = 0;                                                        \
             __j < sizeof(struct sec_sg_tbl_entry)/sizeof(uint32_t);         \
             __j++ ){                                                        \
-            SEC_DEBUG("0x%08x %08x",                                        \
+            SEC_DEBUG("0x%08x %08x\n",                                      \
                     (uint32_t)((uint32_t*)(((&((sg_tbl)[__i])))) + __j),    \
                     *((uint32_t*)(&((sg_tbl)[__i])) + __j) );               \
         }                                                                   \
@@ -168,7 +168,7 @@ typedef struct{
     /** If set to 1, signals that there is a Scatter-Gather table
      * enabled for the input packet of this job
      */
-    uint8_t in_sg_tbl_en;
+    uint32_t in_sg_tbl_en;
 
     /** Input scatter-gather table, as a pointer instead of array */
     struct sec_sg_tbl_entry  *in_sg_tbl;
@@ -176,7 +176,7 @@ typedef struct{
     /** If set to 1, signals that there is a Scatter-Gather table
      * enabled for the output packet of this job
      */
-    uint8_t out_sg_tbl_en;
+    uint32_t out_sg_tbl_en;
 
     /** Output scatter-gather table, as a pointer instead of array */
     struct sec_sg_tbl_entry  *out_sg_tbl;
@@ -212,7 +212,8 @@ typedef struct{
  */
 sec_return_code_t build_sg_context(sec_sg_context_t *sg_ctx,
                                    const sec_packet_t *packet,
-                                   sec_sg_context_type_t dir);
+                                   sec_sg_context_type_t dir,
+				   int num_fragments);
 /*================================================================================================*/
 
 
