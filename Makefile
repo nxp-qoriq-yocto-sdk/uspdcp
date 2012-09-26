@@ -67,8 +67,8 @@ ifneq (distclean,$(MAKECMDGOALS))
    $(ARCH)_SPEC_DEFINE	:= _FILE_OFFSET_BITS=64
    $(ARCH)_SPEC_INC_PATH:=
    $(ARCH)_SPEC_LIB_PATH:=
-   $(ARCH)_SPEC_CFLAGS	:= -pthread -O3 -Wall -Wshadow
-   $(ARCH)_SPEC_LDFLAGS	:= -pthread
+   $(ARCH)_SPEC_CFLAGS	:= -g -pthread -O3 -Wall -Wshadow -te500v2
+   $(ARCH)_SPEC_LDFLAGS	:= -g -pthread -te500v2
  else
    ifeq (i686, $(ARCH))
 	 CROSS_COMPILE	:=
