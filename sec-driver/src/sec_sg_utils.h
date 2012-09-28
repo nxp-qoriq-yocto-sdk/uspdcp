@@ -75,11 +75,11 @@ extern "C"{
 
 /** Macro for getting a pointer to the input Scatter-Gather table of a job.
  */
-#define SG_CONTEXT_GET_TBL_IN(sg_ctx)               ( (sg_ctx)->in_sg_tbl )
+#define SG_CONTEXT_GET_TBL_IN_PHY(sg_ctx)               ( (sg_ctx)->in_sg_tbl_phy )
 
 /** Macro for getting a pointer to the output Scatter-Gather table of a job.
  */
-#define SG_CONTEXT_GET_TBL_OUT(sg_ctx)               ( (sg_ctx)->out_sg_tbl )
+#define SG_CONTEXT_GET_TBL_OUT_PHY(sg_ctx)               ( (sg_ctx)->out_sg_tbl_phy )
 
 #warning "Update for 36 bits addresses"
 #if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
@@ -172,6 +172,9 @@ typedef struct{
 
     /** Input scatter-gather table, as a pointer instead of array */
     struct sec_sg_tbl_entry  *in_sg_tbl;
+    
+    /** Input SG table physical address */
+    dma_addr_t in_sg_tbl_phy;
 
     /** If set to 1, signals that there is a Scatter-Gather table
      * enabled for the output packet of this job
@@ -180,6 +183,9 @@ typedef struct{
 
     /** Output scatter-gather table, as a pointer instead of array */
     struct sec_sg_tbl_entry  *out_sg_tbl;
+    
+    /** Output SG table physical address */
+    dma_addr_t out_sg_tbl_phy;
 
 }sec_sg_context_t;
 

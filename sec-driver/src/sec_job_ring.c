@@ -209,6 +209,9 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
         memset(job_ring->sg_ctxs[i].out_sg_tbl, 0, sizeof(struct sec_sg_tbl_entry) * SEC_MAX_SG_TBL_ENTRIES);
         *dma_mem += sizeof(struct sec_sg_tbl_entry) * SEC_MAX_SG_TBL_ENTRIES;
 
+        job_ring->sg_ctxs[i].in_sg_tbl_phy = g_sec_vtop(job_ring->sg_ctxs[i].in_sg_tbl);
+        job_ring->sg_ctxs[i].out_sg_tbl_phy = g_sec_vtop(job_ring->sg_ctxs[i].out_sg_tbl);
+
 #endif // defined(SEC_HW_VERSION_4_4) && (SEC_ENABLE_SCATTER_GATHER == ON)
 #ifdef SEC_HW_VERSION_3_1
         SEC_ASSERT ((dma_addr_t)*dma_mem % CACHE_LINE_SIZE == 0,
