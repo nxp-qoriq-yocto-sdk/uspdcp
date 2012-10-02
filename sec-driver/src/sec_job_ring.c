@@ -167,6 +167,9 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
 
     job_ring->descriptors = *dma_mem;
 #ifdef SEC_HW_VERSION_4_4
+    /* Store base address here. It will be used for 'lookups' in sec_poll() */
+    job_ring->descriptors_base_addr = g_sec_vtop(job_ring->descriptors);
+    
     memset(job_ring->descriptors, 0, SEC_DMA_MEM_DESCRIPTORS);
     *dma_mem += SEC_DMA_MEM_DESCRIPTORS;
 #else

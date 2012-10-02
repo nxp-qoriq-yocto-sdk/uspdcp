@@ -151,6 +151,10 @@ struct sec_job_ring_t
                                                     they lay on different cachelines, to avoid false
                                                     sharing between threads when the threads run on different cores! */
 
+#ifdef SEC_HW_VERSION_4_4
+    dma_addr_t descriptors_base_addr;           /*< Base address of descriptors. Used for fast computation
+                                                    of the currently finished job */
+#endif
     struct sec_job_t jobs[SEC_JOB_RING_SIZE];   /*< Ring of jobs. SEC 3.1 ONLY: The same ring is used for
                                                     input jobs and output jobs because SEC engine writes
                                                     back output indication in input job.

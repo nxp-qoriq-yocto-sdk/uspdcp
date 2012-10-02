@@ -415,7 +415,6 @@ static void hw_flush_job_ring(sec_job_ring_t * job_ring,
         
         /* Since the memory is continous, then P2V translation is a mere addition to
            the base descriptor physical address */
-        //current_desc = (current_desc - job_ring->jobs[0].descr_phys_addr) / sizeof(struct sec_descriptor_t);
         current_desc = (current_desc - job_ring->jobs[0].descr_phys_addr) >> 6;
 
         job = (job_ring->descriptors + current_desc)->job_ptr;
@@ -516,7 +515,7 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
     * in the output status word has occurred
     */
     sec_error_code = hw_job_ring_error(job_ring);
-    if (sec_error_code)
+    if (unlikely(sec_error_code))
     {
         // Set errno value to the error code returned by SEC engine.
         // Errno value is thread-local.
@@ -548,18 +547,17 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
 #ifdef SEC_HW_VERSION_4_4
         status = SEC_STATUS_SUCCESS;
 
-        /* Get completed descriptor */
-        current_desc = job_ring->output_ring[job_ring->cidx].desc;
-        
         /* Get job status here */
         sec_error_code = job_ring->output_ring[job_ring->cidx].status;
 
-        /* Since the memory is continous, then P2V translation is a mere addition to
+        /* Get completed descriptor */
+        /* Since the memory is contigous, then P2V translation is a mere addition to
            the base descriptor physical address */
-        current_desc = (current_desc - job_ring->jobs[0].descr_phys_addr) / sizeof(struct sec_descriptor_t);
+        current_desc = (job_ring->output_ring[job_ring->cidx].desc - 
+                        job_ring->descriptors_base_addr) >> 6;
 
         job = (job_ring->descriptors + current_desc)->job_ptr;
-        
+
         SEC_ASSERT (job != NULL, SEC_PROCESSING_ERROR,
                     "Job ring retrieved from descriptor is NULL");
 
@@ -586,7 +584,6 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
                           "Integrity check FAILED!.",
                           job->sec_context, job->in_packet, job->out_packet);
         }
-
 #else // SEC_HW_VERSION_4_4
         if(SEC_JOB_RING_NUMBER_OF_ITEMS(SEC_JOB_RING_SIZE, job_ring->pidx, job_ring->cidx) == 0)
         {
