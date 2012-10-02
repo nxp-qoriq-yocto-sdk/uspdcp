@@ -12,7 +12,7 @@ test_sec_driver_benchmark_single_th_sg_LDFLAGS := -L$(IPC_LIB_DIR) -lmem
 
 test_sec_driver_benchmark_single_th_sg_LDADD := sec-driver of
 
-AM_CFLAGS += -pthread -D_GNU_SOURCE -g
+AM_CFLAGS += -D_GNU_SOURCE -g
 
 test_sec_driver_benchmark_single_th_sg_SOURCES := test_sec_driver_benchmark_single_th_sg.c
 
