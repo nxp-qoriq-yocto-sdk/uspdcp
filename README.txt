@@ -1,7 +1,7 @@
 ----------------------------------------------------------------------------------------------------
 ABOUT THIS FILE
 ----------------------------------------------------------------------------------------------------
-Date:    31 July 2012
+Date:    03 October 2012
 
 This Readme file contains details on SEC user space driver package contents as well as instructions
 showing how to compile and install SEC user space driver related binaries:
@@ -33,24 +33,6 @@ The package contains:
                          of these. All the obtained results are checked againsted pre-made reference testt vectors.
                          Exercises all the available options for retrieving processed packets: poll, IRQ, NAPI.
                          See <test-scenario-poll-irq-napi>/readme.txt for more details.
-
-                    ---> <test-scenario-benchmark>
-                         This is a two-thread test application that allows benchmarking PDCP data plane processing.
-                         Benchmark results consist of:
-                            - core cycles/packet - spent in SEC user space driver APIs for sending and
-                                                   retrieving a packet to/from SEC engine.
-                            - execution time
-                            - CPU load
-                         See <test-scenario-benchmark>/readme.txt for more details.
-
-                    ---> <test-scenario-benchmark-single-th>
-                         This is a single-thread test application that allows benchmarking PDCP data plane processing.
-                         Benchmark results consist of:
-                            - core cycles/packet - spent in SEC user space driver APIs for sending and
-                                                   retrieving a packet to/from SEC engine.
-                            - execution time
-                            - CPU load
-                         See <test-scenario-benchmark-single-th>/readme.txt for more details.
 
                     ---> <test-scenario-benchmark-sg>
                          This is a two-thread test application that allows benchmarking PDCP data plane and control plane
@@ -185,9 +167,7 @@ HOW TO RUN TESTS FOR SEC USER SPACE DRIVER
     [psc9131rdb]~ ./test_sec_driver
 
 * Run benchmarking tests:
-    [psc9131rdb]~ ./test_sec_driver_benchmark
     [psc9131rdb]~ ./test_sec_driver_benchmark_sg
-    [psc9131rdb]~ ./test_sec_driver_benchmark_single_th
     [psc9131rdb]~ ./test_sec_driver_benchmark_single_th_sg
     [psc9131rdb]~ ./test_sec_driver_b2b
 
