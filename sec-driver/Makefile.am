@@ -30,9 +30,9 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-lib_LIBRARIES = sec-driver
+lib_LIBRARIES = sec-driver sec-driver-dbg
 
-AM_CFLAGS := -I$(TOP_LEVEL)/sec-driver/include -I$(TOP_LEVEL)/utils/of/include -I$(TOP_LEVEL)/utils/dma_mem/include -I$(TOP_LEVEL)/sec-driver/src -g
+AM_CFLAGS := -I$(TOP_LEVEL)/sec-driver/include -I$(TOP_LEVEL)/utils/of/include -I$(TOP_LEVEL)/utils/dma_mem/include -I$(TOP_LEVEL)/sec-driver/src
 AM_CFLAGS += -I${KERNEL_DIR}/drivers/misc
 AM_CFLAGS += -I${IPC_DIR}/ipc/include
 
@@ -40,3 +40,9 @@ SRC=src
 sec-driver_SOURCES := $(SRC)/sec_driver.c $(SRC)/list.c $(SRC)/sec_contexts.c \
 $(SRC)/sec_config.c $(SRC)/sec_job_ring.c $(SRC)/sec_hw_specific.c \
 $(SRC)/sec_pdcp.c
+
+sec-driver-dbg_SOURCES := $(SRC)/sec_driver.c $(SRC)/list.c $(SRC)/sec_contexts.c \
+$(SRC)/sec_config.c $(SRC)/sec_job_ring.c $(SRC)/sec_hw_specific.c \
+$(SRC)/sec_pdcp.c
+
+sec-driver-dbg_CFLAGS += -DDEBUG
