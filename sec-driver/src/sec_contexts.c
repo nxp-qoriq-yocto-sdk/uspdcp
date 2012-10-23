@@ -234,6 +234,8 @@ static void node_modify_after_delete(list_node_t *node)
     // once it is added to the free list it can be retrieved and
     // used by other threads ... and we should not interfere
     ctx->state = SEC_CONTEXT_UNUSED;
+    ctx->pi = 0;
+    ctx->ci = 0;
     ctx->notify_packet_cbk = NULL;
     ctx->jr_handle = NULL;
 

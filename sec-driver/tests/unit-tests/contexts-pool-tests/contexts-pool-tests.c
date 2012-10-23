@@ -212,7 +212,6 @@ static void test_contexts_pool_free_contexts_with_packets_in_flight(void)
     int ret = 0, i = 0;
 #define NO_OF_CONTEXTS 10
     sec_context_t* sec_ctxs[NO_OF_CONTEXTS];
-    sec_context_t* sec_ctx = NULL;
 
     ret = init_contexts_pool(&pool, NO_OF_CONTEXTS,
 #ifdef SEC_HW_VERSION_4_4
@@ -292,18 +291,20 @@ static void test_contexts_pool_free_contexts_with_packets_in_flight(void)
     {
         sec_ctxs[i]->ci = sec_ctxs[i]->pi;
     }
+    /* Get all the contexts in the pool, to make sure that all of them were
+     * properly free'ed
+     */
+    for (i = 0; i < NO_OF_CONTEXTS; i++)
+    {
+        sec_ctxs[i] = get_free_context(&pool);
+        assert_not_equal_with_message(sec_ctxs[i], 0,
+                "ERROR on get_free_context: no more contexts available and there should be (%d)", i);
 
-    // the contexts should be freed at the next call of get_free_context() or free_or_retire_context()
-    // try and get one context -> it should work ok because we just freed some
-    sec_ctx = get_free_context(&pool);
-    assert_not_equal_with_message(sec_ctx, 0,
-            "ERROR on get_free_context: free contexts not available and there should be!");
-
-    ret = free_or_retire_context(&pool, sec_ctx);
-    assert_equal_with_message(ret, SEC_SUCCESS,
-            "ERROR on free_or_retire_context: should have returned SEC_SUCCESS ret = (%d)", ret);
-
-    // now check that all the contexts are unused
+        ret = free_or_retire_context(&pool, sec_ctxs[i]);
+        assert_equal_with_message(ret, SEC_SUCCESS,
+                "ERROR on free_or_retire_context: should have returned SEC_SUCCESS ret = (%d)", ret);
+    }
+    /* Now free all the aquired contexts */
     for (i = 0; i < NO_OF_CONTEXTS; i++)
     {
         assert_equal_with_message(sec_ctxs[i]->state, SEC_CONTEXT_UNUSED,

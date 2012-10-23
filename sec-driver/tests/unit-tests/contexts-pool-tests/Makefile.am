@@ -4,6 +4,7 @@ AM_CFLAGS := -I$(TOP_LEVEL)/sec-driver/src
 AM_CFLAGS += -I$(TOP_LEVEL)/sec-driver/include
 AM_CFLAGS += -I$(TOP_LEVEL)/utils/test-frameworks/cgreen
 AM_CFLAGS += -I$(TOP_LEVEL)/utils/dma_mem/include
+AM_CFLAGS += -DDEBUG
 
 ifeq (DMA_MEM,$(MEM_MANAGER))
 AM_CFLAGS += -I$(TOP_LEVEL)/utils/dma_mem/include
