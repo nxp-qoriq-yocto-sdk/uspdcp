@@ -344,12 +344,11 @@ static void test_single_algorithms(void)
     int limit = SEC_JOB_RING_SIZE  - 1;
     int memcmp_res = 0;
     int test_idx;
-
+    int i;
     uint32_t packets_out = 0;
     uint32_t packets_handled = 0;
     sec_job_ring_handle_t jr_handle_0;
-    sec_context_handle_t ctx_handle_0 = NULL;
-    sec_context_handle_t ctx_handle_1 = NULL;
+    sec_context_handle_t ctx_handle[SEC_MAX_PDCP_CONTEXTS];
     sec_packet_t *in_encap_pkt = NULL, *out_encap_pkt = NULL, *in_decap_pkt = NULL, *out_decap_pkt = NULL;
     uint8_t *hdr;
     uint8_t hdr_len;
@@ -358,35 +357,35 @@ static void test_single_algorithms(void)
     sec_pdcp_context_info_t ctx_info[] = {
         // Context for encapsulation
         {
-            //.cipher_algorithm       = SEC_ALG_NULL,
+            .cipher_algorithm       = SEC_ALG_NULL,
             .cipher_key             = cipher_key,
             .cipher_key_len         = sizeof(test_crypto_key),
-            //.integrity_algorithm    = SEC_ALG_AES,
+            .integrity_algorithm    = SEC_ALG_AES,
             .integrity_key          = integrity_key,
             .integrity_key_len      = sizeof(test_auth_key),
             .notify_packet          = &handle_packet_from_sec,
-            //.sn_size                = SEC_PDCP_SN_SIZE_5,
+            .sn_size                = SEC_PDCP_SN_SIZE_5,
             .bearer                 = test_bearer,
-            //.user_plane             = PDCP_CONTROL_PLANE,
-            //.packet_direction       = test_pkt_dir;
-            //.protocol_direction     = test_proto_dir;
+            .user_plane             = PDCP_CONTROL_PLANE,
+            .packet_direction       = PDCP_UPLINK,
+            .protocol_direction     = PDCP_ENCAPSULATION,
             .hfn                    = test_hfn,
             .hfn_threshold          = test_hfn_threshold,
         },
         // Context for decapsulation
         {
-            //.cipher_algorithm       = SEC_ALG_NULL,
+            .cipher_algorithm       = SEC_ALG_NULL,
             .cipher_key             = cipher_key,
             .cipher_key_len         = sizeof(test_crypto_key),
-            //.integrity_algorithm    = SEC_ALG_AES,
+            .integrity_algorithm    = SEC_ALG_AES,
             .integrity_key          = integrity_key,
             .integrity_key_len      = sizeof(test_auth_key),
             .notify_packet          = &handle_packet_from_sec,
-            //.sn_size                = SEC_PDCP_SN_SIZE_5,
+            .sn_size                = SEC_PDCP_SN_SIZE_5,
             .bearer                 = test_bearer,
-            //.user_plane             = PDCP_CONTROL_PLANE,
-            //.packet_direction       = test_pkt_dir;
-            //.protocol_direction     = test_proto_dir;
+            .user_plane             = PDCP_CONTROL_PLANE,
+            .packet_direction       = PDCP_UPLINK,
+            .protocol_direction     = PDCP_ENCAPSULATION,
             .hfn                    = test_hfn,
             .hfn_threshold          = test_hfn_threshold,
         }
@@ -404,6 +403,16 @@ static void test_single_algorithms(void)
                               SEC_SUCCESS, ret);
 
     jr_handle_0 = job_ring_descriptors[0].job_ring_handle;
+    
+    /* Get all available contexts */
+    for(i = 0; i<SEC_MAX_PDCP_CONTEXTS - 1; i++)
+    {
+        /* Create some contexts and affine it to first job ring. They will not
+         * be used for sending data
+         */
+        ret = sec_create_pdcp_context(jr_handle_0, &ctx_info[0], &ctx_handle[i+1]);
+        assert(ret == SEC_SUCCESS);
+    }
 
     for( test_idx = 0; test_idx < sizeof(test_params)/sizeof(test_params[0]) ; test_idx ++ )
     {
@@ -433,21 +442,11 @@ static void test_single_algorithms(void)
         ////////////////////////////////////
         ////////////////////////////////////
 
-        // Create one context and affine it to first job ring.
-        ret = sec_create_pdcp_context(jr_handle_0, &ctx_info[0], &ctx_handle_0);
+        // Create a context and affine it to the first job ring.
+        ret = sec_create_pdcp_context(jr_handle_0, &ctx_info[0], &ctx_handle[0]);
         assert_equal_with_message(ret, SEC_SUCCESS,
                 "ERROR on sec_create_pdcp_context: expected ret[%d]. actual ret[%d]",
                 SEC_SUCCESS, ret);
-
-        // Create another context and affine it to the first job ring.
-        ret = sec_create_pdcp_context(jr_handle_0, &ctx_info[1], &ctx_handle_1);
-        assert_equal_with_message(ret, SEC_SUCCESS,
-                "ERROR on sec_create_pdcp_context: expected ret[%d]. actual ret[%d]",
-                SEC_SUCCESS, ret);
-
-
-        ////////////////////////////////////
-        ////////////////////////////////////
 
         // How many packets to send and receive to/from SEC
         packets_handled = 1;
@@ -467,7 +466,7 @@ static void test_single_algorithms(void)
                 0, ret);
 
         // Submit one packet on the first context for encapsulation
-        ret = sec_process_packet(ctx_handle_0, in_encap_pkt, out_encap_pkt, NULL);
+        ret = sec_process_packet(ctx_handle[0], in_encap_pkt, out_encap_pkt, NULL);
         assert_equal_with_message(ret, SEC_SUCCESS,
                     "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
                     SEC_SUCCESS, ret);
@@ -482,6 +481,16 @@ static void test_single_algorithms(void)
                                 "ERROR on sec_poll: expected packets notified[%d]."
                                 "actual packets notified[%d]",
                                 packets_handled, packets_out);
+
+        ret = sec_delete_pdcp_context(ctx_handle[0]);
+        assert_equal_with_message(ret, 0,
+                                  "ERROR on releasing context!");
+
+        // Create another context and affine it to the first job ring.
+        ret = sec_create_pdcp_context(jr_handle_0, &ctx_info[1], &ctx_handle[0]);
+        assert_equal_with_message(ret, SEC_SUCCESS,
+                "ERROR on sec_create_pdcp_context: expected ret[%d]. actual ret[%d]",
+                SEC_SUCCESS, ret);
 
         // Get one packet to be used as input for decapsulation
         ret = get_pkt(&in_decap_pkt,test_data_out[test_idx],test_data_out_len[test_idx],
@@ -498,7 +507,7 @@ static void test_single_algorithms(void)
                     0, ret);
 
         // Submit one packet on the second context for decapsulation
-        ret = sec_process_packet(ctx_handle_1, in_decap_pkt, out_decap_pkt, NULL);
+        ret = sec_process_packet(ctx_handle[0], in_decap_pkt, out_decap_pkt, NULL);
         assert_equal_with_message(ret, SEC_SUCCESS,
                                   "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
                                   SEC_SUCCESS, ret);
@@ -514,6 +523,10 @@ static void test_single_algorithms(void)
                                 "actual packets notified[%d]",
                                 packets_handled, packets_out);
 
+        ret = sec_delete_pdcp_context(ctx_handle[0]);
+        assert_equal_with_message(ret, 0,
+                                  "ERROR on releasing context!");
+        
         // Check that encap content is correct
         memcmp_res = memcmp(test_ptov(out_encap_pkt->address) + out_encap_pkt->offset,
                             hdr,hdr_len);
@@ -550,15 +563,14 @@ static void test_single_algorithms(void)
         assert_equal_with_message(ret, 0,
                                   "ERROR on releasing output decapsulation packet!");
 
-        // delete contexts
-        ret = sec_delete_pdcp_context(ctx_handle_0);
-        assert_equal_with_message(ret, 0,
-                                  "ERROR on releasing context !");
+    }
 
-        ret = sec_delete_pdcp_context(ctx_handle_1);
-        assert_equal_with_message(ret, 0,
-                                  "ERROR on releasing context!");
-
+    /* Free all available contexts */
+    for(i = 0; i<SEC_MAX_PDCP_CONTEXTS - 1; i++)
+    {
+        // Delete unused contexts
+        ret = sec_delete_pdcp_context(ctx_handle[i+1]);
+        assert(ret == SEC_SUCCESS);
     }
 
     // release sec driver

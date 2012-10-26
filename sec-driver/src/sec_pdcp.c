@@ -1346,6 +1346,7 @@ static void sec_pdcp_create_pdb(sec_context_t *ctx)
     ASSERT( ctx->sh_desc != NULL);
 
     sec_pdb = &ctx->sh_desc->pdb;
+    memset(&ctx->sh_desc->pdb, 0x00, sizeof(sec_crypto_pdb_t));
 
     if (ctx->pdcp_crypto_info->user_plane == PDCP_CONTROL_PLANE)
     {
