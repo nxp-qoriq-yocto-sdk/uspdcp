@@ -202,9 +202,18 @@ static int handle_packet_from_sec(const sec_packet_t *in_packet,
                                   uint32_t status,
                                   uint32_t error_info)
 {
-    int ret = SEC_SUCCESS;
+    assert_equal_with_message(status, SEC_STATUS_SUCCESS, "SEC returned packet error: %d",status);
+    return SEC_RETURN_STOP;
+}
 
-    return ret;
+static int handle_packet_from_sec_icv_failed(const sec_packet_t *in_packet,
+                                  const sec_packet_t *out_packet,
+                                  ua_context_handle_t ua_ctx_handle,
+                                  uint32_t status,
+                                  uint32_t error_info)
+{
+    assert_equal_with_message(status, SEC_STATUS_MAC_I_CHECK_FAILED, "Excpected MAC-I check failed, got: %d",status);
+    return SEC_RETURN_STOP;
 }
 
 static int get_pkt(sec_packet_t **pkt,
@@ -299,7 +308,11 @@ static void test_free(void *ptr, size_t size)
 
 static void test_setup(void)
 {
-    // Fill SEC driver configuration data
+    // Init FSL USMMGR
+    g_usmmgr = fsl_usmmgr_init();
+    assert_not_equal_with_message(g_usmmgr, NULL, "ERROR on fsl_usmmgr_init");
+
+    // Fill SEC driver configuration data    
     sec_config_data.memory_area = dma_mem_memalign(CACHE_LINE_SIZE, SEC_DMA_MEMORY_SIZE);
     sec_config_data.sec_drv_vtop = test_vtop;
 
@@ -579,6 +592,159 @@ static void test_single_algorithms(void)
 
 }
 
+static void test_single_algorithms_icv_failed(void)
+{
+    int ret = 0;
+    int limit = SEC_JOB_RING_SIZE  - 1;
+    int memcmp_res = 0;
+    int test_idx;
+
+    uint32_t packets_out = 0;
+    uint32_t packets_handled = 0;
+    sec_job_ring_handle_t jr_handle_0;
+    sec_context_handle_t ctx_handle = NULL;
+    sec_packet_t *in_decap_pkt = NULL, *out_decap_pkt = NULL;
+    uint8_t *hdr;
+    uint8_t hdr_len;
+
+    // configuration data for a PDCP context
+    sec_pdcp_context_info_t ctx_info =
+        // Context for decapsulation
+        {
+            //.cipher_algorithm       = SEC_ALG_NULL,
+            .cipher_key             = cipher_key,
+            .cipher_key_len         = sizeof(test_crypto_key),
+            //.integrity_algorithm    = SEC_ALG_AES,
+            .integrity_key          = integrity_key,
+            .integrity_key_len      = sizeof(test_auth_key),
+            .notify_packet          = &handle_packet_from_sec_icv_failed,
+            //.sn_size                = SEC_PDCP_SN_SIZE_5,
+            .bearer                 = test_bearer,
+            //.user_plane             = PDCP_CONTROL_PLANE,
+            //.packet_direction       = test_pkt_dir;
+            //.protocol_direction     = test_proto_dir;
+            .hfn                    = test_hfn,
+            .hfn_threshold          = test_hfn_threshold,
+        };
+
+    printf("Running test %s\n", __FUNCTION__);
+
+    ////////////////////////////////////
+    ////////////////////////////////////
+
+    // Init sec driver. No invalid param.
+    ret = sec_init(&sec_config_data, JOB_RING_NUMBER, &job_ring_descriptors);
+    assert_equal_with_message(ret, SEC_SUCCESS,
+                              "ERROR on sec_init: expected ret[%d]. actual ret[%d]",
+                              SEC_SUCCESS, ret);
+
+    jr_handle_0 = job_ring_descriptors[0].job_ring_handle;
+
+    for( test_idx = 0; test_idx < sizeof(test_params)/sizeof(test_params[0]) ; test_idx ++ )
+    {
+        if(test_params[test_idx].integrity_algorithm == SEC_ALG_NULL)
+            continue;
+
+        ctx_info.packet_direction = test_packet_direction[test_idx];
+        ctx_info.protocol_direction = PDCP_DECAPSULATION;
+
+        ctx_info.user_plane = test_params[test_idx].type;
+
+        ctx_info.cipher_algorithm    = test_params[test_idx].cipher_algorithm;
+        ctx_info.integrity_algorithm = test_params[test_idx].integrity_algorithm;
+
+        ctx_info.sn_size = test_data_sns[test_idx];
+
+        hdr = test_hdr[test_idx];
+
+        hdr_len = (test_data_sns[test_idx] == SEC_PDCP_SN_SIZE_5 ? 1 :
+                   test_data_sns[test_idx] == SEC_PDCP_SN_SIZE_7 ? 1 : 2);
+
+        ////////////////////////////////////
+        ////////////////////////////////////
+
+        // Create a context and affine it to the first job ring.
+        ret = sec_create_pdcp_context(jr_handle_0, &ctx_info, &ctx_handle);
+        assert_equal_with_message(ret, SEC_SUCCESS,
+                "ERROR on sec_create_pdcp_context: expected ret[%d]. actual ret[%d]",
+                SEC_SUCCESS, ret);
+
+
+        ////////////////////////////////////
+        ////////////////////////////////////
+
+        // How many packets to send and receive to/from SEC
+        packets_handled = 1;
+
+        // Get one packet to be used as input for decapsulation
+        ret = get_pkt(&in_decap_pkt,test_data_out[test_idx],test_data_out_len[test_idx],
+                      hdr,hdr_len);
+        assert_equal_with_message(ret, 0,
+                    "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
+                    0, ret);
+
+        // Get one packet to be used as output for decapsulation
+        ret = get_pkt(&out_decap_pkt,NULL,test_data_in_len,
+                      hdr,hdr_len);
+        assert_equal_with_message(ret, 0,
+                    "ERROR on get_pkt: expected ret[%d]. actual ret[%d]",
+                    0, ret);
+
+        // Modify the MAC-I, so that ICV check wil fail.
+        *((uint8_t*)test_ptov(in_decap_pkt->address) + 
+                    in_decap_pkt->offset + 
+                    hdr_len + 
+                    test_data_out_len[test_idx] - 1) = 0xAB;
+
+        // Submit one packet on the context for decapsulation
+        ret = sec_process_packet(ctx_handle, in_decap_pkt, out_decap_pkt, NULL);
+        assert_equal_with_message(ret, SEC_SUCCESS,
+                                  "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
+                                  SEC_SUCCESS, ret);
+        usleep(1000);
+        ret = sec_poll_job_ring(jr_handle_0, limit, &packets_out);
+
+        assert_equal_with_message(ret, SEC_SUCCESS,
+                                "ERROR on sec_poll: expected ret[%d]. actual ret[%d]",
+                                SEC_SUCCESS, ret);
+        // <packets_handled> packets should be retrieved from SEC
+        assert_equal_with_message(packets_out, packets_handled,
+                                "ERROR on sec_poll: expected packets notified[%d]."
+                                "actual packets notified[%d]",
+                                packets_handled, packets_out);
+
+        // check that decap content is correct
+        memcmp_res = memcmp(test_ptov(out_decap_pkt->address) + out_decap_pkt->offset,
+                            hdr,hdr_len);
+        assert_equal_with_message(memcmp_res, 0,
+                              "ERROR on checking decapsulation contents: header is different!");
+
+        memcmp_res = memcmp(test_ptov(out_decap_pkt->address) + out_decap_pkt->offset + hdr_len,
+                            test_data_in,test_data_in_len);
+        assert_equal_with_message(memcmp_res, 0,
+                              "ERROR on checking decapsulation contents: content is different :%d\n!",test_idx);
+
+        ret = put_pkt(&in_decap_pkt);
+        assert_equal_with_message(ret, 0,
+                                  "ERROR on releasing in decapsulation packet!");
+
+        ret = put_pkt(&out_decap_pkt);
+        assert_equal_with_message(ret, 0,
+                                  "ERROR on releasing output decapsulation packet!");
+
+        // delete context
+        ret = sec_delete_pdcp_context(ctx_handle);
+        assert_equal_with_message(ret, 0,
+                                  "ERROR on releasing context!");
+
+    }
+
+    // release sec driver
+    ret = sec_release();
+    assert_equal_with_message(ret, SEC_SUCCESS, "ERROR on sec_release: ret = %d", ret);
+
+}
+
 static TestSuite * mixed_descs_tests()
 {
     /* create test suite */
@@ -590,6 +756,7 @@ static TestSuite * mixed_descs_tests()
 
     /* start adding unit tests */
     add_test(suite, test_single_algorithms);
+    add_test(suite, test_single_algorithms_icv_failed);
 
     return suite;
 }
@@ -613,13 +780,10 @@ int main(int argc, char *argv[])
     /* create test suite */
     TestSuite * suite = mixed_descs_tests();
     TestReporter * reporter = create_text_reporter();
-    
-    // Init FSL USMMGR
-    g_usmmgr = fsl_usmmgr_init();
-    assert_not_equal_with_message(g_usmmgr, NULL, "ERROR on fsl_usmmgr_init");
 
     /* Run tests */
     run_single_test(suite, "test_single_algorithms", reporter);
+    run_single_test(suite, "test_single_algorithms_icv_failed", reporter);
 
     destroy_test_suite(suite);
     (*reporter->destroy)(reporter);
