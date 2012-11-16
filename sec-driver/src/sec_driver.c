@@ -1924,9 +1924,9 @@ sec_return_code_t sec_get_stats(sec_job_ring_handle_t job_ring_handle,sec_statis
     sec_stat->consumer_index = job_ring->cidx;
     sec_stat->producer_index = job_ring->pidx;
     sec_stat->slots_available = SEC_JOB_RING_NUMBER_OF_ITEMS(SEC_JOB_RING_SIZE,
-                                    job_ring->cidx,
-                                    job_ring->pidx);
-    sec_stat->jobs_waiting_dequeue = SEC_JOB_RING_SIZE - sec_stat->slots_available;
+                                    job_ring->pidx,
+                                    job_ring->cidx);
+    sec_stat->jobs_waiting_dequeue = (SEC_JOB_RING_SIZE - sec_stat->slots_available) % SEC_JOB_RING_SIZE;
 
     return SEC_SUCCESS;
 }
