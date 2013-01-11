@@ -1495,19 +1495,6 @@ int validate_params()
         return -1;
     }
 
-    /* Some combinations are not valid */
-    if ((((test_integrity_algorithm == SEC_ALG_SNOW) &&
-        (test_cipher_algorithm == SEC_ALG_AES)) ||
-        ((test_integrity_algorithm == SEC_ALG_AES) &&
-        (test_cipher_algorithm == SEC_ALG_SNOW))) &&
-        test_user_plane == PDCP_CONTROL_PLANE)
-    {
-        fprintf(stderr,"Invalid algorithm combination for Control Plane: %s %s\n",
-            user_param.int_alg,
-            user_param.enc_alg);
-            return -1;
-    }
-
     for (i = 0; i<ARRAY_SIZE(test_dirs); i++)
     {
         if(!strncasecmp(user_param.direction, test_dirs[i].dir_name,PATH_MAX))
