@@ -2,7 +2,7 @@ bin_PROGRAMS = test_sec_driver_b2b
 
 AM_CFLAGS := -I$(TOP_LEVEL)/sec-driver/include
 AM_CFLAGS += -I$(TOP_LEVEL)/utils/of/include
-AM_CFLAGS += -I$(TOP_LEVEL)/utils/dma_mem/include
+AM_CFLAGS += -I$(TOP_LEVEL)/sec-driver/tests/system-tests/common
 
 AM_CFLAGS += -I$(KERNEL_DIR)/drivers/misc
 AM_CFLAGS += -I$(IPC_DIR)/ipc/include

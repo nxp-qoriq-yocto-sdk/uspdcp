@@ -46,16 +46,15 @@ extern "C" {
 #include <sched.h>
 #include <sys/time.h>
 #include <signal.h>
+#include <linux/limits.h>
 
 #include "fsl_sec.h"
-// for mfspr related functions
-#include "compat.h"
-
-#warning "Ugly hack to keep compat.h unchanged."
-#undef __KERNEL__
 
 // For shared memory allocator
 #include "fsl_usmmgr.h"
+
+// Common methods across tests
+#include "common.h"
 
 #include "test_sec_driver_benchmark_sg.h"
 /*==================================================================================================
