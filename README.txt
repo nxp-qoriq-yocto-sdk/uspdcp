@@ -90,7 +90,6 @@ further reffered to as <psc9131-sdk>.
        The output should list the following two files
        ipc/libipc.so  ipc/libmem.so
 
-    -> SEC device version. Configured for SEC 4.4 now.
 ----------------------------------------------------------------------------------------------------
 CONFIGURE LINUX KERNEL
 ----------------------------------------------------------------------------------------------------

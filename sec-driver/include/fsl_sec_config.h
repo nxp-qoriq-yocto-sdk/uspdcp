@@ -212,17 +212,9 @@ extern "C"{
  *  simultaneously by SEC user space driver. Add 2x safety margin. */
 #define SEC_MAX_PDCP_CONTEXTS   ((SEC_MAX_PDCP_CONTEXTS_PER_DIRECTION) * 2) * 2
 
-
-#ifdef SEC_HW_VERSION_4_4
-
-////////////////////////////////////////////////////////////////////////////////////////////////
-// SEC 4.4
-////////////////////////////////////////////////////////////////////////////////////////////////
-
-
 /** Size of cryptographic context that is used directly in communicating with SEC device.
  *  SEC device works only with physical addresses. This is the maximum size for a SEC
- *  descriptor on SEC 4.4 device, 64 words.
+ *  descriptor ( = 64 words).
  */
 #define SEC_CRYPTO_DESCRIPTOR_SIZE  256
 
@@ -284,35 +276,6 @@ extern "C"{
 
 #endif // (SEC_ENABLE_SCATTER_GATHER == ON)
 
-#else //#ifdef SEC_HW_VERSION_4_4
-
-////////////////////////////////////////////////////////////////////////////////////////////////
-// SEC 3.1
-////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-/** On SEC 3.1 device there is no concept of shared descriptor.
- *  There are only job descriptors used for every packet submitted to SEC device.
- */
-#define SEC_CRYPTO_DESCRIPTOR_SIZE  0
-/** Size of cryptographic context that is used directly in communicating with SEC device.
- *  SEC device works only with physical addresses.
- *  SEC 3.1 has a fixed format for a descriptor consisting of 8 double words.
- *  However, some other internal data is used for a job descriptor, for which
- *  SEC requires physical address:
- *  - Initialization Vector (IV):  48 bytes required size -- 64 bytes cacheline-aligned size
- *  - MAC-I code: 8 bytes required size -- 32 bytes cacheline-aligned size
- */
-#define SEC_JOB_DESCRIPTOR_SIZE     (64 + 64 + 32)
-/** DMA memory required for a channel (similar with job ring in SEC 4.4). */
-#define SEC_DMA_MEM_INPUT_RING_SIZE     (SEC_JOB_DESCRIPTOR_SIZE) * (SEC_JOB_RING_SIZE)
-/** DMA memory required for a channel (similar with job ring in SEC 4.4).
- * On SEC 3.1 there is not output ring, instead SEC directly updates jobs from channel (input ring) */
-#define SEC_DMA_MEM_JOB_RING_SIZE       (SEC_DMA_MEM_INPUT_RING_SIZE)
-
-#endif // SEC_HW_VERSION_4_4
-
-
 /** When calling sec_init() UA will provide an area of virtual memory
  *  of size #SEC_DMA_MEMORY_SIZE to be  used internally by the driver
  *  to allocate data (like SEC descriptors) that needs to be passed to
@@ -371,15 +334,8 @@ extern "C"{
 /* SEC JOB RING related configuration. */
 /***************************************/
 
-#ifdef SEC_HW_VERSION_4_4
-
-////////////////////////////////////////////////////////////////////////////////////////////////
-// SEC 4.4
-////////////////////////////////////////////////////////////////////////////////////////////////
-
-
 /** Configure the size of the JOB RING.
- * For SEC 4.4 the maximum size of the RING is hardware limited to 1024.
+ * The maximum size of the ring is hardware limited to 1024.
  * However the number of packets in flight in a time interval of 1ms can be calculated
  * from the traffic rate (Mbps) and packet size.
  * Here it was considered a packet size of 40 bytes.
@@ -393,23 +349,6 @@ extern "C"{
  */
 #define SEC_JOB_RING_SIZE       512
 
-#else
-
-////////////////////////////////////////////////////////////////////////////////////////////////
-// SEC 3.1
-////////////////////////////////////////////////////////////////////////////////////////////////
-
-/** Configure the size of the JOB RING.
- *  For SEC 3.1 the size of the FIFO (concept similar to JOB INPUT RING
- *  on SEC 4.4) is hardware fixed to 24. */
-#define SEC_JOB_RING_HW_SIZE  24
-/** The size of the job ring rounded up to nearest power of 2.
- *  This is an optimization for updating producer/consumer indexes
- *  of a job ring with bitwise operations. */
-#define SEC_JOB_RING_SIZE  32
-#endif
-
-
 /***************************************************/
 /* Interrupt coalescing related configuration.     */
 /* NOTE: SEC hardware enabled interrupt            */
@@ -418,7 +357,6 @@ extern "C"{
 /* coalescing.                                     */
 /***************************************************/
 
-#ifdef SEC_HW_VERSION_4_4
 #if SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE_POLL
 
 #define SEC_INT_COALESCING_ENABLE   ON
@@ -444,7 +382,6 @@ extern "C"{
  * coalescing is disabled.*/
 #define SEC_INTERRUPT_COALESCING_TIMER_THRESH  100
 #endif // SEC_NOTIFICATION_TYPE_POLL
-#endif // SEC_HW_VERSION_4_4
 
 /*==================================================================================================
                                  GLOBAL VARIABLE DECLARATIONS

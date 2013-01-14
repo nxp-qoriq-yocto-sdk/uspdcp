@@ -312,13 +312,7 @@ int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
     uint32_t usr_channel_map = 0;
     uint8_t config_jr_no = 0;
     int jr_idx = 0, jr_no = 0;
-#ifdef SEC_HW_VERSION_3_1
-    uint32_t len = 0;
-    uint32_t channel_remap = 0;
-    int my_map = 0;
-#else // SEC_HW_VERSION_3_1
     struct device_node *child_node = NULL;
-#endif // SEC_HW_VERSION_3_1
 
 #if SEC_NOTIFICATION_TYPE == SEC_NOTIFICATION_TYPE_POLL
     SEC_INFO("SEC driver configured with SEC_NOTIFICATION_TYPE_POLL enabled");
@@ -328,47 +322,10 @@ int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
     SEC_INFO("SEC driver configured with SEC_NOTIFICATION_TYPE_NAPI enabled");
 #endif
 
-
-#ifdef SEC_HW_VERSION_3_1
-    // Get device node for SEC 3.1
-    for_each_compatible_node(dpa_node, NULL, "fsl,sec3.1")
-    {
-        // If device is disabled from DTS, skip
-        if(of_device_is_available(dpa_node) == false)
-        {
-            continue;
-        }
-
-        // Read channel remap which dictates register mapping of channels
-        // into an alternate 4k page.
-        prop = of_get_property(dpa_node, "fsl,channel-remap", &len);
-        if(prop == NULL)
-        {
-            SEC_ERROR("Error reading <fsl,channel-remap> property from DTS!");
-            return SEC_INVALID_INPUT_PARAM;
-        }
-        channel_remap = *prop;
-
-        // Read from DTS job ring distribution map between user space and kernel space.
-        // If bit is set, job ring belongs to kernel space.
-        // Bitfield: jr0 | jr1 | jr2 | jr3
-        prop = of_get_property(dpa_node, "fsl,channel-kernel-user-space-map", &len);
-        if(prop == NULL)
-        {
-            SEC_ERROR("Error reading <fsl,channel-kernel-user-space-map> property from DTS!");
-            return SEC_INVALID_INPUT_PARAM;
-        }
-
-        SEC_DEBUG("Read from DTS <fsl,channel-kernel-user-space-map> = 0x%x", *prop);
-        my_map = *prop;
-
-        kernel_usr_channel_map = *prop;
-#else // SEC_HW_VERSION_3_1
-
     // Initialize of library
     of_init();
 
-    // Get device node for SEC 4.4
+    // Get device node for SEC
     /* Because there is only one SEC available on the whole
      * platform, if it's disabled then I can safely assume I can
      * report an error (there is no other device)
@@ -404,10 +361,7 @@ int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
         }
         jr_idx++;
     }
-#endif // SEC_HW_VERSION_3_1
-        /* Kept so that the code is similar between SEC 3.1 and
-         * SEC 4.4 architectures
-         */
+
         usr_channel_map = ~kernel_usr_channel_map;
 
         // Calculate the number of available job rings for user space usage.
@@ -436,17 +390,7 @@ int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
             {
                 SEC_INFO("Using Job Ring number %d", jr_idx);
                 job_rings[jr_no].jr_id = jr_idx;
-#ifdef SEC_HW_VERSION_3_1
-                // remember if the registers for this job ring are mapped in an alternate 4k page
-                if(channel_remap & JOB_RING_MASK(jr_idx))
-                {
-                    job_rings[jr_no].alternate_register_range = TRUE;
-                }
-                else
-                {
-                    job_rings[jr_no].alternate_register_range = FALSE;
-                }
-#endif // SEC_HW_VERSION_3_1
+
                 jr_no++;
                 if (jr_no == job_ring_number)
                 {
@@ -456,12 +400,9 @@ int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
             jr_idx++;
 
         }while(jr_idx < MAX_SEC_JOB_RINGS);
-#ifdef SEC_HW_VERSION_4_4
+
 		of_finish();
-#else // SEC_HW_VERSION_4_4
-    }
-    SEC_DEBUG("Read from DTS <fsl,channel-kernel-user-space-map> = 0x%x", my_map);
-#endif // SEC_HW_VERSION_4_4
+
     return SEC_SUCCESS;
 }
 
@@ -491,11 +432,8 @@ sec_return_code_t sec_config_uio_job_ring(sec_job_ring_t *job_ring)
 
 
     SEC_INFO("Opened device file for job ring %d , fd = %d", job_ring->jr_id, job_ring->uio_fd);
+    
     // Map register range for this job ring.
-    // On SEC 4.x each job ring has its specific registers
-    // in a separate 4K map-able memory area.
-    // On SEC 3.1 we cannot separate register address ranges for each channel.
-    // We will map only once the entire register address range for SEC device.
     ASSERT(job_ring->register_base_addr == NULL);
     job_ring->register_base_addr = uio_map_registers(job_ring->uio_fd,
                                                      uio_device_id,

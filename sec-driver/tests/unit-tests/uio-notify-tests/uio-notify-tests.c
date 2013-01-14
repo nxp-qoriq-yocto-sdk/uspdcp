@@ -39,14 +39,10 @@ extern "C" {
 ==================================================================================================*/
 #include "fsl_sec.h"
 #include "cgreen.h"
-#ifdef SEC_HW_VERSION_3_1
-#include "compat.h"
-#else // SEC_HW_VERSION_3_1
 
 // For shared memory allocator
 #include "fsl_usmmgr.h"
 
-#endif // SEC_HW_VERSION_3_1
 
 #include <stdio.h>
 #include <assert.h>
@@ -74,7 +70,6 @@ extern "C" {
 // Maximum number of IRQs to be generated in a test
 #define MAX_IRQ     50
 
-#ifdef SEC_HW_VERSION_4_4
 /** Size in bytes of a cacheline. */
 #define CACHE_LINE_SIZE  32
 
@@ -82,7 +77,6 @@ extern "C" {
 #define dma_mem_memalign  test_memalign
 #define dma_mem_free      test_free
 
-#endif
 /*==================================================================================================
                                       LOCAL VARIABLES
 ==================================================================================================*/
@@ -102,16 +96,13 @@ static const sec_job_ring_descriptor_t *job_ring_descriptors = NULL;
 
 // Job ring used for testing, in tests using a single job ring.
 static int job_ring_id;
-#ifdef SEC_HW_VERSION_4_4
 
 // FSL Userspace Memory Manager structure
 fsl_usmmgr_t g_usmmgr;
 
-#endif // SEC_HW_VERSION_4_4
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
 ==================================================================================================*/
-#ifdef SEC_HW_VERSION_4_4
 /* Returns the physical address corresponding to the virtual
  * address passed as a parameter. 
  */
@@ -125,11 +116,9 @@ static void * test_memalign(size_t align, size_t size);
 
 /* Frees a previously allocated FSL USMMGR memory region */
 static void test_free(void *ptr, size_t size);
-#endif // SEC_HW_VERSION_4_4
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
-#ifdef SEC_HW_VERSION_4_4
 static void * test_memalign(size_t align, size_t size)
 {
     int ret;
@@ -145,20 +134,11 @@ static void test_free(void *ptr, size_t size)
    range_t r = {0,ptr,size};   
    fsl_usmmgr_free(&r,g_usmmgr);
 }
-#endif // SEC_HW_VERSION_4_4
 
 static void test_setup(void)
 {
     int ret = 0;
 
-#ifdef SEC_HW_VERSION_3_1
-    // map the physical memory
-    ret = dma_mem_setup();
-    assert_equal_with_message(ret, 0, "ERROR on dma_mem_setup: ret = %d", ret);
-    
-    // Fill SEC driver configuration data
-    sec_config_data.memory_area = (void*)__dma_virt;
-#else
     // Init FSL USMMGR
     g_usmmgr = fsl_usmmgr_init();
     assert_not_equal_with_message(g_usmmgr, NULL, "ERROR on fsl_usmmgr_init");
@@ -166,7 +146,6 @@ static void test_setup(void)
     // Fill SEC driver configuration data
     sec_config_data.memory_area = dma_mem_memalign(CACHE_LINE_SIZE,SEC_DMA_MEMORY_SIZE);
     sec_config_data.sec_drv_vtop = test_vtop;
-#endif
 
     sec_config_data.work_mode = SEC_STARTUP_POLLING_MODE;
 
@@ -182,17 +161,13 @@ static void test_teardown()
     // release sec driver
     ret = sec_release();
 	assert_equal_with_message(ret, SEC_SUCCESS, "ERROR on sec_release: ret = %d", ret);
-#ifdef SEC_HW_VERSION_3_1
-    // unmap the physical memory
-    dma_mem_release();
-#else // SEC_HW_VERSION_3_1
 
     dma_mem_free(sec_config_data.memory_area,SEC_DMA_MEMORY_SIZE);
     
     /* Destroy FSL USMMGR object. */
     ret = fsl_usmmgr_exit(g_usmmgr);
     assert_equal_with_message(ret,0,"Failure to destroy the FSL USMMGR: %d",ret);
-#endif // SEC_HW_VERSION_3_1
+
 }
 
 

@@ -180,10 +180,6 @@ typedef uint64_t dma_addr_t;
 /** Physical address on 32 bits. MUST be kept in synch with same define from kernel!*/
 typedef uint32_t dma_addr_t;
 #endif
-#ifdef SEC_HW_VERSION_3_1
-/** Physical address. */
-typedef dma_addr_t  phys_addr_t;
-#endif // SEC_HW_VERSION_3_1
 
 /**Data type used for specifying addressing scheme for
  * packets submitted by User Application. Assume virtual addressing */
@@ -202,13 +198,11 @@ typedef const void* sec_context_handle_t;
 /** UA opaque handle to a packet context.
  *  The handle is opaque from SEC driver's point of view. */
 typedef const void* ua_context_handle_t;
-#ifdef SEC_HW_VERSION_4_4
+
 /** Function type used for virtual to physical address conversions */
 typedef dma_addr_t (*sec_vtop)(void *v);
-#endif // SEC_HW_VERSION_4_4
 
 /** Structure used to describe an input or output packet accessed by SEC. */
-#ifdef SEC_HW_VERSION_4_4
 typedef struct sec_packet_s
 {
     dma_addr_t      address;        /**< The PHYSICAL address of the buffer. */
@@ -235,22 +229,6 @@ typedef struct sec_statistics_s
     uint32_t jobs_waiting_dequeue;  /**< Number of jobs available to be dequeued by the UA. */
     uint32_t reserved[2];           /**< Reserved for future additions. */
 }sec_statistics_t  __attribute__ ((aligned (32)));;
-
-#else // SEC_HW_VERSION_4_4
-typedef struct sec_packet_s
-{
-    uint8_t         *address;       /**< The virtual address of the buffer. */
-    uint32_t        offset;         /**< Offset within packet from where SEC will access (read or write) data. */
-    uint32_t        length;         /**< Packet length. */
-    packet_type_t   scatter_gather; /**< A value of #SEC_SCATTER_GATHER_BUFFER indicates the packet is
-                                         passed as a scatter/gather table.
-                                         A value of #SEC_CONTIGUOUS_BUFFER means the packet is contiguous
-                                         in memory and is accessible at the given address.
-                                         @todo export format for link table.*/
-}sec_packet_t;
-#endif // SEC_HW_VERSION_4_4
-
-
 
 /** Contains Job Ring descriptor info returned to the caller when sec_init() is invoked. */
 typedef struct sec_job_ring_descriptor_s
@@ -348,7 +326,6 @@ typedef struct sec_config_s
                                                  SEC device in physical addressing. */
 
     uint32_t        irq_coalescing_timer;   /**< Interrupt Coalescing Timer Threshold.
-                                                 @note Applicable to SEC 4.4 only!
 
                                                  While interrupt coalescing is enabled (ICEN=1), this value determines the
                                                  maximum amount of time after processing a Descriptor before raising an interrupt.
@@ -358,7 +335,6 @@ typedef struct sec_config_s
                                                  coalescing is disabled.*/
 
     uint8_t         irq_coalescing_count;   /**< Interrupt Coalescing Descriptor Count Threshold.
-                                                 @note Applicable to SEC 4.4 only!
 
                                                  While interrupt coalescing is enabled (ICEN=1), this value determines
                                                  how many Descriptors are completed before raising an interrupt.
@@ -372,8 +348,7 @@ typedef struct sec_config_s
                                                  Valid values are #SEC_STARTUP_POLLING_MODE and #SEC_STARTUP_INTERRUPT_MODE.*/
     
     sec_vtop        sec_drv_vtop;           /**< Function to be used internally by the driver for virtual to physical 
-                                                 address translation for internal structures.
-                                                 @note Applicable to SEC 4.4 only! */
+                                                 address translation for internal structures. */
 }sec_config_t;
 
 /**
@@ -632,14 +607,7 @@ sec_return_code_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle,
  * The User Application must poll SEC driver using sec_poll() or sec_poll_job_ring() to
  * receive notifications of the processing completion status. The notifications are received
  * by UA by means of callback (see ::sec_out_cbk).
- *
- * @note For packets submitted for PDCP control-plane context it is possible to
- *       be sent to SEC twice for processing: once to do integrity check, second to do
- *       encryption/decryption. This will happen when the algorithm for integrity is
- *       different than the algorithm for confidentiality.
- *       When both algorithms are the same, the packet will be sent only once, on BSC 913x (SEC 4.4).
- *       On P2020 (SEC 3.1) the control-plane packets will ALWAYS be sent to SEC twice.
- *
+ * 
  * @note The input packet and output packet must not both point to the same memory location!
  *
  * @param [in]  sec_ctx_handle     The handle of the context associated to this packet.
@@ -759,8 +727,8 @@ sec_return_code_t sec_process_packet_hfn_ov(sec_context_handle_t sec_ctx_handle,
  * @retval -1 if local-per-thread error variable is not initialized.
  * @retval 0 if no error code is reported by SEC device.
  * @retval Returns specific error code, as reported by SEC device.
- *         On SEC 3.1, the error is extracted from Channel Status Register (CSR), bits [32:63].
- *         On SEC 4.4, the error is extracted from Job Ring Interrupt Status Register (JRINT), bits [0:32].
+ *         The error is extracted from Job Ring Interrupt Status Register
+ *         (JRINT), bits [0:32].
  */
 int32_t sec_get_last_error(void);
 
@@ -783,41 +751,6 @@ const char* sec_get_error_message(sec_return_code_t return_code);
     @}
  */
 
-#ifdef SEC_HW_VERSION_3_1
-/**
-    @addtogroup SecUserSpaceDriverPacketFunctions
-    @{
- */
-/** @brief Triggers processing of PDCP control plane packets on a job ring.
- *
- * On P2020, SEC 3.1 engine cannot perform both cryptographic and authentication
- * operations on a PDCP c-plane packet in a single step. This requires c-plane
- * packets being sent to SEC engine two times, once for performing each security function.
- * Before the c-plane packets are sent the second time to SEC, they are stored in internal
- * per-job ring FIFO. This function will send all c-plane packets from internal FIFO to SEC
- * engine for the second processing function, completing this way all the operations required
- * to have PDCP c-plane packets ready.
- *
- * @note This API is valid only for P2020 PDCP driver.
- *       It is not required and will not be provided on 913x PDCP driver!
- *
- * @param [in]  job_ring_handle     The Job Ring handle.
- *
- * @retval ::SEC_SUCCESS                    for successful execution.
- * @retval ::SEC_INVALID_INPUT_PARAM        is returned if job ring handle is NULL.
- * @retval ::SEC_DRIVER_NOT_INITIALIZED     is returned if SEC driver is not yet initialized.
- * @retval ::SEC_DRIVER_RELEASE_IN_PROGRESS is returned if SEC driver release is in progress
- * @retval ::SEC_JR_IS_FULL                 is returned if the JR is full
- * @retval ::SEC_JOB_RING_RESET_IN_PROGRESS indicates job ring is resetting due to a per-packet SEC processing error ::SEC_PACKET_PROCESSING_ERROR.
- *                                          Reset is finished when sec_poll() or sec_poll_job_ring() return.
- */
-sec_return_code_t sec_push_c_plane_packets(sec_job_ring_handle_t job_ring_handle);
-
-/**
-    @}
- */
-#endif
-#ifdef SEC_HW_VERSION_4_4
 /**
     @addtogroup SecUserSpaceDriverManagementFunctions
     @{
@@ -840,7 +773,7 @@ sec_return_code_t sec_get_stats(sec_job_ring_handle_t job_ring_handle,
 /**
     @}
  */
-#endif
+
 /*================================================================================================*/
 
 #ifdef __cplusplus

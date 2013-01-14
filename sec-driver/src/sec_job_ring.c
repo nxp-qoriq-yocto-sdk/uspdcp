@@ -42,10 +42,6 @@ extern "C" {
 #include "sec_hw_specific.h"
 #include "sec_config.h"
 
-#ifdef SEC_HW_VERSION_3_1
-// For definition of sec_vtop and sec_ptov macros
-#include "external_mem_management.h"
-#endif
 
 /*==================================================================================================
                                      LOCAL DEFINES
@@ -72,9 +68,7 @@ extern "C" {
 ==================================================================================================*/
 /* Job rings used for communication with SEC HW */
 sec_job_ring_t g_job_rings[MAX_SEC_JOB_RINGS];
-#ifdef SEC_HW_VERSION_4_4
 extern sec_vtop g_sec_vtop;
-#endif
 
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
@@ -88,9 +82,7 @@ extern sec_vtop g_sec_vtop;
                                      GLOBAL FUNCTIONS
 ==================================================================================================*/
 int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mode
-#ifdef SEC_HW_VERSION_4_4
         , uint16_t irq_coalescing_timer, uint8_t irq_coalescing_count
-#endif
         )
 {
     int ret = 0;
@@ -101,7 +93,6 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
 
     SEC_INFO("Job ring %d UIO fd = %d", job_ring->jr_id, job_ring->uio_fd);
 
-#ifdef SEC_HW_VERSION_4_4
     // Memory area must start from cacheline-aligned boundary.
     // Each job entry is itself aligned to cacheline.
     SEC_ASSERT ((dma_addr_t)*dma_mem % CACHE_LINE_SIZE == 0,
@@ -132,7 +123,6 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
     memset(job_ring->output_ring, 0, SEC_DMA_MEM_OUTPUT_RING_SIZE);
     *dma_mem += SEC_DMA_MEM_OUTPUT_RING_SIZE;
 
-#endif // SEC_HW_VERSION_4_4
     // Reset job ring in SEC hw and configure job ring registers
     ret = hw_reset_job_ring(job_ring);
     SEC_ASSERT(ret == 0, ret, "Failed to reset hardware job ring with id %d", job_ring->jr_id);
@@ -154,28 +144,16 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
     uio_job_ring_enable_irqs(job_ring);
 #endif
 
-#ifdef SEC_HW_VERSION_3_1
-    // Memory area must start from cacheline-aligned boundary.
-    // Each job entry is itself aligned to cacheline.
-    SEC_ASSERT ((dma_addr_t)*dma_mem % CACHE_LINE_SIZE == 0,
-            SEC_INVALID_INPUT_PARAM,
-            "Current memory position is not cacheline aligned."
-            "Job ring id = %d", job_ring->jr_id);
-#endif
     // Allocate job items from the DMA-capable memory area provided by UA
     ASSERT(job_ring->descriptors == NULL);
 
     job_ring->descriptors = *dma_mem;
-#ifdef SEC_HW_VERSION_4_4
+
     /* Store base address here. It will be used for 'lookups' in sec_poll() */
     job_ring->descriptors_base_addr = g_sec_vtop(job_ring->descriptors);
     
     memset(job_ring->descriptors, 0, SEC_DMA_MEM_DESCRIPTORS);
     *dma_mem += SEC_DMA_MEM_DESCRIPTORS;
-#else
-    memset(job_ring->descriptors, 0, SEC_JOB_RING_SIZE * sizeof(struct sec_descriptor_t));
-    *dma_mem += SEC_JOB_RING_SIZE * sizeof(struct sec_descriptor_t);
-#endif // SEC_HW_VERSION_4_4
 
     // TODO: check that we do not use more DMA mem than actually allocated/reserved for us by User App.
     // Options:
@@ -189,12 +167,9 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
         job_ring->jobs[i].descr = &job_ring->descriptors[i];
 
         // Obtain and store the physical address for a job descriptor
-#ifdef SEC_HW_VERSION_3_1
-        job_ring->jobs[i].descr_phys_addr = sec_vtop(&job_ring->descriptors[i]);
-#else // SEC_HW_VERSION_3_1
         job_ring->jobs[i].descr_phys_addr = g_sec_vtop(&job_ring->descriptors[i]);
-#endif // SEC_HW_VERSION_3_1
-#if defined(SEC_HW_VERSION_4_4) && (SEC_ENABLE_SCATTER_GATHER == ON)
+
+#if (SEC_ENABLE_SCATTER_GATHER == ON)
         job_ring->jobs[i].sg_ctx = &job_ring->sg_ctxs[i];
 
         // Need two SG tables, one for input packet, the other for the output
@@ -215,29 +190,9 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
         job_ring->sg_ctxs[i].in_sg_tbl_phy = g_sec_vtop(job_ring->sg_ctxs[i].in_sg_tbl);
         job_ring->sg_ctxs[i].out_sg_tbl_phy = g_sec_vtop(job_ring->sg_ctxs[i].out_sg_tbl);
 
-#endif // defined(SEC_HW_VERSION_4_4) && (SEC_ENABLE_SCATTER_GATHER == ON)
-#ifdef SEC_HW_VERSION_3_1
-        SEC_ASSERT ((dma_addr_t)*dma_mem % CACHE_LINE_SIZE == 0,
-                SEC_INVALID_INPUT_PARAM,
-                "Current jobs[i]->mac_i [i=%d] position is not cacheline aligned.", i);
-
-        // Allocate DMA-capable memory where SEC 3.1 will generate MAC-I for
-        // SNOW F9 and AES CMAC integrity check algorithms (PDCP control-plane).
-        job_ring->jobs[i].mac_i = *dma_mem;
-        memset(job_ring->jobs[i].mac_i, 0, sizeof(sec_mac_i_t));
-        *dma_mem += sizeof(sec_mac_i_t);
-#endif
+#endif // (SEC_ENABLE_SCATTER_GATHER == ON)
     }
-#ifdef SEC_HW_VERSION_3_1
-    // Allocate normal virtual memory for internal c-plane FIFO
-    for(i = 0; i < FIFO_CAPACITY; i++)
-    {
-        job_ring->pdcp_c_plane_fifo.items[i] =(void*) malloc(sizeof(sec_job_t));
-        memset(job_ring->pdcp_c_plane_fifo.items[i], 0, sizeof(sec_job_t));
-    }
-#endif
 
-#ifdef SEC_HW_VERSION_4_4
 #if (SEC_INT_COALESCING_ENABLE == ON)
     hw_job_ring_set_coalescing_param(job_ring,
                                      irq_coalescing_timer,
@@ -245,7 +200,6 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
 
     hw_job_ring_enable_coalescing(job_ring);
 #endif // SEC_INT_COALESCING_ENABLE == ON
-#endif //SEC_HW_VERSION_4_4
 
     job_ring->jr_state = SEC_JOB_RING_STATE_STARTED;
 
@@ -257,15 +211,10 @@ int shutdown_job_ring(sec_job_ring_t * job_ring)
     int ret = 0;
 
     ASSERT(job_ring != NULL);
-#ifdef SEC_HW_VERSION_3_1
-    if(job_ring->uio_fd != 0)
-    {
-        close(job_ring->uio_fd);
-    }
-#endif
+
     ret = hw_shutdown_job_ring(job_ring);
     SEC_ASSERT(ret == 0, ret, "Failed to shutdown hardware job ring with id %d", job_ring->jr_id);
-#ifdef SEC_HW_VERSION_4_4
+
 #if (SEC_INT_COALESCING_ENABLE == ON)
     hw_job_ring_disable_coalescing(job_ring);
 #endif // SEC_INT_COALESCING_ENABLE == ON
@@ -274,28 +223,17 @@ int shutdown_job_ring(sec_job_ring_t * job_ring)
     uio_job_ring_disable_irqs(job_ring);
 #endif
 
-    /* On SEC 4.4 I need to close the fd after
-     * I shutdown the JR because i need to send
-     * UIO commands using the fd
+    /* I need to close the fd after shutdown UIO commands need to be 
+     * sent using the fd 
      */
+
     if(job_ring->uio_fd != 0)
     {
         SEC_INFO("Closed device file for job ring %d , fd = %d", job_ring->jr_id, job_ring->uio_fd);
         close(job_ring->uio_fd);
     }
-#endif
+
     memset(job_ring, 0, sizeof(sec_job_ring_t));
-#ifdef SEC_HW_VERSION_3_1
-    int i;
-    for(i = 0; i < FIFO_CAPACITY; i++)
-    {
-        if(job_ring->pdcp_c_plane_fifo.items[i] != NULL)
-        {
-            free(job_ring->pdcp_c_plane_fifo.items[i]);
-            job_ring->pdcp_c_plane_fifo.items[i] = NULL;
-        }
-    }
-#endif //SEC_HW_VERSION_3_1
 
     return SEC_SUCCESS;
 }
@@ -329,7 +267,7 @@ void uio_job_ring_enable_irqs(sec_job_ring_t *job_ring)
     SEC_DEBUG("Jr[%p]. Enabled IRQs on jr id %d", job_ring, job_ring->jr_id);
 }
 
-#ifdef SEC_HW_VERSION_4_4
+
 void uio_job_ring_disable_irqs(sec_job_ring_t *job_ring)
 {
     int ret;
@@ -346,7 +284,6 @@ void uio_job_ring_disable_irqs(sec_job_ring_t *job_ring)
     SEC_DEBUG("Jr[%p]. Disabled IRQs on jr id %d", job_ring, job_ring->jr_id);
 }
 
-#endif // SEC_HW_VERSION_4_4
 /*================================================================================================*/
 
 #ifdef __cplusplus

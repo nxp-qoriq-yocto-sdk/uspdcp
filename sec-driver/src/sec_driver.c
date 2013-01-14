@@ -46,9 +46,9 @@ extern "C" {
 #include "sec_atomic.h"
 #include "sec_pdcp.h"
 #include "sec_hw_specific.h"
-#if defined(SEC_HW_VERSION_4_4) && (SEC_ENABLE_SCATTER_GATHER == ON)
+#if (SEC_ENABLE_SCATTER_GATHER == ON)
 #include "sec_sg_utils.h"
-#endif // defined(SEC_HW_VERSION_4_4) && (SEC_ENABLE_SCATTER_GATHER == ON)
+#endif // (SEC_ENABLE_SCATTER_GATHER == ON)
 #include <stdio.h>
 
 /*==================================================================================================
@@ -194,12 +194,11 @@ pthread_key_t g_sec_errno = SEC_PTHREAD_KEY_INVALID;
  * @see the 'man 3 pthread_setspecific' page for further details on thread locals.
  */
 uint32_t g_sec_errno_value = SEC_SUCCESS;
-#ifdef SEC_HW_VERSION_4_4
+
 /** Global function for virtual to physical translation for the internal
  * SEC driver structures
  */
 sec_vtop g_sec_vtop = NULL;
-#endif // SEC_HW_VERSION_4_4
 
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
@@ -254,83 +253,7 @@ static void hw_flush_job_ring(sec_job_ring_t *job_ring,
  * WITHOUT beeing notified to UA.
  */
 static void flush_job_rings();
-#ifdef SEC_HW_VERSION_3_1
-/** @brief Checks if there are any PDCP control-plane packets waiting
- * to be processed, on a certain job ring.
- * PDCP control-plane packets may require a two step processing:
- * sent once to SEC for integrity checking, sent second time to SEC
- * for confidentiality protection.
- *
- * @param [in,out]     job_ring     Job ring
- *
- * @retval SEC_SUCCESS for success
- * @retval other for error
- */
-static int sec_process_pdcp_c_plane_packets(sec_job_ring_t *job_ring);
 
-/** @brief Copy generated MAC-I code from driver's internal location
- * to the indicated location.
- *
- * @param [in]  job            The job
- * @param [in]  sec_context    The context
- * @param [out] out_mac_i      The MAC-I output code
- */
-static void sec_handle_mac_i_generation(sec_job_t *job,
-                                        sec_context_t *sec_context,
-                                        uint32_t *out_mac_i);
-
-/** @brief Check result of MAC-I validation.
- * For AES CMAC, on SEC 3.1, the validation is manually done in the driver with memcmp.
- * For SNOW, SEC 3.1 does the validation itself.
- *
- * @param [in]  job            The job
- * @param [in]  sec_context    The context
- *
- * @retval 0 for MAC-I validation success
- * @retval 1 for MAC-I validation failure
- */
-static int sec_handle_mac_i_validation(sec_job_t *job, sec_context_t *sec_context);
-
-/** @brief Handle a PDCP control packet.
- * Decide if packet is to be notified to User Application, if it is to be sent
- * again to SEC, etc.
- *
- * @param [in]  job_ring     Job ring
- * @param [in]  job          The job
- * @param [in]  sec_context  The context
- * @param [out] status       The status to be notified to UA
- * @param [out] notify_pkt   Indicates if packet is to be notified to UA.
- */
-static void sec_handle_c_plane_packet(sec_job_ring_t *job_ring,
-                                      sec_job_t *job,
-                                      sec_context_t *sec_context,
-                                      sec_status_t *status,
-                                      uint8_t *notify_pkt);
-
-/** @brief Buffer a PDCP control packet into internal Control-plane FIFO.
- * The packet will be sent again to SEC for second processing stage:
- * confidentiality or authentication, depending on context configuration.
- * Next time sec_process_packet() API is called, the internal Control-plane FIFO
- * is checked and any buffered packets are sent to SEC.
- *
- * @param [in]  job_ring     Job ring
- * @param [in]  job          The job
- */
-static void sec_buffer_c_plane_packet(sec_job_ring_t *job_ring,
-                                      sec_job_t *job);
-
-/** @brief On P2020 it is required to implement EEA0/EIA0 algorithms,
- * that is NULL crypto and NULL authentication with a memcpy-based mechanism.
- *
- * @note: TODO when migrating to PSC9132: remove this function!!
- *
- * @param [in,out]  job     The job pointing to input/output packets
- *
- * @retval SEC_SUCCESS for success
- * @retval other for error
- */
-static int sec_process_packet_with_null_algo(sec_job_t *job);
-#endif // SEC_HW_VERSION_3_1
 /** @brief Handle packet that generated error in SEC engine.
  * Identify the exact type of error and handle the error.
  * Depending on the error type, the job ring could be reset.
@@ -378,23 +301,15 @@ static void hw_flush_job_ring(sec_job_ring_t * job_ring,
     int32_t discarded_packets_no = 0;
     int32_t number_of_jobs_available = 0;
     int ret;
-#ifdef SEC_HW_VERSION_4_4
     dma_addr_t  current_desc = 0;
-#endif
 
     SEC_DEBUG("Jr[%p] pi[%d] ci[%d].Flushing jr id %d.packet status[%d]."
               "SEC error code[0x%x]. notify packet=[%d]",
               job_ring, job_ring->pidx, job_ring->cidx,
               job_ring->jr_id, status, error_code, do_notify);
-#ifdef SEC_HW_VERSION_3_1
-    // compute the number of jobs available in the job ring based on the
-    // producer and consumer index values.
-    number_of_jobs_available = SEC_JOB_RING_NUMBER_OF_ITEMS(SEC_JOB_RING_SIZE,
-                                                            job_ring->pidx,
-                                                            job_ring->cidx);
-#else
+
     number_of_jobs_available = hw_get_no_finished_jobs(job_ring);
-#endif
+
     // Discard all jobs
     jobs_no_to_discard = number_of_jobs_available;
 
@@ -408,9 +323,7 @@ static void hw_flush_job_ring(sec_job_ring_t * job_ring,
     while(jobs_no_to_discard > discarded_packets_no)
     {
         // get the first un-notified job from the job ring
-#ifdef SEC_HW_VERSION_3_1
-        job = &job_ring->jobs[job_ring->cidx];
-#else
+
         current_desc = job_ring->output_ring[job_ring->cidx].desc;
         
         /* Since the memory is continous, then P2V translation is a mere addition to
@@ -419,7 +332,7 @@ static void hw_flush_job_ring(sec_job_ring_t * job_ring,
 
         job = (job_ring->descriptors + current_desc)->job_ptr;
         SEC_ASSERT_RET_VOID( job != NULL,"Job ring retrieved from descriptor is NULL");
-#endif
+
         sec_context = job->sec_context;
 
         discarded_packets_no++;
@@ -438,9 +351,9 @@ static void hw_flush_job_ring(sec_job_ring_t * job_ring,
         // AFTER saving job in temporary location!
         // Increment the consumer index for the current job ring
         job_ring->cidx = SEC_CIRCULAR_COUNTER(job_ring->cidx, SEC_JOB_RING_SIZE);
-#ifdef SEC_HW_VERSION_4_4
+
         hw_remove_one_entry(job_ring);
-#endif // SEC_HW_VERSON_4_4
+
         if(do_notify == TRUE)
         {
             new_status = status;
@@ -504,11 +417,8 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
     uint32_t number_of_jobs_available = 0;
     uint32_t sec_error_code = 0;
     int ret = 0;
-#ifdef SEC_HW_VERSION_3_1
-    uint8_t notify_pkt = TRUE;
-#endif
     uint32_t do_driver_shutdown = FALSE;
-#ifdef SEC_HW_VERSION_4_4
+
     dma_addr_t current_desc;
 
     /* check here if any JR error that cannot be written
@@ -522,7 +432,7 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
         SEC_ERRNO_SET(sec_error_code);
         return SEC_PROCESSING_ERROR;
     }
-#endif
+
     // Compute the number of notifications that need to be raised to UA
     // If limit < 0 -> notify all done jobs
     // If limit > total number of done jobs -> notify all done jobs
@@ -531,11 +441,8 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
 
     // compute the number of jobs available in the job ring based on the
     // producer and consumer index values.
-#ifdef SEC_HW_VERSION_3_1
-    number_of_jobs_available = SEC_JOB_RING_NUMBER_OF_ITEMS(SEC_JOB_RING_SIZE, job_ring->pidx, job_ring->cidx);
-#else
     number_of_jobs_available = hw_get_no_finished_jobs(job_ring);
-#endif
+
     jobs_no_to_notify = (limit < 0 || limit > number_of_jobs_available) ? number_of_jobs_available : limit;
 
     SEC_DEBUG("Jr[%p] pi[%d] ci[%d].Jobs submitted %d.Jobs to notify %d",
@@ -544,7 +451,6 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
 
     while(jobs_no_to_notify > notified_packets_no)
     {
-#ifdef SEC_HW_VERSION_4_4
         status = SEC_STATUS_SUCCESS;
 
         /* Get job status here */
@@ -584,27 +490,8 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
                           "Integrity check FAILED!.",
                           job->sec_context, job->in_packet, job->out_packet);
         }
-#else // SEC_HW_VERSION_4_4
-        if(SEC_JOB_RING_NUMBER_OF_ITEMS(SEC_JOB_RING_SIZE, job_ring->pidx, job_ring->cidx) == 0)
-        {
-            SEC_DEBUG("Job Ring %p was emptied by moving c-plane packets into internal FIFO",
-                      job_ring);
-            break;
-        }
 
-        // get the first un-notified job from the job ring
-        job = &job_ring->jobs[job_ring->cidx];
-
-#endif // SEC_HW_VERSION_4_4
-#ifdef SEC_HW_VERSION_3_1
-        // check if job is DONE
-        if(!hw_job_is_done(job))
-#endif // SEC_HW_VERSION_3_1
         {
-#ifdef SEC_HW_VERSION_3_1
-            // check if any job generated error, not only this job.
-            sec_error_code = hw_job_ring_error(job_ring);
-#endif // SEC_HW_VERSION_3_1
             if (sec_error_code)
             {
                 // Set errno value to the error code returned by SEC engine.
@@ -622,41 +509,10 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
 
                 return ((do_driver_shutdown == TRUE) ? SEC_PROCESSING_ERROR : SEC_PACKET_PROCESSING_ERROR);
             }
-#ifdef SEC_HW_VERSION_3_1
-            else
-            {
-                // Packet is not processed yet, exit
-                SEC_DEBUG("Jr[%p]. packet not done, exit. job descr hdr = 0x%x \n",
-                          job_ring, job->descr->hdr);
-                break;
-            }
-#endif // SEC_HW_VERSION_3_1
         }
 
         sec_context = job->sec_context;
-#ifdef SEC_HW_VERSION_3_1
-        // Used only for #SEC_STATUS_HFN_THRESHOLD_REACHED code, which is set by the driver,
-        // before the packet is sent to SEC.
-        status = job->job_status;
 
-        // Packet processing is DONE. See if it's a data-plane or control-plane packet
-        if(sec_context->pdcp_crypto_info->user_plane == PDCP_CONTROL_PLANE)
-        {
-            sec_handle_c_plane_packet(job_ring, job, sec_context, &status, &notify_pkt);
-
-            // If control-plane packet must be sent to SEC a second time,
-            // it will not be notified now.
-            if(notify_pkt == FALSE)
-            {
-                // increment the consumer index for the current job ring
-                job_ring->cidx = SEC_CIRCULAR_COUNTER(job_ring->cidx, SEC_JOB_RING_SIZE);
-
-                // Do not consume the packet on the context! The context still has this packet in flight,
-                // even if it's in internal c-plane FIFO.
-                continue;
-            }
-        }
-#endif // SEC_HW_VERSION_3_1
         // copy into a temporary job the fields from the job we need to raise callback
         // this is done to free the slot before the callback is called,
         // which we cannot control in terms of how much processing it will do.
@@ -667,10 +523,10 @@ static uint32_t hw_poll_job_ring(sec_job_ring_t *job_ring,
         // now increment the consumer index for the current job ring,
         // AFTER saving job in temporary location!
         job_ring->cidx = SEC_CIRCULAR_COUNTER(job_ring->cidx, SEC_JOB_RING_SIZE);
-#ifdef SEC_HW_VERSION_4_4
+
         /* Signal that the job has been processed and the slot is free */
         hw_remove_one_entry(job_ring);
-#endif // SEC_HW_VERSION_4_4
+
         // If context is retiring, set a suggestive status for the packets notified to UA.
         // Doesn't matter if the status is overwritten here, if UA deleted the context,
         // it does not care about any other packet status.
@@ -728,310 +584,12 @@ static void flush_job_rings()
         }
     }
 }
-#ifdef SEC_HW_VERSION_3_1
-static int sec_process_pdcp_c_plane_packets(sec_job_ring_t *job_ring)
-{
-    int ret = SEC_SUCCESS;
-    int32_t nr_of_c_plane_pkts = 0;
-    sec_job_t *c_plane_job = NULL;
-    sec_job_t *jr_job = NULL;
-    struct fifo_t *c_plane_fifo = &job_ring->pdcp_c_plane_fifo;
-    sec_context_t *sec_context = NULL;
-
-    nr_of_c_plane_pkts = FIFO_NUMBER_OF_ITEMS(FIFO_CAPACITY, c_plane_fifo->pidx, c_plane_fifo->cidx);
-
-    SEC_DEBUG("Jr[%p] pi[%d] ci[%d]. C-plane FIFO pi[%d] ci[%d]",
-              job_ring, job_ring->pidx, job_ring->cidx,
-              c_plane_fifo->pidx, c_plane_fifo->cidx);
-
-    while(nr_of_c_plane_pkts > 0)
-    {
-        // check if the Job Ring is full
-        if(SEC_JOB_RING_IS_FULL(job_ring->pidx, job_ring->cidx,
-                    SEC_JOB_RING_SIZE, SEC_JOB_RING_HW_SIZE + 1))
-        {
-            SEC_DEBUG("Jr[%p] pi[%d] ci[%d]. Jr is full.\n", job_ring, job_ring->pidx, job_ring->cidx);
-            return SEC_JR_IS_FULL;
-        }
-
-        // get the first un-notified job from the c-plane internal FIFO
-        c_plane_job = c_plane_fifo->items[c_plane_fifo->cidx];
-
-        sec_context = c_plane_job->sec_context;
-        // send packet to SEC again, for second processing step:
-        // integrity check or confidentiality.
-
-        // if packet was already processed with integrity algorithm,
-        // process now with confidentiality. And viceversa...
-        c_plane_job->is_integrity_algo = !c_plane_job->is_integrity_algo;
-
-
-        jr_job = &job_ring->jobs[job_ring->pidx];
-
-        jr_job->in_packet = c_plane_job->in_packet;
-        jr_job->out_packet = c_plane_job->out_packet;
-
-        jr_job->sec_context = c_plane_job->sec_context;
-        jr_job->ua_handle = c_plane_job->ua_handle;
-        jr_job->is_integrity_algo = c_plane_job->is_integrity_algo;
-
-        // Update SEC descriptor. If HFN reached the configured threshold, then
-        // the User App callback will be raised with status set to SEC_STATUS_HFN_THRESHOLD_REACHED.
-        ret = sec_pdcp_context_update_descriptor(jr_job->sec_context, jr_job, jr_job->descr, jr_job->is_integrity_algo);
-        SEC_ASSERT(ret == SEC_SUCCESS, ret,
-                   "sec_pdcp_context_update_descriptor returned error code %d", ret);
-
-        // increment the producer index for the current job ring
-        job_ring->pidx = SEC_CIRCULAR_COUNTER(job_ring->pidx, SEC_JOB_RING_SIZE);
-
-
-        // Enqueue this descriptor into the Fetch FIFO of this JR
-        // Need write memory barrier here so that descriptor is written before
-        // packet is enqueued in SEC's job ring.
-        // GCC's builtins offers full memry barrier, use it here.
-        atomic_synchronize();
-        hw_enqueue_packet_on_job_ring(job_ring, jr_job->descr_phys_addr);
-
-        nr_of_c_plane_pkts--;
-
-        // increment the consumer index for the current job ring
-        c_plane_fifo->cidx = FIFO_CIRCULAR_COUNTER(c_plane_fifo->cidx, FIFO_CAPACITY);
-
-        SEC_DEBUG("Jr[%p] pi[%d] ci[%d].Sent c-plane packets to SEC second time.",
-                  job_ring, job_ring->pidx, job_ring->cidx);
-    }
-
-    return SEC_SUCCESS;
-}
-
-static void sec_handle_mac_i_generation(sec_job_t *job,
-                                        sec_context_t *sec_context,
-                                        uint32_t *out_mac_i)
-{
-    SEC_DEBUG("SEC context[%p] in pkt[%p] out pkt[%p]."
-              "Internal raw generated MAC-I: [0x%x,0x%x]",
-              sec_context, job->in_packet, job->out_packet,
-              *((uint32_t*)(job->mac_i->code)),
-              *((uint32_t*)(job->mac_i->code + 4)));
-
-    // SEC 3.1 generated an 8 byte long MAC-I into a per-context-memory-zone internal
-    // to the driver. Copy the relevant 4 bytes of MAC-I code into output buffer.
-    if(sec_context->pdcp_crypto_info->integrity_algorithm == SEC_ALG_SNOW)
-    {
-        // SEC 3.1 generates SNOW F9 MAC-I code that is 8 bytes long, having first 4 bytes
-        // set to zero. PDCP MAC-I is in the last 4 bytes.
-        *out_mac_i = *((uint32_t*)(job->mac_i->code + 4));
-    }
-    else if(sec_context->pdcp_crypto_info->integrity_algorithm == SEC_ALG_AES)
-    {
-
-        // SEC 3.1 generates AES CMAC MAC-I code that is 8 bytes long,
-        // having PDCP MAC-I in the first 4 bytes. Last 4 bytes unused.
-        *out_mac_i = *((uint32_t*)(job->mac_i->code));
-    }
-
-    SEC_DEBUG("SEC context[%p] in pkt[%p] out pkt[%p]."
-              "Generated MAC-I = 0x%x",
-              sec_context, job->in_packet,
-              job->out_packet, *out_mac_i);
-}
-
-static int sec_handle_mac_i_validation(sec_job_t *job, sec_context_t *sec_context)
-{
-    uint32_t original_mac_i;
-
-    // Decapsulation. MAC-I validation was performed.
-    if(sec_context->pdcp_crypto_info->integrity_algorithm == SEC_ALG_SNOW)
-    {
-        // SEC 3.1 is capable of doing MAC-I validation itself for SNOW F9
-        SEC_DEBUG("Validating SNOW F9 hw status. hdr = 0x%x.\n", job->descr->hdr_lo);
-        return hw_icv_check_failed(job->descr);
-    }
-    else if (sec_context->pdcp_crypto_info->integrity_algorithm == SEC_ALG_AES)
-    {
-        const sec_packet_t *auth_packet = (sec_context->double_pass == TRUE) ? job->out_packet : job->in_packet;
-        // Do manually the MAC-I validation for AES CMAC.
-        // SEC 3.1 does not support ICV len smaller than 8 bytes for AES CMAC.
-        original_mac_i = (*(uint32_t*)(auth_packet->address +
-                         auth_packet->length -
-                         PDCP_MAC_I_LENGTH));
-
-        SEC_DEBUG("SEC context[%p] in pkt[%p] out pkt[%p]."
-                  "Original MAC-I = 0x%x. Generated MAC-I = 0x%x",
-                  sec_context, job->in_packet, job->out_packet,
-                  original_mac_i, *((uint32_t*)(job->mac_i->code)));
-
-        return (original_mac_i != *((uint32_t*)(job->mac_i->code)));
-    }
-    return 0;
-}
-
-static void sec_handle_c_plane_packet(sec_job_ring_t *job_ring,
-                                      sec_job_t *job,
-                                      sec_context_t *sec_context,
-                                      sec_status_t *status,
-                                      uint8_t *notify_pkt)
-{
-    uint8_t mac_i_check_failed = FALSE;
-
-    *notify_pkt = TRUE;
-
-    SEC_DEBUG("Jr[%p] pi[%d] ci[%d].Start processing c-plane packet done.",
-               job_ring, job_ring->pidx, job_ring->cidx);
-
-    if(sec_context->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION)
-    {
-        if(job->is_integrity_algo == TRUE)
-        {
-            if(sec_context->double_pass == TRUE)
-            {
-                SEC_DEBUG("SEC context[%p] in pkt[%p] out pkt[%p]."
-                          "Copy MAC-I into input buffer",
-                          sec_context, job->in_packet, job->out_packet);
-                // for double pass c-plane packets copy generated MAC-I code into input packet:
-                sec_handle_mac_i_generation(job,
-                                            sec_context,
-                                            (uint32_t*)(job->in_packet->address +
-                                                        job->in_packet->length -
-                                                        PDCP_MAC_I_LENGTH ));
-
-                // do not notify packet now
-                *notify_pkt = FALSE;
-
-                // add packet to special control-plane fifo
-                sec_buffer_c_plane_packet(job_ring, job);
-            }
-            else
-            {
-                SEC_DEBUG("SEC context[%p] in pkt[%p] out pkt[%p]."
-                          "Copy MAC-I into output buffer",
-                          sec_context, job->in_packet, job->out_packet);
-                // For single pass c-plane packets with integrity only,
-                // copy generated MAC-I code into last 4 bytes of input packet.
-                sec_handle_mac_i_generation(job,
-                                            sec_context,
-                                            (uint32_t*)(job->out_packet->address + job->out_packet->offset));
-            }
-        }
-    }
-    else if(sec_context->pdcp_crypto_info->protocol_direction == PDCP_DECAPSULATION)
-    {
-        // On decapsulation we run first confidentiality algorithm
-        if(job->is_integrity_algo == FALSE)
-        {
-            if(sec_context->double_pass == TRUE)
-            {
-                // do not notify packet now
-                *notify_pkt = FALSE;
-
-                // add packet to special control-plane fifo
-                sec_buffer_c_plane_packet(job_ring, job);
-            }
-        }
-        else
-        {
-            // integrity algorithm: validate MAC-I
-            mac_i_check_failed = sec_handle_mac_i_validation(job, sec_context);
-            SEC_DEBUG("SEC context[%p] in pkt[%p] out pkt[%p]."
-                      "job[%p].Generated MAC-I = [0x%x,0x%x]",
-                      sec_context, job->in_packet, job->out_packet, job,
-                      *((uint32_t*)(job->mac_i->code)),
-                      *((uint32_t*)(job->mac_i->code + 4))
-                    );
-
-            // Check if MAC-I validation failed
-            if(mac_i_check_failed)
-            {
-                SEC_ERROR("SEC context[%p] in pkt[%p] out pkt[%p]."
-                          "Integrity check FAILED!."
-                          "original MAC-I[0x%x]. generated MAC-I = [0x%x,0x%x]",
-                          sec_context, job->in_packet, job->out_packet,
-                          (*(uint32_t*)(job->out_packet->address +
-                                        job->out_packet->length -
-                                        PDCP_MAC_I_LENGTH)),
-                          *((uint32_t*)(job->mac_i->code)),
-                          *((uint32_t*)(job->mac_i->code + 4)));
-
-                *status = SEC_STATUS_MAC_I_CHECK_FAILED;
-            }
-        }
-    }
-
-    SEC_DEBUG("Jr[%p] pi[%d] ci[%d].End processing c-plane packet done."
-              "job[%p].Notify to UA = %d",
-               job_ring, job_ring->pidx, job_ring->cidx,
-               job, *notify_pkt);
-}
-
-static void sec_buffer_c_plane_packet(sec_job_ring_t *job_ring,
-                                      sec_job_t *job)
-{
-    struct fifo_t *c_plane_fifo = &job_ring->pdcp_c_plane_fifo;
-
-    SEC_DEBUG("Jr[%p] pi[%d] ci[%d].job[%p]."
-              "Buffering control-plane packet into internal FIFO",
-              job_ring, job_ring->pidx, job_ring->cidx, job);
-
-    // check if the c-plane fifo is full
-    if(FIFO_IS_FULL(c_plane_fifo->pidx, c_plane_fifo->cidx,
-                FIFO_CAPACITY, FIFO_CAPACITY))
-    {
-        SEC_ERROR("Jr[%p].Control-plane FIFO is FULL!"
-                  "Consider increasing fifo capacity.",
-                  job_ring);
-    }
-
-    // get first available job from c-plane fifo
-    SEC_DEBUG("Jr[%p] pi[%d] ci[%d].job[%p].Copy job in c-plane FIFO",
-              job_ring, job_ring->pidx, job_ring->cidx, job);
-
-    ASSERT(c_plane_fifo->items[c_plane_fifo->pidx] != NULL);
-    memcpy(c_plane_fifo->items[c_plane_fifo->pidx], job, sizeof(sec_job_t));
-
-    // increment the producer index for the current job ring
-    c_plane_fifo->pidx = FIFO_CIRCULAR_COUNTER(c_plane_fifo->pidx, FIFO_CAPACITY);
-}
-
-static int sec_process_packet_with_null_algo(sec_job_t *job)
-{
-    ASSERT(job != NULL);
-    ASSERT(job->in_packet != NULL);
-    ASSERT(job->out_packet != NULL);
-
-    SEC_ASSERT(job->in_packet->address != NULL,
-            SEC_INVALID_INPUT_PARAM,
-            "NULL address field specified for input packet");
-
-    SEC_ASSERT(job->out_packet->address != NULL,
-            SEC_INVALID_INPUT_PARAM,
-            "NULL address field specified for output packet");
-
-    SEC_ASSERT(job->in_packet->length - job->in_packet->offset ==
-               job->out_packet->length - job->out_packet->offset,
-               SEC_INVALID_INPUT_PARAM,
-               "Length and offset for input packet mistmatch with those for output packet");
-
-    // Copy input packet into output packet.
-    // This is the implementation for NULL-crypto / NULL-authentication on SEC 3.1
-    memcpy(job->out_packet->address + job->out_packet->offset,
-           job->in_packet->address + job->in_packet->offset,
-           job->in_packet->length - job->in_packet->offset);
-
-    // Now simulate that the SEC engine marked this packet as processed.
-    // Required to see the packet as DONE from sec_poll.
-    job->descr->hdr |=  SEC_DESC_HDR_DONE;
-    return SEC_SUCCESS;
-}
-#endif // SEC_HW_VERSION_3_1
 
 static void sec_handle_packet_error(sec_job_ring_t *job_ring,
                                     uint32_t sec_error_code,
                                     uint32_t *notified_packets,
                                     uint32_t *do_driver_shutdown)
 {
-#ifdef SEC_HW_VERSION_3_1
-    int ret;
-#endif // SEC_HW_VERSION_3_1
     uint32_t reset_cont_job_ring = FALSE;
 
     ASSERT(notified_packets != NULL);
@@ -1052,44 +610,11 @@ static void sec_handle_packet_error(sec_job_ring_t *job_ring,
                       SEC_STATUS_ERROR, // the status to be set for each packet when notified to UA
                       sec_error_code,
                       notified_packets);
-#ifdef SEC_HW_VERSION_3_1
-    // Reset job ring if required
-    if(reset_cont_job_ring == TRUE)
-    {
-        SEC_DEBUG("Jr[%p].Error on jr id %d requires reset + continue action",
-                  job_ring, job_ring->jr_id);
-
-        // Reset job ring using 'continue' method: configuration registers and
-        // already submitted jobs are kept and job ring can continue processing.
-        ret = hw_reset_and_continue_job_ring(job_ring);
-        if(ret != 0)
-        {
-            SEC_DEBUG("Jr[%p].Failed to reset and continue for jr id %d."
-                      "Sending request to SEC kernel driver to reset SEC engine!",
-                      job_ring, job_ring->jr_id);
-
-            // Use UIO control to communicate with SEC kernel driver
-            // and ask to reset SEC engine.
-            uio_reset_sec_engine(job_ring);
-
-            // Driver shutdown is required. UA MUST call sec_release().
-            // UA must call sec_init() again if wishes to use driver again.
-            *do_driver_shutdown = TRUE;
-        }
-        else
-        {
-            // Job ring can be used again by UA
-            job_ring->jr_state = SEC_JOB_RING_STATE_STARTED;
-        }
-    }
-    else
-#endif //  SEC_HW_VERSION_3_1
     {
         // Job ring can be used again by UA
         job_ring->jr_state = SEC_JOB_RING_STATE_STARTED;
     }
 }
-
 
 
 /*==================================================================================================
@@ -1122,7 +647,7 @@ sec_return_code_t sec_init(const sec_config_t *sec_config_data,
     SEC_ASSERT ((dma_addr_t)sec_config_data->memory_area % CACHE_LINE_SIZE == 0,
                 SEC_INVALID_INPUT_PARAM,
                 "Configured memory is not cacheline aligned");
-#ifdef SEC_HW_VERSION_4_4
+
     // Must check the user passed a valid function for V2P translation.
     SEC_ASSERT (sec_config_data->sec_drv_vtop != NULL,
                 SEC_INVALID_INPUT_PARAM,
@@ -1131,7 +656,6 @@ sec_return_code_t sec_init(const sec_config_t *sec_config_data,
     // Update V2P function
     g_sec_vtop = sec_config_data->sec_drv_vtop;
 
-#endif // SEC_HW_VERSION_4_4
     // Initialize per-thread-local errno variable
 
     // Delete the Errno Key here _ONLY_ if it has a valid value.
@@ -1171,9 +695,7 @@ sec_return_code_t sec_init(const sec_config_t *sec_config_data,
         // create/delete contexts for a certain JR (also known as the producer of the JR).
         ret = init_contexts_pool(&(g_job_rings[i].ctx_pool),
                                  MAX_SEC_CONTEXTS_PER_POOL,
-#ifdef SEC_HW_VERSION_4_4
                                  &g_dma_mem_free,
-#endif // SEC_HW_VERSION_4_4
                                  THREAD_UNSAFE_POOL);
         if (ret != SEC_SUCCESS)
         {
@@ -1200,10 +722,8 @@ sec_return_code_t sec_init(const sec_config_t *sec_config_data,
 
         // Initialize job ring
         ret = init_job_ring(&g_job_rings[i], &g_dma_mem_free, sec_config_data->work_mode
-#ifdef SEC_HW_VERSION_4_4
                 , sec_config_data->irq_coalescing_timer & 0xFFFF
                 , sec_config_data->irq_coalescing_count & 0xFF
-#endif // SEC_HW_VERSION_4_4
                 );
         if (ret != SEC_SUCCESS)
         {
@@ -1222,9 +742,7 @@ sec_return_code_t sec_init(const sec_config_t *sec_config_data,
     // We need thread synchronizations mechanisms for this pool.
     ret = init_contexts_pool(&g_ctx_pool,
                              MAX_SEC_CONTEXTS_PER_POOL,
-#ifdef SEC_HW_VERSION_4_4
                              &g_dma_mem_free,
-#endif
                              THREAD_SAFE_POOL);
     if (ret != SEC_SUCCESS)
     {
@@ -1235,7 +753,6 @@ sec_return_code_t sec_init(const sec_config_t *sec_config_data,
         return ret;
     }
 
-#ifdef SEC_HW_VERSION_4_4
     /* Now check if I've overrun the memory 'segment' allocated by the UA
      * TODO: Add some tests for this
      */
@@ -1252,7 +769,6 @@ sec_return_code_t sec_init(const sec_config_t *sec_config_data,
                   SEC_DMA_MEMORY_SIZE/1024);
 
     }
-#endif // SEC_HW_VERSION_4_4
 
     // Remember initial work mode
     g_sec_work_mode = sec_config_data->work_mode;
@@ -1380,35 +896,14 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
         free_or_retire_context(ctx->pool, ctx);
         return SEC_INVALID_INPUT_PARAM;
     }
-#ifdef SEC_HW_VERSION_3_1
-    // On SEC 3.1 all packets belonging to PDCP control-plane conetxts that have configured both
-    // integrity check and confidentiality algorithms will be double-passed through SEC engine.
-    ctx->double_pass = (ctx->pdcp_crypto_info->user_plane == PDCP_CONTROL_PLANE) &&
-                       ((ctx->pdcp_crypto_info->integrity_algorithm != SEC_ALG_NULL) &&
-                        (ctx->pdcp_crypto_info->cipher_algorithm != SEC_ALG_NULL));
 
-    ctx->is_null_algo = FALSE;
-
-    if((ctx->pdcp_crypto_info->user_plane == PDCP_CONTROL_PLANE &&
-        ctx->pdcp_crypto_info->integrity_algorithm == SEC_ALG_NULL &&
-        ctx->pdcp_crypto_info->cipher_algorithm == SEC_ALG_NULL) ||
-       (ctx->pdcp_crypto_info->user_plane == PDCP_DATA_PLANE &&
-        ctx->pdcp_crypto_info->cipher_algorithm == SEC_ALG_NULL))
-    {
-        ctx->is_null_algo = TRUE;
-        SEC_DEBUG("Jr[%p].Context %p user plane = %d configured with NULL algorithm",
-                  job_ring, ctx, ctx->pdcp_crypto_info->user_plane);
-    }
-#endif // SEC_HW_VERSION_3_1
-
-#ifdef SEC_HW_VERSION_4_4
     if (sec_ctx_info->hfn_ov_en == TRUE)
     {
         ctx->hfn_ov_en = TRUE;
         SEC_DEBUG("Jr[%p].Context %p configured for HFN override",
                   job_ring, ctx);
     }
-#endif // SEC_HW_VERSION_4_4
+
     // provide to UA a SEC ctx handle
     *sec_ctx_handle = (sec_context_handle_t)ctx;
 
@@ -1475,15 +970,10 @@ sec_return_code_t sec_poll(int32_t limit, uint32_t weight, uint32_t *packets_no)
     // To skip the round robin algorithm, UA can call sec_poll_per_jr for each JR and thus
     // implement its own algorithm.
     // - A limit smaller or equal than weight is considered invalid.
-#ifdef SEC_HW_VERSION_3_1
-    SEC_ASSERT(!(limit == 0 || weight == 0 || (limit <= weight) || (weight > SEC_JOB_RING_HW_SIZE)),
-               SEC_INVALID_INPUT_PARAM,
-               "Invalid limit/weight parameter configuration");
-#else // SEC_HW_VERSION_3_1
     SEC_ASSERT(!(limit == 0 || weight == 0 || (limit <= weight) || (weight > SEC_JOB_RING_SIZE)),
                SEC_INVALID_INPUT_PARAM,
                "Invalid limit/weight parameter configuration");
-#endif // SEC_HW_VERSION_3_1
+
     SEC_DEBUG("Polling. weight [%d] limit[%d]", weight, limit);
 
     // Poll job rings
@@ -1588,15 +1078,10 @@ sec_return_code_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle,
 
     // Validate input arguments
     SEC_ASSERT(job_ring != NULL, SEC_INVALID_INPUT_PARAM, "job_ring_handle is NULL");
-#ifdef SEC_HW_VERSION_3_1
-    SEC_ASSERT(!((limit == 0) || (limit > SEC_JOB_RING_HW_SIZE)),
-               SEC_INVALID_INPUT_PARAM,
-               "Invalid limit parameter configuration");
-#else
     SEC_ASSERT(!((limit == 0) || (limit > SEC_JOB_RING_SIZE)),
                    SEC_INVALID_INPUT_PARAM,
                    "Invalid limit parameter configuration");
-#endif
+
     SEC_DEBUG("Jr[%p]Polling. limit[%d]", job_ring, limit);
 
     // Poll job ring
@@ -1656,10 +1141,6 @@ sec_return_code_t sec_process_packet_hfn_ov(sec_context_handle_t sec_ctx_handle,
     sec_job_t *job = NULL;
     sec_job_ring_t *job_ring = NULL;
 
-#if defined(SEC_HW_VERSION_3_1) && (SEC_ENABLE_SCATTER_GATHER==ON)
-#error "Scatter/Gather support is not implemented!"
-#endif // defined(SEC_HW_VERSION_3_1) && (SEC_ENABLE_SCATTER_GATHER==ON)
-
     // Validate driver state
     SEC_ASSERT(g_driver_state == SEC_DRIVER_STATE_STARTED,
                (g_driver_state == SEC_DRIVER_STATE_RELEASE) ?
@@ -1671,19 +1152,13 @@ sec_return_code_t sec_process_packet_hfn_ov(sec_context_handle_t sec_ctx_handle,
     SEC_ASSERT(sec_ctx_handle != NULL, SEC_INVALID_INPUT_PARAM, "sec_ctx_handle is NULL");
     SEC_ASSERT(in_packet != NULL, SEC_INVALID_INPUT_PARAM, "in_packet is NULL");
     SEC_ASSERT(out_packet != NULL, SEC_INVALID_INPUT_PARAM, "out_packet is NULL");
-#ifdef SEC_HW_VERSION_4_4
     SEC_ASSERT(in_packet->address != 0, SEC_INVALID_INPUT_PARAM, "in_packet->address is 0");
     SEC_ASSERT(out_packet->address != 0, SEC_INVALID_INPUT_PARAM, "out_packet->address is 0");
-#else // SEC_HW_VERSION_4_4
-    SEC_ASSERT(in_packet->address != NULL, SEC_INVALID_INPUT_PARAM, "in_packet->address is NULL");
-    SEC_ASSERT(out_packet->address != NULL, SEC_INVALID_INPUT_PARAM, "out_packet->address is NULL");
-#endif // SEC_HW_VERSION_4_4
     SEC_ASSERT(in_packet->length != 0, SEC_INVALID_INPUT_PARAM, "in_packet->length is 0");
     SEC_ASSERT(out_packet->length != 0, SEC_INVALID_INPUT_PARAM, "out_packet->length is 0");
     SEC_ASSERT((in_packet->offset & 0x1FFFFFFF) == in_packet->offset, SEC_INVALID_INPUT_PARAM, "in_packet->offset is invalid")
     SEC_ASSERT((out_packet->offset & 0x1FFFFFFF) == out_packet->offset, SEC_INVALID_INPUT_PARAM, "out_packet->offset is invalid")
 #warning "There should be a validation for maximum packet length"
-#ifdef SEC_HW_VERSION_4_4
 #if (SEC_ENABLE_SCATTER_GATHER == ON)
 #warning "Add some more validation here"
     SEC_ASSERT(in_packet->num_fragments < SEC_MAX_SG_TBL_ENTRIES, SEC_INVALID_INPUT_PARAM, "in_packet->num_fragments too large");
@@ -1693,7 +1168,6 @@ sec_return_code_t sec_process_packet_hfn_ov(sec_context_handle_t sec_ctx_handle,
     SEC_ASSERT(out_packet->num_fragments == 0, SEC_INVALID_INPUT_PARAM, "Please enable Scatter Gather support");
 #endif // SEC_ENABLE_SCATTER_GATHER == ON
 
-#endif // SEC_HW_VERSION_4_4
     sec_context_t * sec_context = (sec_context_t *)sec_ctx_handle;
 
     // Validate that context handle contains valid bit patterns
@@ -1718,22 +1192,7 @@ sec_return_code_t sec_process_packet_hfn_ov(sec_context_handle_t sec_ctx_handle,
                SEC_JOB_RING_RESET_IN_PROGRESS,
                "Job ring with id %d is currently resetting. "
                "Can use it again after reset is over(when sec_poll function/s return)", job_ring->jr_id);
-#ifdef SEC_HW_VERSION_3_1
-    // Check control-plane internal queue for packets that need be sent to SEC
-    // for second processing step.
-    ret = sec_process_pdcp_c_plane_packets(job_ring);
-    SEC_ASSERT_CONT(ret == SEC_SUCCESS,
-                    "sec_process_pdcp_c_plane_packets returned error code %d", ret);
 
-    // check if the Job Ring is full
-    if(SEC_JOB_RING_IS_FULL(job_ring->pidx, job_ring->cidx,
-                            SEC_JOB_RING_SIZE, SEC_JOB_RING_HW_SIZE + 1))
-    {
-        SEC_DEBUG("Jr[%p] pi[%d] ci[%d].Job Ring is full.",
-                  job_ring, job_ring->pidx, job_ring->cidx);
-        return SEC_JR_IS_FULL;
-    }
-#else // SEC_HW_VERSION_3_1
     if( SEC_JOB_RING_IS_FULL(job_ring->pidx, job_ring->cidx,
                               SEC_JOB_RING_SIZE,SEC_JOB_RING_SIZE ) )
     {
@@ -1741,13 +1200,13 @@ sec_return_code_t sec_process_packet_hfn_ov(sec_context_handle_t sec_ctx_handle,
                           job_ring, job_ring->pidx, job_ring->cidx);
                 return SEC_JR_IS_FULL;
     }
-#endif // SEC_HW_VERSION_3_1
+
     SEC_DEBUG("Jr[%p] pi[%d] ci[%d].Before sending packet",
               job_ring, job_ring->pidx, job_ring->cidx);
 
     // get first available job from job ring
     job = &job_ring->jobs[job_ring->pidx];
-#if defined(SEC_HW_VERSION_4_4) && (SEC_ENABLE_SCATTER_GATHER == ON)
+#if (SEC_ENABLE_SCATTER_GATHER == ON)
 
     ret = build_sg_context(job->sg_ctx,in_packet,SEC_SG_CONTEXT_TYPE_IN,in_packet->num_fragments);
     if( ret != SEC_SUCCESS )
@@ -1763,7 +1222,7 @@ sec_return_code_t sec_process_packet_hfn_ov(sec_context_handle_t sec_ctx_handle,
         return ret;
     }
 
-#endif // defined(SEC_HW_VERSION_4_4) && (SEC_ENABLE_SCATTER_GATHER == ON)
+#endif // (SEC_ENABLE_SCATTER_GATHER == ON)
 
     // update job with crypto context and in/out packet data
     job->in_packet = in_packet;
@@ -1771,77 +1230,31 @@ sec_return_code_t sec_process_packet_hfn_ov(sec_context_handle_t sec_ctx_handle,
 
     job->sec_context = sec_context;
     job->ua_handle = ua_ctx_handle;
-#ifdef SEC_HW_VERSION_4_4
     job->hfn_ov_value = hfn_ov_val;
-#endif // SEC_HW_VERSION_4_4
-
-#ifdef SEC_HW_VERSION_3_1
-    job->is_integrity_algo = (sec_context->pdcp_crypto_info->user_plane == PDCP_CONTROL_PLANE) &&
-        ((sec_context->double_pass == FALSE && sec_context->pdcp_crypto_info->integrity_algorithm != SEC_ALG_NULL) ||
-         (sec_context->double_pass == TRUE && sec_context->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION) );
-
-    SEC_DEBUG("Jr[%p] pi[%d] ci[%d].in packet[%p].packet double-pass[%d].is_integrity_algo[%d]",
-              job_ring, job_ring->pidx, job_ring->cidx,
-              job->in_packet, sec_context->double_pass,
-              job->is_integrity_algo);
-#endif // SEC_HW_VERSION_3_1
 
     // update descriptor with pointers to input/output data and pointers to crypto information
     ASSERT(job->descr != NULL);
-
-#ifdef SEC_HW_VERSION_3_1
-    // Update SEC descriptor. If HFN reached the configured threshold, then
-    // the User App callback will be raised with status set to SEC_STATUS_HFN_THRESHOLD_REACHED.
-    ret = sec_pdcp_context_update_descriptor(sec_context, job, job->descr, job->is_integrity_algo);
-#else // SEC_HW_VERSION_3_1
 
     /* Update SEC Job Descriptor for this packet with the relevant pointers
      * (i.e. Shared Descriptor pointer (per context), in packet address,
      * out packet address)
      */
     ret = sec_pdcp_context_update_descriptor(sec_context, job, job->descr, 0 /* Not used */);
-#endif
 
     SEC_ASSERT(ret == SEC_SUCCESS, ret,
                "sec_pdcp_context_update_descriptor returned error code %d", ret);
 
     // keep count of submitted packets for this sec context
     CONTEXT_ADD_PACKET(sec_context);
-#ifdef SEC_HW_VERSION_4_4
+
     // Set ptr in input ring to current descriptor
     job_ring->input_ring[job_ring->pidx] = job->descr_phys_addr;
 
     // Notify HW that a new job is enqueued
     hw_enqueue_packet_on_job_ring(job_ring);
 
-#endif // SEC_HW_VERSION_4_4
     // increment the producer index for the current job ring
     job_ring->pidx = SEC_CIRCULAR_COUNTER(job_ring->pidx, SEC_JOB_RING_SIZE);
-
-#ifdef SEC_HW_VERSION_3_1
-    // Enqueue this descriptor into the Fetch FIFO of this JR
-    // Need write memory barrier here so that descriptor is written before
-    // packet is enqueued in SEC's job ring.
-    // GCC's builtins offers full memory barrier, use it here.
-
-    atomic_synchronize();
-
-    // On SEC 3.1 there is no hardware support for NULL-crypto and NULL-auth.
-    // Need to simulate this with memcpy.
-    // TODO: remove this 'if'statement on 9132(SEC 4.1 knows about NULL-algo).
-
-    if(sec_context->is_null_algo == FALSE)
-    {
-        hw_enqueue_packet_on_job_ring(job_ring, job->descr_phys_addr);
-    }
-    else
-    {
-        ret = sec_process_packet_with_null_algo(job);
-        SEC_ASSERT(ret == SEC_SUCCESS, ret,
-               "Failed to process packet with NULL crypto / "
-               "NULL authentication algorithms");
-    }
-#endif // SEC_HW_VERSION_3_1
 
     return SEC_SUCCESS;
 }
@@ -1874,35 +1287,7 @@ const char* sec_get_error_message(sec_return_code_t return_code)
     return g_return_code_descriptions[return_code];
 }
 
-#ifdef SEC_HW_VERSION_3_1
-sec_return_code_t sec_push_c_plane_packets(sec_job_ring_handle_t job_ring_handle)
-{
-    sec_job_ring_t * job_ring =  (sec_job_ring_t *)job_ring_handle;
-    int ret = 0;
 
-    // Validate driver state
-    SEC_ASSERT(g_driver_state == SEC_DRIVER_STATE_STARTED,
-               (g_driver_state == SEC_DRIVER_STATE_RELEASE) ?
-               SEC_DRIVER_RELEASE_IN_PROGRESS : SEC_DRIVER_NOT_INITIALIZED,
-               "Driver release is in progress or driver not initialized");
-
-    SEC_ASSERT(job_ring != NULL, SEC_INVALID_INPUT_PARAM, "job_ring_handle is NULL");
-
-    // Check job ring state
-    SEC_ASSERT(job_ring->jr_state == SEC_JOB_RING_STATE_STARTED,
-               SEC_JOB_RING_RESET_IN_PROGRESS,
-               "Job ring with id %d is currently resetting. "
-               "Can use it again after reset is over(when sec_poll function/s return)", job_ring->jr_id);
-
-    // Check control-plane internal queue for packets that need be sent to SEC
-    // for second processing step.
-    ret = sec_process_pdcp_c_plane_packets(job_ring);
-    SEC_ASSERT(ret == SEC_SUCCESS, ret,
-               "sec_process_pdcp_c_plane_packets returned error code %d", ret);
-    return SEC_SUCCESS;
-}
-#endif
-#ifdef SEC_HW_VERSION_4_4
 sec_return_code_t sec_get_stats(sec_job_ring_handle_t job_ring_handle,sec_statistics_t* sec_stat)
 {
     sec_job_ring_t * job_ring =  (sec_job_ring_t *)job_ring_handle;
@@ -1930,7 +1315,6 @@ sec_return_code_t sec_get_stats(sec_job_ring_handle_t job_ring_handle,sec_statis
 
     return SEC_SUCCESS;
 }
-#endif // SEC_HW_VERSION_4_4
 /*================================================================================================*/
 
 #ifdef __cplusplus

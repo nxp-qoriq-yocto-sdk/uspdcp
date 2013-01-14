@@ -40,14 +40,10 @@ extern "C" {
 #include "fsl_sec.h"
 #include "cgreen.h"
 
-#ifdef SEC_HW_VERSION_3_1
-#include "compat.h"
-#else // SEC_HW_VERSION_3_1
 
 // For shared memory allocator
 #include "fsl_usmmgr.h"
 
-#endif // SEC_HW_VERSION_3_1
 
 #include <stdio.h>
 #include <assert.h>
@@ -83,7 +79,6 @@ extern "C" {
 // Max length in bytes for a confidentiality /integrity key.
 #define MAX_KEY_LENGTH    32
 
-#ifdef SEC_HW_VERSION_4_4
 /** Size in bytes of a cacheline. */
 #define CACHE_LINE_SIZE  32
 
@@ -91,15 +86,9 @@ extern "C" {
 #define dma_mem_memalign  test_memalign
 #define dma_mem_free      test_free
 
-#endif
-
 // Sizeof sec_context_t struct as defined in driver.
 // @note this has to be defined to have exactly the value of sizeof(struct sec_context_t)!
-#ifdef SEC_HW_VERSION_3_1
-#define SIZEOF_SEC_CONTEXT_T_STRUCT 128
-#else
 #define SIZEOF_SEC_CONTEXT_T_STRUCT 64
-#endif
 
 // Number of SEC contexts in each pool. Define taken from SEC user-space driver.
 #define MAX_SEC_CONTEXTS_PER_POOL   (SEC_MAX_PDCP_CONTEXTS / (JOB_RING_NUMBER))
@@ -176,12 +165,10 @@ static uint8_t test_crypto_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
 // Authentication key
 static uint8_t test_auth_key[] = {0xC7,0x36,0xC6,0xAA,0xB2,0x2B,0xFF,0xF9,
                                   0x1E,0x26,0x98,0xD2,0xE2,0x2A,0xD5,0x7E};
-#ifdef SEC_HW_VERSION_4_4
 
 // FSL Userspace Memory Manager structure
 fsl_usmmgr_t g_usmmgr;
 
-#endif // SEC_HW_VERSION_4_4
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
 ==================================================================================================*/
@@ -199,7 +186,7 @@ static void get_free_packet(int packet_idx, sec_packet_t **in_packet, sec_packet
 static void send_packets(sec_context_handle_t ctx,
                          int packet_no,
                          int expected_ret_code);
-#ifdef SEC_HW_VERSION_4_4
+
 /* Returns the physical address corresponding to the virtual
  * address passed as a parameter. 
  */
@@ -217,12 +204,6 @@ static void * test_memalign(size_t align, size_t size);
 
 /* Frees a previously allocated FSL USMMGR memory region */
 static void test_free(void *ptr, size_t size);
-#else
-
-#define test_ptov(x)    (x)
-#define test_vtop(x)    (x)
-
-#endif // SEC_HW_VERSION_4_4
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
@@ -255,9 +236,6 @@ static void get_free_packet(int packet_idx, sec_packet_t **in_packet, sec_packet
     // Initialize with valid info the input packet
     (*in_packet)->address = test_vtop(&(test_input_packets[packet_idx].buffer[0]));
     (*in_packet)->offset = TEST_PACKET_OFFSET;
-#ifdef SEC_HW_VERSION_3_1
-    (*in_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
-#endif // SEC_HW_VERSION_3_1
     (*in_packet)->length = TEST_PACKET_LENGTH;
     (*in_packet)->total_length = 0;
     (*in_packet)->num_fragments = 0;
@@ -265,9 +243,6 @@ static void get_free_packet(int packet_idx, sec_packet_t **in_packet, sec_packet
     // Initialize with valid info the output packet
     (*out_packet)->address = test_vtop(&(test_output_packets[packet_idx].buffer[0]));
     (*out_packet)->offset = TEST_PACKET_OFFSET;
-#ifdef SEC_HW_VERSION_3_1
-    (*out_packet)->scatter_gather = SEC_CONTIGUOUS_BUFFER;
-#endif
     (*out_packet)->length = TEST_PACKET_LENGTH;
     (*out_packet)->total_length = 0;
     (*out_packet)->num_fragments = 0;
@@ -281,38 +256,24 @@ static void send_packets(sec_context_handle_t ctx, int packet_no, int expected_r
     sec_packet_t *out_packet = NULL;
     int idx = 0;
 
-#ifdef SEC_HW_VERSION_3_1
-    assert(packet_no < TEST_PACKETS_NUMBER);
-#endif
     assert(ctx != NULL);
 
     for (idx = 0; idx < packet_no; idx++)
     {
         get_free_packet(idx
-#ifdef SEC_HW_VERSION_4_4
                 %TEST_PACKETS_NUMBER
-#endif
                 , &in_packet, &out_packet);
         // Submit one packet on the context
         ret = sec_process_packet(ctx, in_packet, out_packet, (ua_context_handle_t)&ua_data[idx]);
-#ifdef SEC_HW_VERSION_4_4
         if( ret != expected_ret_code)
             break;
-#else
-        assert_equal_with_message(ret, expected_ret_code,
-                "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
-                expected_ret_code, ret);
-#endif
     }
 
-#ifdef SEC_HW_VERSION_4_4
     assert_equal_with_message(ret, expected_ret_code,
                               "ERROR on sec_process_packet: expected ret[%d]. actual ret[%d]",
                                expected_ret_code, ret);
-#endif
 }
 
-#ifdef SEC_HW_VERSION_4_4
 static void * test_memalign(size_t align, size_t size)
 {
     int ret;
@@ -328,26 +289,16 @@ static void test_free(void *ptr, size_t size)
    range_t r = {0,ptr,size};   
    fsl_usmmgr_free(&r,g_usmmgr);
 }
-#endif // SEC_HW_VERSION_4_4
+
 static void test_setup(void)
 {
-#ifdef SEC_HW_VERSION_3_1
-    int ret = 0;
-
-    // map the physical memory
-    ret = dma_mem_setup();
-    assert_equal_with_message(ret, 0, "ERROR on dma_mem_setup: ret = %d", ret);
-
-    // Fill SEC driver configuration data
-    sec_config_data.memory_area = (void*)__dma_virt;
-#else
     // Init FSL USMMGR
     g_usmmgr = fsl_usmmgr_init();
     assert_not_equal_with_message(g_usmmgr, NULL, "ERROR on fsl_usmmgr_init");
 
     sec_config_data.memory_area = dma_mem_memalign(CACHE_LINE_SIZE,SEC_DMA_MEMORY_SIZE);
     sec_config_data.sec_drv_vtop = test_vtop;
-#endif
+
     sec_config_data.work_mode = SEC_STARTUP_POLLING_MODE;
 
     cipher_key = dma_mem_memalign(BUFFER_ALIGNEMENT, MAX_KEY_LENGTH);
@@ -369,8 +320,7 @@ static void test_setup(void)
     ctx_info.notify_packet = &handle_packet_from_sec;
     ctx_info.sn_size = SEC_PDCP_SN_SIZE_7;
     ctx_info.bearer = 0x3;
-    // Use data plane contexts as control-plane requires the packets to be
-    // send two times to SEC, in case of SEC 3.1
+    
     ctx_info.user_plane = PDCP_DATA_PLANE;
     ctx_info.packet_direction = PDCP_DOWNLINK;
     ctx_info.protocol_direction = PDCP_ENCAPSULATION;
@@ -401,20 +351,14 @@ static void test_teardown()
     dma_mem_free(test_input_packets, sizeof(buffer_t) * TEST_PACKETS_NUMBER);
     dma_mem_free(test_output_packets, sizeof(buffer_t) * TEST_PACKETS_NUMBER);
 
-#ifdef SEC_HW_VERSION_3_1    
-    // unmap the physical memory
-    dma_mem_release();
-#else // SEC_HW_VERSION_3_1
     /* Release memory allocated for SEC internal structures. */
     dma_mem_free(sec_config_data.memory_area,SEC_DMA_MEMORY_SIZE);
 
     /* Destoy FSL USMMGR object */
     ret = fsl_usmmgr_exit(g_usmmgr);
     assert_equal_with_message(ret,0,"Failure to destroy the FSL USMMGR object: %d",ret);
-    
-#endif // SEC_HW_VERSION_3_1
 
-    
+
 }
 
 static void test_sec_init_invalid_params(void)
@@ -787,13 +731,8 @@ static void test_sec_process_packet_invalid_params(void)
     struct test_sec_context_t *ctx = NULL;
     sec_packet_t *in_packet = NULL;
     sec_packet_t *out_packet = NULL;
-#ifdef SEC_HW_VERSION_4_4
     dma_addr_t tmp = 0;
-#else
-    uint8_t* tmp = NULL;
-#endif
     int packet_idx = 0;
-#ifdef SEC_HW_VERSION_4_4
     uint32_t    tmp_num;
 #if (SEC_ENABLE_SCATTER_GATHER == ON)
     sec_packet_t *in_packet2 = NULL;
@@ -802,7 +741,6 @@ static void test_sec_process_packet_invalid_params(void)
     sec_packet_t *out_packet3 = NULL;
     sec_packet_t in_sg_packet[3];
     sec_packet_t out_sg_packet[3];
-#endif // defined(SEC_HW_VERSION_4_4)
 #endif //(SEC_ENABLE_SCATTER_GATHER == ON)
 
     printf("Running test %s\n", __FUNCTION__);
@@ -865,11 +803,7 @@ static void test_sec_process_packet_invalid_params(void)
 
     // Invalid input packet -> buffer address is NULL
     tmp = in_packet->address;
-#ifdef SEC_HW_VERSION_4_4
     in_packet->address = 0;
-#else
-    in_packet->address = NULL;
-#endif
 
     ret = sec_process_packet(ctx_handle, in_packet, out_packet, (ua_context_handle_t)&ua_data[packet_idx]);
     assert_equal_with_message(ret, SEC_INVALID_INPUT_PARAM,
@@ -892,11 +826,7 @@ static void test_sec_process_packet_invalid_params(void)
     ////////////////////////////////////
 
     tmp = out_packet->address;
-#ifdef SEC_HW_VERSION_4_4
     out_packet->address = 0;
-#else
-    out_packet->address = NULL;
-#endif
 
     // Invalid output packet -> buffer address is NULL
     ret = sec_process_packet(ctx_handle, in_packet, out_packet, (ua_context_handle_t)&ua_data[packet_idx]);
@@ -906,7 +836,7 @@ static void test_sec_process_packet_invalid_params(void)
 
     // Restore output packet address
     out_packet->address = tmp;
-#ifdef SEC_HW_VERSION_4_4
+
     ////////////////////////////////////
     ////////////////////////////////////
 
@@ -1092,11 +1022,7 @@ static void test_sec_process_packet_invalid_params(void)
 
     in_sg_packet[0] = *in_packet;
     tmp = in_packet->address;
-#ifdef SEC_HW_VERSION_4_4
     in_packet->address = 0;
-#else
-    in_packet->address = NULL;
-#endif
     in_sg_packet[1] = *in_packet;
     in_packet->address = tmp;
 
@@ -1119,11 +1045,7 @@ static void test_sec_process_packet_invalid_params(void)
 
     out_sg_packet[0] = *out_packet;
     tmp = out_packet->address;
-#ifdef SEC_HW_VERSION_4_4
     out_packet->address = 0;
-#else
-    out_packet->address = NULL;
-#endif
     out_sg_packet[1] = *out_packet;
     out_packet->address = tmp;
 
@@ -1184,7 +1106,6 @@ static void test_sec_process_packet_invalid_params(void)
     out_packet->total_length = 0;
 
 #endif //(SEC_ENABLE_SCATTER_GATHER == ON)
-#endif // defined(SEC_HW_VERSION_4_4)
 
     ////////////////////////////////////
     ////////////////////////////////////
@@ -1200,7 +1121,7 @@ static void test_sec_process_packet_invalid_params(void)
             "sec_get_error_message returned wrong string"
             "representation for ret code %d", ret);
 
-#if defined(SEC_HW_VERSION_4_4) && (SEC_ENABLE_SCATTER_GATHER == ON)
+#if (SEC_ENABLE_SCATTER_GATHER == ON)
     // Get one additional packets
     packet_idx = 1;
     get_free_packet(packet_idx,&in_packet2,&out_packet2);
@@ -1347,7 +1268,7 @@ static void test_sec_process_packet_invalid_params(void)
     
     // Poll five packets so the test below still works
     sec_poll(5, 1, &tmp_num);
-#endif // defined(SEC_HW_VERSION_4_4) && (SEC_ENABLE_SCATTER_GATHER == ON)
+#endif // (SEC_ENABLE_SCATTER_GATHER == ON)
 
     // Delete context with 1 packet in flight.
     // Because we do not poll for results, the context is
@@ -1493,14 +1414,10 @@ static void test_sec_poll_invalid_params(void)
     ////////////////////////////////////
     ////////////////////////////////////
 
-    // Invalid weight param: > size of SEC job ring size (FIFO is fixed at 24 entries on SEC 3.1)
-#ifdef SEC_HW_VERSION_3_1
-    limit = SEC_JOB_RING_HW_SIZE + 10;
-    weight = SEC_JOB_RING_HW_SIZE + 5;
-#else
+    // Invalid weight param: > size of SEC job ring size
     limit = SEC_JOB_RING_SIZE + 10;
     weight = SEC_JOB_RING_SIZE + 5;
-#endif
+
     ret = sec_poll(limit, weight, &packets_out);
     assert_equal_with_message(ret, SEC_INVALID_INPUT_PARAM,
                               "ERROR on sec_poll: expected ret[%d]. actual ret[%d]",
@@ -1628,12 +1545,8 @@ static void test_sec_poll_job_ring_invalid_params(void)
                               SEC_INVALID_INPUT_PARAM, ret);
     ////////////////////////////////////
     ////////////////////////////////////
-#ifdef SEC_HW_VERSION_3_1
-    // Invalid limit param: > size of SEC job ring size (FIFO is fixed at 24 entries on SEC 3.1)
-    limit = SEC_JOB_RING_HW_SIZE + 5;
-#else
     limit = SEC_JOB_RING_SIZE + 5;
-#endif
+
     // Assign a value to packets_out. It must be overwritten
     // by driver in sec_poll_job_ring() function.
     packets_out = 1;
@@ -1647,11 +1560,7 @@ static void test_sec_poll_job_ring_invalid_params(void)
     ////////////////////////////////////
 
     // Test with no invalid params. Should work
-#ifdef SEC_HW_VERSION_3_1
-    limit = SEC_JOB_RING_HW_SIZE;
-#else
     limit = SEC_JOB_RING_SIZE;
-#endif
 
     // Assign a value to packets_out. It must be overwritten
     // by driver in sec_poll_job_ring() function.
@@ -1672,11 +1581,8 @@ static void test_sec_poll_job_ring_invalid_params(void)
     ////////////////////////////////////
 
     // Test with no invalid params and NULL packets_out. Should work
-#ifdef SEC_HW_VERSION_3_1
-    limit = SEC_JOB_RING_HW_SIZE;
-#else
     limit = SEC_JOB_RING_SIZE;
-#endif
+
     ret = sec_poll_job_ring(jr_handle, limit, NULL);
     assert_equal_with_message(ret, SEC_SUCCESS,
                               "ERROR on sec_poll_job_ring: expected ret[%d]. actual ret[%d]",
@@ -1743,11 +1649,7 @@ static void test_poll_job_ring_scenarios(void)
     send_packets(ctx_handle, packets_handled, SEC_SUCCESS);
 
     // Test with no invalid params. Should work
-#ifdef SEC_HW_VERSION_3_1
-    limit = SEC_JOB_RING_HW_SIZE;
-#else
     limit = SEC_JOB_RING_SIZE  - 1;
-#endif
 
     usleep(1000);
     ret = sec_poll_job_ring(jr_handle, limit, &packets_out);
@@ -1768,21 +1670,13 @@ static void test_poll_job_ring_scenarios(void)
     // and retrieve them.
 
     // How many packets to send and receive to/from SEC
-#ifdef SEC_HW_VERSION_3_1
-    packets_handled = SEC_JOB_RING_HW_SIZE;
-#else
     packets_handled = SEC_JOB_RING_SIZE  - 1;
-#endif
 
     // Submit packets on the context
     send_packets(ctx_handle, packets_handled, SEC_SUCCESS);
 
     // Test with no invalid params. Should work
-#ifdef SEC_HW_VERSION_3_1
-    limit = SEC_JOB_RING_HW_SIZE;
-#else
     limit = SEC_JOB_RING_SIZE - 1;
-#endif
 
     usleep(1000);
     ret = sec_poll_job_ring(jr_handle, limit, &packets_out);
@@ -1804,11 +1698,7 @@ static void test_poll_job_ring_scenarios(void)
     // Retrieve packets.
 
     // How many packets to send and receive to/from SEC
-#ifdef SEC_HW_VERSION_3_1
-    packets_handled = SEC_JOB_RING_HW_SIZE;
-#else
     packets_handled = SEC_JOB_RING_SIZE - 1;
-#endif
 
     // Submit packets on the context
     send_packets(ctx_handle, packets_handled, SEC_SUCCESS);
@@ -1818,11 +1708,7 @@ static void test_poll_job_ring_scenarios(void)
     send_packets(ctx_handle, 5, SEC_JR_IS_FULL);
 
     // Test with no invalid params. Should work
-#ifdef SEC_HW_VERSION_3_1
-    limit = SEC_JOB_RING_HW_SIZE;
-#else
     limit = SEC_JOB_RING_SIZE  - 1;
-#endif
 
     usleep(1000);
     ret = sec_poll_job_ring(jr_handle, limit, &packets_out);
@@ -2071,11 +1957,7 @@ static void test_poll_scenarios(void)
     send_packets(ctx_handle_0, packets_handled, SEC_SUCCESS);
 
     // Test with no invalid params. Should work
-#ifdef SEC_HW_VERSION_3_1
-    limit = SEC_JOB_RING_HW_SIZE;
-#else
     limit = SEC_JOB_RING_SIZE - 1;
-#endif
 
     usleep(1000);
     ret = sec_poll(limit, weight, &packets_out);
@@ -2101,11 +1983,7 @@ static void test_poll_scenarios(void)
     send_packets(ctx_handle_1, packets_handled, SEC_SUCCESS);
 
     // Test with no invalid params. Should work
-#ifdef SEC_HW_VERSION_3_1
-    limit = SEC_JOB_RING_HW_SIZE;
-#else
     limit = SEC_JOB_RING_SIZE - 1;
-#endif
 
     usleep(1000);
     ret = sec_poll(limit, weight, &packets_out);
@@ -2135,11 +2013,7 @@ static void test_poll_scenarios(void)
     send_packets(ctx_handle_1, packets_handled/2, SEC_SUCCESS);
 
     // Test with no invalid params. Should work
-#ifdef SEC_HW_VERSION_3_1
-    limit = SEC_JOB_RING_HW_SIZE;
-#else
     limit = SEC_JOB_RING_SIZE - 1;
-#endif
 
     usleep(1000);
     ret = sec_poll(limit, weight, &packets_out);
@@ -2159,11 +2033,7 @@ static void test_poll_scenarios(void)
     // to SEC and retrieve them.
 
     // How many packets to send and receive to/from SEC
-#ifdef SEC_HW_VERSION_3_1
-    packets_handled = 2 * SEC_JOB_RING_HW_SIZE;
-#else
     packets_handled = 2 * (SEC_JOB_RING_SIZE - 1);
-#endif
 
     // Submit packets on first context
     send_packets(ctx_handle_0, packets_handled/2, SEC_SUCCESS);
@@ -2172,11 +2042,7 @@ static void test_poll_scenarios(void)
     send_packets(ctx_handle_1, packets_handled/2, SEC_SUCCESS);
 
     // Test with no invalid params. Should work
-#ifdef SEC_HW_VERSION_3_1
-    limit = 2 * SEC_JOB_RING_HW_SIZE;
-#else
     limit = 2 * (SEC_JOB_RING_SIZE - 1);
-#endif
 
     usleep(1000);
     ret = sec_poll(limit, weight, &packets_out);
@@ -2198,11 +2064,7 @@ static void test_poll_scenarios(void)
     // Retrieve packets.
 
     // How many packets to send and receive to/from SEC
-#ifdef SEC_HW_VERSION_3_1
-    packets_handled = 2 * SEC_JOB_RING_HW_SIZE;
-#else
     packets_handled = 2 * (SEC_JOB_RING_SIZE - 1);
-#endif
 
     // Submit packets on first context
     send_packets(ctx_handle_0, packets_handled/2, SEC_SUCCESS);
@@ -2219,11 +2081,7 @@ static void test_poll_scenarios(void)
     send_packets(ctx_handle_1, 5, SEC_JR_IS_FULL);
 
     // Test with no invalid params. Should work
-#ifdef SEC_HW_VERSION_3_1
-    limit = 2 * SEC_JOB_RING_HW_SIZE;
-#else
     limit = 2 * (SEC_JOB_RING_SIZE - 1);
-#endif
 
     usleep(1000);
     ret = sec_poll(limit, weight, &packets_out);
@@ -2335,19 +2193,12 @@ static void test_poll_scenarios(void)
 
     // Reset this global counter. It is incremented each time handle_packet_from_sec() is called.
     test_packets_notified = 0;
-#ifdef SEC_HW_VERSION_3_1
-    // Configure handle_packet_from_sec() to return SEC_RETURN_STOP after 11 packets notified.
-    test_packets_notified_ret_stop = 11;
-
-    // How many packets to send and receive to/from SEC
-    packets_handled = 2 * 12;
-#else
     // Configure handle_packet_from_sec() to return SEC_RETURN_STOP after 11 packets notified.
     test_packets_notified_ret_stop = 16;
 
     // How many packets to send and receive to/from SEC
     packets_handled = 2 * 16;
-#endif
+
     // Submit packets on the context.
     send_packets(ctx_handle_0, packets_handled/2, SEC_SUCCESS);
 

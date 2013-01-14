@@ -44,20 +44,12 @@ extern "C" {
 #include <assert.h>
 #include <string.h>
 
-#ifdef SEC_HW_VERSION_4_4
 #include <malloc.h> // memalign...
-#endif
+
 /*==================================================================================================
                                      LOCAL DEFINES
 ==================================================================================================*/
 #define MAX_SEC_CONTEXTS_PER_POOL   (SEC_MAX_PDCP_CONTEXTS / (MAX_SEC_JOB_RINGS))
-#ifdef SEC_HW_VERSION_3_1
-#define sec_vtop(virt_address) \
-{\
-    /* stub macro*/ \
-    return (dma_addr_t)(virt_address); \
-}
-#else
 
 sec_vtop g_sec_vtop;
 
@@ -65,7 +57,7 @@ static inline dma_addr_t test_vtop(void *v)
 {
     return (dma_addr_t)(v);
 }
-#endif
+
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
 ==================================================================================================*/
@@ -104,9 +96,7 @@ static void test_contexts_pool_init_destroy(void)
 #define NO_OF_CONTEXTS 10
 
     ret = init_contexts_pool(&pool, NO_OF_CONTEXTS,
-#ifdef SEC_HW_VERSION_4_4
             &global_dma_mem_free,
-#endif
             THREAD_UNSAFE_POOL);
 
     assert_equal_with_message(ret, 0,
@@ -123,9 +113,7 @@ static void test_contexts_pool_get_free_contexts(void)
     sec_context_t* sec_ctxs[NO_OF_CONTEXTS];
 
     ret = init_contexts_pool(&pool, NO_OF_CONTEXTS,
-#ifdef SEC_HW_VERSION_4_4
             &global_dma_mem_free,
-#endif
             THREAD_UNSAFE_POOL);
 
     assert_equal_with_message(ret, 0,
@@ -159,9 +147,7 @@ static void test_contexts_pool_free_contexts_with_no_packets_in_flight(void)
     sec_context_t* sec_ctxs[NO_OF_CONTEXTS];
 
     ret = init_contexts_pool(&pool, NO_OF_CONTEXTS,
-#ifdef SEC_HW_VERSION_4_4
             &global_dma_mem_free,
-#endif
             THREAD_UNSAFE_POOL);
 
     assert_equal_with_message(ret, 0,
@@ -214,9 +200,7 @@ static void test_contexts_pool_free_contexts_with_packets_in_flight(void)
     sec_context_t* sec_ctxs[NO_OF_CONTEXTS];
 
     ret = init_contexts_pool(&pool, NO_OF_CONTEXTS,
-#ifdef SEC_HW_VERSION_4_4
             &global_dma_mem_free,
-#endif
             THREAD_UNSAFE_POOL);
 
     assert_equal_with_message(ret, 0,
