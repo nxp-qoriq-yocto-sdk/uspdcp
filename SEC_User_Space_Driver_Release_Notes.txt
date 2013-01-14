@@ -1,8 +1,8 @@
 ----------------------------------------------------------------------------------------------------
 ABOUT THIS FILE
 ----------------------------------------------------------------------------------------------------
-Date:    03 October 2012
-SEC User Space Driver version:    2.6
+Date:    14 January 2013
+SEC User Space Driver version:    2.7
 
 This file contains SEC User Space Driver-related information about versioning, hardware, software,
 and tools dependencies, as well as known issues and a history of changes.
@@ -30,13 +30,13 @@ SEC USER SPACE DRIVER - LIMITATIONS
 SEC USER SPACE DRIVER - ERRATA
 ----------------------------------------------------------------------------------------------------
 
-1. The following mixed algorithm combinations for PDCP Control Plane are partially supported
-    - AES-CTR encryption + SNOW f9 integrity - unit-tested only
-    - SNOW f8 encryption + AES-CMAC integrity - decapsulation does not check the ICV
 
 ----------------------------------------------------------------------------------------------------
 SEC USER SPACE DRIVER - CHANGELOG
 ----------------------------------------------------------------------------------------------------
+Version 2.7
+    - Fully tested support for AES CTR encryption + SNOW f9 integrity
+    - SNOW f8 encryption and AES CMAC integrity full support (encapsulation & decapsulation
 Version 2.6
     - Added optimizations for increasing SEC driver performance.
     - Removed leftover benchmark scenarios

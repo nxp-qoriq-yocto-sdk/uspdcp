@@ -1,7 +1,7 @@
 ----------------------------------------------------------------------------------------------------
 ABOUT THIS FILE
 ----------------------------------------------------------------------------------------------------
-Date:    03 October 2012
+Date:    14 January 2013
 
 This Readme file contains details on SEC user space driver package contents as well as instructions
 showing how to compile and install SEC user space driver related binaries:
@@ -53,6 +53,7 @@ The package contains:
                             - execution time
                             - CPU load
                          See <test-scenario-benchmark-single-th-sg>/readme.txt for more details.
+
                     ---> <test-scenario-b2b>
                          This is a two-thread application that performs loopback encapsulation/decapsulation of PDCP
                          data plane and control plane, using Scatter-Gather tables.
