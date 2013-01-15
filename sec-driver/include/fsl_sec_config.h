@@ -47,36 +47,36 @@ extern "C"{
 
     @defgroup SecUserSpaceDriverConfigurationSection SEC Driver Configuration
     @ingroup SecUserSpaceDriverAPI
-    This sub-moudule documents how SEC user space driver can be configured.
+    This sub-module documents how SEC user space driver can be configured.
 
     @defgroup SecUserSpaceDriverFunctions SEC Driver Programming
     @ingroup SecUserSpaceDriverAPI
-    This sub-moudule documents how SEC user space driver can be programmed.
+    This sub-module documents how SEC user space driver can be programmed.
 
     @defgroup SecUserSpaceDriverExternal SEC Driver External Dependencies
     @ingroup SecUserSpaceDriverAPI
-    This sub-moudule documents SEC user space driver external dependencies.
+    This sub-module documents SEC user space driver external dependencies.
 
     @defgroup SecUserSpaceDriverExternalMemoryManagement SEC Driver External Memory Management Mechanism
     @ingroup SecUserSpaceDriverExternal
-    This sub-moudule documents SEC user space driver external memory management mechanism.
+    This sub-module documents SEC user space driver external memory management mechanism.
 
     @defgroup SecUserSpaceDriverManagementFunctions SEC Driver Management Functions
     @ingroup SecUserSpaceDriverFunctions
-    This sub-moudule documents SEC user space driver management functions.
+    This sub-module documents SEC user space driver management functions.
 
     @defgroup SecUserSpaceDriverContextFunctions SEC Driver Context Handling Functions
     @ingroup SecUserSpaceDriverFunctions
-    This sub-moudule documents SEC user space driver functions that allow handling of cryptographic contexts.
+    This sub-module documents SEC user space driver functions that allow handling of cryptographic contexts.
     Currently only PDCP contexts are supported.
 
     @defgroup SecUserSpaceDriverPacketFunctions SEC Driver Packet Processing Functions
     @ingroup SecUserSpaceDriverFunctions
-    This sub-moudule documents SEC user space driver functions that allow packet processing operations.
+    This sub-module documents SEC user space driver functions that allow packet processing operations.
 
     @defgroup SecUserSpaceDriverErrorFunctions SEC Driver Error Handling Functions
     @ingroup SecUserSpaceDriverFunctions
-    This sub-moudule documents SEC user space driver error handling functions.
+    This sub-module documents SEC user space driver error handling functions.
  */
 
  /** @mainpage SEC User Space Driver API Main Page

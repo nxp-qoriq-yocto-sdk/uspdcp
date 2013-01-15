@@ -139,7 +139,7 @@ typedef enum sec_status_e
                                              @note ALL new status values MUST be added before ::SEC_STATUS_MAX_VALUE! */
 }sec_status_t;
 
-/** Return codes for User Application registered callback sec_out_cbk.
+/** Return codes for User Application registered callback ::sec_out_cbk.
  */
 typedef enum sec_ua_return_e
 {
@@ -147,14 +147,6 @@ typedef enum sec_ua_return_e
     SEC_RETURN_STOP,            /**< User Application wants to return from the polling API without
                                      processing any other SEC responses. */
 }sec_ua_return_t;
-
-
-/** Possible types for a packet format */
-typedef enum packet_type_e
-{
-    SEC_CONTIGUOUS_BUFFER = 0,  /**< Packet is a contiguous buffer */
-    SEC_SCATTER_GATHER_BUFFER   /**< Packet is a scatter/gather buffer */
-}packet_type_t;
 
 /** Cryptographic/Integrity check algorithms.
  *  @note The id values for each algorithm are synchronized with those
@@ -181,9 +173,6 @@ typedef uint64_t dma_addr_t;
 typedef uint32_t dma_addr_t;
 #endif
 
-/**Data type used for specifying addressing scheme for
- * packets submitted by User Application. Assume virtual addressing */
-
 /** Data type used for specifying address for packets submitted
  *  by User Application. Assume physical addressing. */
 typedef dma_addr_t  packet_addr_t;
@@ -199,8 +188,30 @@ typedef const void* sec_context_handle_t;
  *  The handle is opaque from SEC driver's point of view. */
 typedef const void* ua_context_handle_t;
 
-/** Function type used for virtual to physical address conversions */
+/**
+    @addtogroup SecUserSpaceDriverExternalMemoryManagement
+    @{
+ */
+/** @brief Function type used for virtual to physical address conversions
+ *
+ * The user application, upon  intialization of the SEC driver, must provide a
+ * pointer to a function with the following signature to be used for performing
+ * virtual to physical translations for the internal SEC driver structures.
+ * This is needed because the ::sec_packet_t structure can contain addresses
+ * from different memory partitions, so the initial assumption that the packets
+ * and the internal data structures of the SEC driver are allocated from the
+ * same memory partition is no longer true. Thus the SEC driver can no longer
+ * perform directly the V2P translations for either the input/output packets
+ * or for its internal structures.
+ *
+ * @param [in] v          Virtual address to be converted.
+ *
+ * @retval Returns the corresponding physical address.
+*/
 typedef dma_addr_t (*sec_vtop)(void *v);
+/**
+    @}
+ */
 
 /** Structure used to describe an input or output packet accessed by SEC. */
 typedef struct sec_packet_s
@@ -215,10 +226,11 @@ typedef struct sec_packet_s
     uint32_t        total_length;   /**< Total Data Length in all fragments including the parent buffer. */
     uint32_t        num_fragments;  /**< Is set only in the first fragment from a s/g packet.
                                          It excludes the parent buffer. */
-    uint32_t        pad[2];
+    uint32_t        pad[2];         /**< Padding to multiple of CACHE_LINE_SIZE. */
 
 }sec_packet_t;
 
+/** Structure used to retrieve statistics from the US SEC PDCP driver. */
 typedef struct sec_statistics_s
 {
     uint32_t consumer_index;        /**< Index in the Job Ring from where
