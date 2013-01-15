@@ -353,10 +353,13 @@ static int create_c_plane_mixed_desc(sec_context_t *ctx)
                 
                 *((uint32_t*)ctx->sh_desc + i++) = 0xA820FB04;  //
                 
-                *((uint32_t*)ctx->sh_desc + i++) = 0x78340006
+                *((uint32_t*)ctx->sh_desc + i) = 0x78340006
                                                         | (((i + 6)*4) << 8);
-                *((uint32_t*)ctx->sh_desc + i++) = 0x79430008 
+                i++;
+
+                *((uint32_t*)ctx->sh_desc + i) = 0x79430008 
                                                         | (((i + 5)*4) << 8);
+                i++;
             }
             else
             {
@@ -502,16 +505,17 @@ static int create_c_plane_mixed_desc(sec_context_t *ctx)
                 *((uint32_t*)ctx->sh_desc + i++) = 0xA828FA04;      // VSIL = SIL-0x00
                 *((uint32_t*)ctx->sh_desc + i++) = 0xA80A4B04;      // VSOL = VSIL +
                 *((uint32_t*)ctx->sh_desc + i++) = 0x00000003;      // 0x03
-            
+
                 *((uint32_t*)ctx->sh_desc + i++) = 0xA828F104;      // M1 = SIL - 0x00
 #warning "Update for 64 bits"
-                *((uint32_t*)ctx->sh_desc + i++) = 0x78350006
+                *((uint32_t*)ctx->sh_desc + i) = 0x78350006
                                                         | (((i + 9)*4) << 8);
                 i++;
 
 #warning "Update for 64 bits"
-                *((uint32_t*)ctx->sh_desc + i++) = 0x79530008 
+                *((uint32_t*)ctx->sh_desc + i) = 0x79530008
                                                         | (((i + 8)*4) << 8);
+                i++;
 
                 *((uint32_t*)ctx->sh_desc + i++) = 0x8210060C | \
                                                    ( (ctx->pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION) ? \

@@ -306,13 +306,13 @@ static void* uio_map_registers(int uio_device_fd, int uio_device_id, int uio_map
 
 int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
 {
-    struct device_node *dpa_node = NULL;
-    uint32_t *prop = NULL;
+    const struct device_node *dpa_node = NULL;
+    const struct device_node *child_node = NULL;
+    const uint32_t *prop = NULL;
     uint32_t kernel_usr_channel_map = 0;
     uint32_t usr_channel_map = 0;
     uint8_t config_jr_no = 0;
     int jr_idx = 0, jr_no = 0;
-    struct device_node *child_node = NULL;
 
 #if SEC_NOTIFICATION_TYPE == SEC_NOTIFICATION_TYPE_POLL
     SEC_INFO("SEC driver configured with SEC_NOTIFICATION_TYPE_POLL enabled");

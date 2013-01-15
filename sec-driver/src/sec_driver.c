@@ -787,7 +787,7 @@ sec_return_code_t sec_release()
     int i;
 
     // Validate driver state
-    SEC_ASSERT(!(g_driver_state == SEC_DRIVER_RELEASE_IN_PROGRESS),
+    SEC_ASSERT(!(g_driver_state == SEC_DRIVER_STATE_RELEASE),
                SEC_DRIVER_RELEASE_IN_PROGRESS,
                "Driver release is already in progress");
 

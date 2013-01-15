@@ -226,10 +226,8 @@
     ((phys_addr) & 0xFFFFFFFF)
 
 
-// TODO: remove this once external memory management mechanism is used:
-// ptov + vtop functions provided by external higher layer application.
-// This is required in the mean time because it conflicts with same
-// function defined in compat.h from dma_mem library.
+// This is needed to prevent of lib definining its own implementation of
+// in_be32 and out_be32 (otherwise unused)
 #define REMOTE_IN_OUT_BE32
 
 
@@ -263,7 +261,6 @@
 /*==============================================================================
                             FUNCTION PROTOTYPES
 ==============================================================================*/
-
 /** Write 32bit values */
 static inline void out_be32(volatile uint32_t *addr, uint32_t val) {
 	*addr = val;
@@ -274,13 +271,6 @@ static inline uint32_t in_be32(const volatile uint32_t *addr) {
 	return *addr;
 }
 
-/** Utility routine to grab the cycle counter by reading ATB (Alternate Time Base) register. */
-static inline int mfatbl(void)
-{
-    int retval;
-    asm volatile ("mfspr %0,526" : "=r"(retval));
-    return retval;
-}
 /*============================================================================*/
 
 
