@@ -240,7 +240,7 @@ typedef struct sec_statistics_s
     uint32_t slots_available;       /**< Slots available for jobs to be enqueued. */
     uint32_t jobs_waiting_dequeue;  /**< Number of jobs available to be dequeued by the UA. */
     uint32_t reserved[2];           /**< Reserved for future additions. */
-}sec_statistics_t  __attribute__ ((aligned (32)));;
+} __attribute__ ((aligned (32))) sec_statistics_t;
 
 /** Contains Job Ring descriptor info returned to the caller when sec_init() is invoked. */
 typedef struct sec_job_ring_descriptor_s
