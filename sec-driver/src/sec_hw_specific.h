@@ -130,9 +130,10 @@
 
 #define CMD_ALGORITHM_ENCRYPT                   0x01
 
-#define PDCP_SD_KEY_LEN                         0x4
+#define CMD_DPOVRD_EN                           (1<<31)
 
-#define CMD_DPOVRD_HFN_OV_EN                    0x80000000
+/** The maximum size of a SEC descriptor, in WORDs (32 bits). */
+#define MAX_DESC_SIZE_WORDS                     64
 
 /******************************************************************
  * Macros for extracting error codes for the job ring
@@ -252,15 +253,25 @@
 /******************************************************************
  * Macros manipulating descriptors
  *****************************************************************/
-#define PDCP_JD_SET_SD(descriptor,ptr,len)           {          \
+/** Macro for setting the SD pointer in a JD. Common for all protocols
+ * supported by the SEC driver.
+ */
+#define SEC_JD_SET_SD(descriptor,ptr,len)           {          \
     (descriptor)->sd_ptr = (ptr);                               \
     (descriptor)->deschdr.command.jd.shr_desc_len = (len);      \
 }
 
-#define PDCP_JD_SET_JOB_PTR(descriptor,ptr) \
+/** Macro for setting a pointer to the job which this descriptor processes.
+ * It eases the lookup procedure for identifying the descriptor that has
+ * completed.
+ */
+#define SEC_JD_SET_JOB_PTR(descriptor,ptr) \
         (descriptor)->job_ptr = (ptr)
 
-#define PDCP_INIT_JD(descriptor)              { \
+/** Macro for setting up a JD. The structure of the JD is common across all
+ * supported protocols, thus its structure is identical.
+ */
+#define SEC_JD_INIT(descriptor)              { \
         /* CTYPE = job descriptor                               \
          * RSMS, DNR = 0
          * ONE = 1
@@ -293,126 +304,62 @@
          * RTO = 0
          */                                                     \
         (descriptor)->seq_in.command.word  = 0xF0400000; /**/   \
+         /* 
+          * In order to be compatible with QI scenarios, the DPOVRD value
+          * loaded must be formated like this:
+          * DPOVRD_EN (1b) | Res| DPOVRD Value (right aligned).
+          */                                                    \
+        (descriptor)->load_dpovrd.command.word = 0x16870004;    \
+        /* By default, DPOVRD mechanism is disabled, thus the value to be
+         * LOAD-ed through the above descriptor command will be 0x0000_0000. 
+         */                                                     \
+        (descriptor)->dpovrd = 0x00000000;                      \
     }
 
-#define SEC_PDCP_INIT_CPLANE_SD(descriptor){ \
-        /* CTYPE = shared job descriptor                        \
-         * RIF = 0
-         * DNR = 0
-         * ONE = 1
-         * Start Index = 5, in order to jump over PDB
-         * ZRO,CIF = 0
-         * SC = 1
-         * PD = 0, SHARE = WAIT
-         * Descriptor Length = 10
-         */                                                     \
-        (descriptor)->deschdr.command.word  = 0xB8851113;       \
-        /* CTYPE = Key
-         * Class = 2 (authentication)
-         * SGF = 0
-         * IMM = 0 (key ptr after command)
-         * ENC, NWB, EKT, KDEST = 0
-         * TK = 0
-         * Length = 0 (to be completed at runtime)
-         */                                                     \
-        (descriptor)->key2_cmd.command.word = 0x04000000;       \
-        /* CTYPE = Key
-         * Class = 1 (encryption)
-         * SGF = 0
-         * IMM = 0 (key ptr after command)
-         * ENC, NWB, EKT, KDEST = 0
-         * TK = 0
-         * Length = 0 (to be completed at runtime)
-         */                                                     \
-        (descriptor)->key1_cmd.command.word = 0x02000000;       \
-        /* CTYPE = Protocol operation
-         * OpType = 0 (to be completed @ runtime)
-         * Protocol ID = PDCP - C-Plane
-         * Protocol Info = 0 (to be completed @ runtime)
-         */                                                     \
-        (descriptor)->protocol.command.word = 0x80430000;       \
-}
-
-#define SEC_PDCP_INIT_UPLANE_SD(descriptor){ \
-        /* CTYPE = shared job descriptor                        \
-         * RIF = 0
-         * DNR = 0
-         * ONE = 1
-         * Start Index = 7, in order to jump over PDB and
-         *                  key2 command
-         * ZRO,CIF = 0
-         * SC = 1
-         * PD = 0, SHARE = WAIT
-         * Descriptor Length = 10
-         */                                                     \
-        (descriptor)->deschdr.command.word  = 0xB8871113;       \
-        /* CTYPE = Key
-         * Class = 2 (authentication)
-         * SGF = 0
-         * IMM = 0 (key ptr after command)
-         * ENC, NWB, EKT, KDEST = 0
-         * TK = 0
-         * Length = 0 (to be completed at runtime)
-         */                                                     \
-        (descriptor)->key2_cmd.command.word = 0x04000000;       \
-        /* CTYPE = Key
-         * Class = 1 (encryption)
-         * SGF = 0
-         * IMM = 0 (key after command)
-         * ENC, NWB, EKT, KDEST = 0
-         * TK = 0
-         * Length = 0 (to be completed at runtime)
-         */                                                     \
-        (descriptor)->key1_cmd.command.word = 0x02000000;       \
-        /* CTYPE = Protocol operation
-         * OpType = 0 (to be completed @ runtime)
-         * Protocol ID = PDCP - C-Plane
-         * Protocol Info = 0 (to be completed @ runtime)
-         */                                                     \
-        (descriptor)->protocol.command.word = 0x80420000;       \
-}
-
-#define SEC_PDCP_SD_SET_KEY1(descriptor,key,len) {              \
-        (descriptor)->key1_cmd.command.field.length = (len);    \
-        (descriptor)->key1_ptr = g_sec_vtop((key));              \
-}
-
-#define SEC_PDCP_SD_SET_KEY2(descriptor,key,len) {              \
-        (descriptor)->key2_cmd.command.field.length = (len);    \
-        (descriptor)->key2_ptr = g_sec_vtop((key));             \
-}
-
-#define PDCP_JD_SET_IN_PTR(descriptor,phys_addr,offset,length) {    \
+/** Macro for setting the pointer to the input buffer in the JD, according to 
+ * the parameters set by the user in the ::sec_packet_t structure.
+ */
+#define SEC_JD_SET_IN_PTR(descriptor,phys_addr,offset,length) {     \
     (descriptor)->seq_in_ptr = (phys_addr) + (offset);              \
     (descriptor)->in_ext_length = (length);                         \
 }
 
-#define PDCP_JD_SET_OUT_PTR(descriptor,phys_addr,offset,length) {   \
+/** Macro for setting the pointer to the output buffer in the JD, according to
+ * the parameters set by the user in the ::sec_packet_t structure.
+ */
+#define SEC_JD_SET_OUT_PTR(descriptor,phys_addr,offset,length) {    \
     (descriptor)->seq_out_ptr = (phys_addr) + (offset);             \
     (descriptor)->out_ext_length = (length);                        \
 }
 
-#define PDCP_JD_SET_SG_IN(descriptor)   ( (descriptor)->seq_in.command.field.sgf =  1 )
+/** Macro for setting the Scatter-Gather flag in the SEQ IN command. Used in 
+ * case the input buffer is split in multiple buffers, according to the user
+ * specification.
+ */
+#define SEC_JD_SET_SG_IN(descriptor) \
+     ( (descriptor)->seq_in.command.field.sgf =  1 )
 
-#define PDCP_JD_SET_SG_OUT(descriptor)  ( (descriptor)->seq_out.command.field.sgf = 1 )
+/** Macro for setting the Scatter-Gather flag in the SEQ OUT command. Used in 
+ * case the output buffer is split in multiple buffers, according to the user
+ * specification.
+ */
+#define SEC_JD_SET_SG_OUT(descriptor) \
+   ( (descriptor)->seq_out.command.field.sgf = 1 )
 
-#define SEC_PDCP_SH_SET_PROT_DIR(descriptor,dir)    ( (descriptor)->protocol.command.field.optype = \
-                        ((dir) == PDCP_ENCAPSULATION) ? CMD_PROTO_ENCAP : CMD_PROTO_DECAP )
+#define SEC_JD_SET_DPOVRD(descriptor) \
 
-#define SEC_PDCP_SH_SET_PROT_ALG(descriptor,alg)    ( (descriptor)->protocol.command.field.protinfo = \
-                        (alg == SEC_ALG_SNOW) ? CMD_PROTO_SNOW_ALG : (alg == SEC_ALG_AES) ? \
-                         CMD_PROTO_AES_ALG : CMD_PROTO_SNOW_ALG )
-
-#define SEC_PDCP_GET_DESC_LEN(descriptor)                                                   \
+/** Macro for retrieving a descriptor's length. Works for both SD and JD. */
+#define SEC_GET_DESC_LEN(descriptor)                                                        \
     (((struct descriptor_header_s*)(descriptor))->command.sd.ctype ==                       \
     CMD_HDR_CTYPE_SD ? ((struct descriptor_header_s*)(descriptor))->command.sd.desclen :    \
                        ((struct descriptor_header_s*)(descriptor))->command.jd.desclen )
 
-#define SEC_PDCP_DUMP_DESC(descriptor) {                                    \
+/** Helper macro for dumping the hex representation of a descriptor */
+#define SEC_DUMP_DESC(descriptor) {                                         \
         int __i;                                                            \
         SEC_DEBUG("Descriptor @ 0x%08x",(uint32_t)((uint32_t*)(descriptor)));\
         for( __i = 0;                                                       \
-            __i < SEC_PDCP_GET_DESC_LEN(descriptor);                        \
+            __i < SEC_GET_DESC_LEN(descriptor);                             \
             __i++)                                                          \
         {                                                                   \
             SEC_DEBUG("0x%08x: 0x%08x",                                     \
@@ -420,8 +367,6 @@
                      *(((uint32_t*)(descriptor)) + __i));                   \
         }                                                                   \
 }
-
-
 /*==============================================================================
                                     ENUMS
 ==============================================================================*/
@@ -616,88 +561,14 @@ struct load_command_s{
     } PACKED command;
 } PACKED;
 
-/** Structure describing the PDB (Protocol Data Block)
- * needed by protocol acceleration descriptors for
- * PDCP Control Plane.
+/** Structure encompassing a general shared descriptor of maximum
+ * size (64 WORDs). Usually, other specific shared descriptor structures 
+ * will be type-casted to this one
+ * this one.
  */
-struct cplane_pdb_s{
-    unsigned int res1;
-    unsigned int hfn:27;
-    unsigned int res2:5;
-    unsigned int bearer:5;
-    unsigned int dir:1;
-    unsigned int res3:26;
-    unsigned int threshold:27;
-    unsigned int res4:5;
-}PACKED;
-
-/** Structure describing the PDB (Protocol Data Block)
- * needed by protocol acceleration descriptors for
- * PDCP User Plane.
- */
-struct uplane_pdb_s{
-    unsigned int res1:30;
-    unsigned int sns:1;
-    unsigned int res2:1;
-    union{
-        struct{
-            unsigned int hfn:20;
-            unsigned int res:12;
-        }PACKED hfn_l;
-        struct{
-            unsigned int hfn:25;
-            unsigned int res:7;
-        }PACKED hfn_s;
-        unsigned int word;
-    } PACKED hfn;
-    unsigned int bearer:5;
-    unsigned int dir:1;
-    unsigned int res3:26;
-    union{
-        struct{
-            unsigned int threshold:20;
-            unsigned int res:12;
-        }PACKED threshold_l;
-        struct{
-            unsigned int threshold:25;
-            unsigned int res:7;
-        }PACKED threshold_s;
-    } PACKED threshold;
-}PACKED;
-
-/** Structure for aggregating the two types of
- * PDBs existing in PDCP Driver.
- */
-typedef struct sec_crypto_pdb_s
-{
-    union{
-        uint32_t    content[4];
-        struct cplane_pdb_s cplane_pdb;
-        struct uplane_pdb_s uplane_pdb;
-    }PACKED pdb_content;
-}PACKED sec_crypto_pdb_t;
-
-/** Structure encompassing a shared descriptor,
- * containing all the information needed by a
- * SEC for processing the packets belonging to
- * the same context:
- *  - key for authentication
- *  - key for encryption
- *  - protocol data block (for Hyper Frame Number, etc.)
- */
-struct sec_pdcp_sd_t{
-    struct descriptor_header_s  deschdr;
-    sec_crypto_pdb_t            pdb;
-    struct key_command_s        key2_cmd;
-#warning "Update for 36 bits addresses"
-    dma_addr_t                  key2_ptr;
-    struct key_command_s        key1_cmd;
-#warning "Update for 36 bits addresses"
-    dma_addr_t                  key1_ptr;
-    uint32_t                    hfn_ov_desc[9];
-    struct protocol_operation_command_s protocol;
-
-} PACKED;
+struct sec_sd_t {
+    uint32_t rsvd[MAX_DESC_SIZE_WORDS];
+} __CACHELINE_ALIGNED PACKED;
 
 /** Structure encompassing a job descriptor which processes
  * a single packet from a context. The job descriptor references
@@ -719,8 +590,6 @@ struct sec_descriptor_t {
     struct sec_job_t *job_ptr;
     uint32_t      pad[5];
 } __CACHELINE_ALIGNED PACKED;
-
-
 /*==============================================================================
                                  CONSTANTS
 ==============================================================================*/

@@ -192,7 +192,7 @@ static void free_in_use_context(sec_contexts_pool_t * pool, sec_context_t * ctx)
     ctx->ci = 0;
     ctx->notify_packet_cbk = NULL;
     ctx->jr_handle = NULL;
-    ctx->pdcp_crypto_info = NULL;
+    ctx->crypto_info.pdcp_crypto_info = NULL;
 
     // add context to free list
     // TODO: maybe add new context to head -> better chance for a cache hit if same element is reused next
@@ -318,7 +318,7 @@ sec_return_code_t init_contexts_pool(sec_contexts_pool_t * pool,
                       SEC_INVALID_INPUT_PARAM,
                       "Current memory position is not cacheline aligned."
                       "Context= %p", ctx);
-        ctx->sh_desc = (struct sec_pdcp_sd_t*)(dma_addr_t)*dma_mem;
+        ctx->sh_desc = (struct sec_sd_t*)(dma_addr_t)*dma_mem;
         memset(ctx->sh_desc, 0, SEC_CRYPTO_DESCRIPTOR_SIZE);
         *dma_mem += SEC_CRYPTO_DESCRIPTOR_SIZE;
 

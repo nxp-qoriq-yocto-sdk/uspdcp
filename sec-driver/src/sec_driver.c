@@ -270,6 +270,20 @@ static void sec_handle_packet_error(sec_job_ring_t *job_ring,
                                     uint32_t sec_error_code,
                                     uint32_t *notified_packets,
                                     uint32_t *do_driver_shutdown);
+
+/** @brief Updates a SEC job descriptor for each packet with pointers to
+ * input packet, output packet and crypto information.
+ *
+ * @param [in]     ctx          SEC context
+ * @param [in,out] job          The job structure
+ * @param [in,out] descriptor   SEC descriptor
+ *
+ * @retval SEC_SUCCESS for success
+ * @retval other for error
+ */
+static int sec_update_job_descriptor(sec_context_t *ctx,
+                                     sec_job_t *job,
+                                     sec_descriptor_t *descriptor);
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
@@ -816,42 +830,19 @@ sec_return_code_t sec_release()
     return SEC_SUCCESS;
 }
 
-sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
-                                           const sec_pdcp_context_info_t *sec_ctx_info,
-                                           sec_context_handle_t *sec_ctx_handle)
+static inline sec_return_code_t create_context(sec_context_t **ctx,
+                                               sec_job_ring_handle_t job_ring_handle)
 {
     sec_job_ring_t * job_ring =  (sec_job_ring_t *)job_ring_handle;
-    sec_context_t * ctx = NULL;
-    int ret = 0;
+
+    // Make sure a valid pointer is given
+    ASSERT(ctx != NULL);
 
     // Validate driver state
     SEC_ASSERT(g_driver_state == SEC_DRIVER_STATE_STARTED,
                (g_driver_state == SEC_DRIVER_STATE_RELEASE) ?
                SEC_DRIVER_RELEASE_IN_PROGRESS : SEC_DRIVER_NOT_INITIALIZED,
                "Driver release is in progress or driver not initialized");
-
-    // Validate input arguments
-    SEC_ASSERT(sec_ctx_info != NULL, SEC_INVALID_INPUT_PARAM, "sec_ctx_info is NULL");
-    SEC_ASSERT(sec_ctx_handle != NULL, SEC_INVALID_INPUT_PARAM, "sec_ctx_handle is NULL");
-    SEC_ASSERT(sec_ctx_info->notify_packet != NULL,
-               SEC_INVALID_INPUT_PARAM,
-               "sec_ctx_inf has NULL notify_packet function pointer");
-    SEC_ASSERT(sec_ctx_info->cipher_key != NULL,
-               SEC_INVALID_INPUT_PARAM,
-               "sec_ctx_info->cipher_key is NULL");
-
-    // Crypto keys must come from DMA memory area and must be cacheline aligned
-    SEC_ASSERT((dma_addr_t)sec_ctx_info->cipher_key % CACHE_LINE_SIZE == 0,
-               SEC_INVALID_INPUT_PARAM,
-               "Configured crypto key is not cacheline aligned");
-
-    if(sec_ctx_info->integrity_key != NULL)
-    {
-        // Authentication keys must come from DMA memory area and must be cacheline aligned
-        SEC_ASSERT((dma_addr_t)sec_ctx_info->integrity_key % CACHE_LINE_SIZE == 0,
-                   SEC_INVALID_INPUT_PARAM,
-                   "Configured integrity key is not cacheline aligned");
-    }
 
     // Either UA specifies a job ring to associate with this context,
     // either the driver will choose a job ring in round robin fashion.
@@ -871,38 +862,143 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
     // global pool is that the access to it needs to be synchronized because it can
     // be accessed simultaneously by 2 threads (the producer thread of JR1 and the
     // producer thread for JR2).
-    if((ctx = get_free_context(&job_ring->ctx_pool)) == NULL)
+    if((*ctx = get_free_context(&job_ring->ctx_pool)) == NULL)
     {
-    	// get free context from the global pool of contexts (with lock)
-        if((ctx = get_free_context(&g_ctx_pool)) == NULL)
+        // get free context from the global pool of contexts (with lock)
+        if((*ctx = get_free_context(&g_ctx_pool)) == NULL)
         {
-			// no free contexts in the global pool
-			return SEC_DRIVER_NO_FREE_CONTEXTS;
-		}
+                // no free contexts in the global pool
+                 return SEC_DRIVER_NO_FREE_CONTEXTS;
+        }
     }
 
-    ASSERT(ctx != NULL);
-    ASSERT(ctx->pool != NULL);
+    ASSERT(*ctx != NULL);
+    ASSERT((*ctx)->pool != NULL);
 
-    // set the notification callback per context
-    ctx->notify_packet_cbk = sec_ctx_info->notify_packet;
     // Set the JR handle.
-    ctx->jr_handle = (sec_job_ring_handle_t)job_ring;
-    // Set the crypto info
-    ret = sec_pdcp_context_set_crypto_info(ctx, sec_ctx_info);
+    (*ctx)->jr_handle = (sec_job_ring_handle_t)job_ring;
+
+    return SEC_SUCCESS;
+}
+
+#if 0
+sec_return_code_t sec_create_rlc_context(sec_job_ring_handle_t job_ring_handle,
+                                         const sec_rlc_context_info_t *rlc_ctx_nfo,
+                                         sec_context_handle_t *sec_ctx_handle)
+{
+    int ret = SEC_SUCCESS;
+    sec_context_t *ctx = NULL
+    
+    // Validate input arguments
+    SEC_ASSERT(rlc_ctx_nfo != NULL, SEC_INVALID_INPUT_PARAM, "rlc_ctx_nfo is NULL");
+    SEC_ASSERT(sec_ctx_handle != NULL, SEC_INVALID_INPUT_PARAM, "sec_ctx_handle is NULL");
+    SEC_ASSERT(rlc_ctx_nfo->notify_packet != NULL,
+               SEC_INVALID_INPUT_PARAM,
+               "rlc_ctx_nfo has NULL notify_packet function pointer");
+    SEC_ASSERT(rlc_ctx_nfo->cipher_key != NULL,
+               SEC_INVALID_INPUT_PARAM,
+               "rlc_ctx_nfo->cipher_key is NULL");
+
+    // Crypto keys must come from DMA memory area and must be cacheline aligned
+    SEC_ASSERT((dma_addr_t)rlc_ctx_nfo->cipher_key % CACHE_LINE_SIZE == 0,
+               SEC_INVALID_INPUT_PARAM,
+               "Configured crypto key is not cacheline aligned");
+
+    if(rlc_ctx_nfo->integrity_key != NULL)
+    {
+        // Authentication keys must come from DMA memory area and must be cacheline aligned
+        SEC_ASSERT((dma_addr_t)rlc_ctx_nfo->integrity_key % CACHE_LINE_SIZE == 0,
+                   SEC_INVALID_INPUT_PARAM,
+                   "Configured integrity key is not cacheline aligned");
+    }
+
+    ret = create_context(&ctx, job_ring_handle);
     if(ret != SEC_SUCCESS)
     {
-        SEC_ERROR("sec_ctx_info contains invalid data");
+        // create_context will return either SEC_SUCCESS or SEC_DRIVER_NO_FREE_CONTEXTS
+        return ret;
+    }
+    
+    // Set the crypto info
+    ret = sec_pdcp_context_set_crypto_info(ctx, rlc_ctx_nfo);
+    if(ret != SEC_SUCCESS)
+    {
+        SEC_ERROR("rlc_ctx_nfo contains invalid data");
         free_or_retire_context(ctx->pool, ctx);
         return SEC_INVALID_INPUT_PARAM;
     }
 
-    if (sec_ctx_info->hfn_ov_en == TRUE)
+    if (rlc_ctx_nfo->hfn_ov_en == TRUE)
     {
-        ctx->hfn_ov_en = TRUE;
+        ctx->dpovrd_en = TRUE;
         SEC_DEBUG("Jr[%p].Context %p configured for HFN override",
                   job_ring, ctx);
     }
+
+    // set the notification callback per context
+    ctx->notify_packet_cbk = rlc_ctx_nfo->notify_packet;
+
+    // provide to UA a SEC ctx handle
+    *sec_ctx_handle = (sec_context_handle_t)ctx;
+
+    return SEC_SUCCESS;
+}
+#endif
+sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
+                                           const sec_pdcp_context_info_t *pdcp_ctx_info,
+                                           sec_context_handle_t *sec_ctx_handle)
+{
+    int ret = SEC_SUCCESS;
+    sec_context_t *ctx = NULL;
+    
+    // Validate input arguments
+    SEC_ASSERT(pdcp_ctx_info != NULL, SEC_INVALID_INPUT_PARAM, "pdcp_ctx_info is NULL");
+    SEC_ASSERT(sec_ctx_handle != NULL, SEC_INVALID_INPUT_PARAM, "sec_ctx_handle is NULL");
+    SEC_ASSERT(pdcp_ctx_info->notify_packet != NULL,
+               SEC_INVALID_INPUT_PARAM,
+               "pdcp_ctx_info has NULL notify_packet function pointer");
+    SEC_ASSERT(pdcp_ctx_info->cipher_key != NULL,
+               SEC_INVALID_INPUT_PARAM,
+               "pdcp_ctx_info->cipher_key is NULL");
+
+    // Crypto keys must come from DMA memory area and must be cacheline aligned
+    SEC_ASSERT((dma_addr_t)pdcp_ctx_info->cipher_key % CACHE_LINE_SIZE == 0,
+               SEC_INVALID_INPUT_PARAM,
+               "Configured crypto key is not cacheline aligned");
+
+    if(pdcp_ctx_info->integrity_key != NULL)
+    {
+        // Authentication keys must come from DMA memory area and must be cacheline aligned
+        SEC_ASSERT((dma_addr_t)pdcp_ctx_info->integrity_key % CACHE_LINE_SIZE == 0,
+                   SEC_INVALID_INPUT_PARAM,
+                   "Configured integrity key is not cacheline aligned");
+    }
+
+    ret = create_context(&ctx, job_ring_handle);
+    if(ret != SEC_SUCCESS)
+    {
+        // create_context will return either SEC_SUCCESS or SEC_DRIVER_NO_FREE_CONTEXTS
+        return ret;
+    }
+    
+    // Set the crypto info
+    ret = sec_pdcp_context_set_crypto_info(ctx, pdcp_ctx_info);
+    if(ret != SEC_SUCCESS)
+    {
+        SEC_ERROR("pdcp_ctx_info contains invalid data");
+        free_or_retire_context(ctx->pool, ctx);
+        return SEC_INVALID_INPUT_PARAM;
+    }
+
+    if (pdcp_ctx_info->hfn_ov_en == TRUE)
+    {
+        ctx->dpovrd_en = TRUE;
+        SEC_DEBUG("Jr[%p].Context %p configured for HFN override",
+                  job_ring, ctx);
+    }
+
+    // set the notification callback per context
+    ctx->notify_packet_cbk = pdcp_ctx_info->notify_packet;
 
     // provide to UA a SEC ctx handle
     *sec_ctx_handle = (sec_context_handle_t)ctx;
@@ -1119,6 +1215,75 @@ sec_return_code_t sec_poll_job_ring(sec_job_ring_handle_t job_ring_handle,
     return SEC_SUCCESS;
 }
 
+int sec_update_job_descriptor(sec_context_t *ctx,
+                              sec_job_t *job,
+                              sec_descriptor_t *descriptor)
+{
+    dma_addr_t  phys_addr;
+    uint32_t    offset = 0;
+    uint32_t    length = 0;
+    int ret = SEC_SUCCESS;
+
+    SEC_JD_INIT(descriptor);
+    SEC_JD_SET_SD(descriptor,
+                   job->sec_context->sh_desc_phys,
+                   SEC_GET_DESC_LEN(job->sec_context->sh_desc));
+
+    SEC_JD_SET_JOB_PTR(descriptor,job);
+
+#if (SEC_ENABLE_SCATTER_GATHER == ON)
+    if( SG_CONTEXT_OUT_TBL_EN(job->sg_ctx ))
+    {
+        SEC_JD_SET_SG_OUT(descriptor);
+        phys_addr = SG_CONTEXT_GET_TBL_OUT_PHY(job->sg_ctx);
+        offset = 0;
+        length = SG_CONTEXT_GET_LEN_OUT(job->sg_ctx);
+    }
+    else
+#endif // SEC_ENABLE_SCATTER_GATHER == ON
+    {
+        phys_addr = job->out_packet->address;
+        offset = job->out_packet->offset;
+        length = job->out_packet->length;
+    }
+
+    SEC_JD_SET_OUT_PTR(descriptor,
+                        phys_addr,
+                        offset,
+                        length);
+
+#if (SEC_ENABLE_SCATTER_GATHER == ON)
+    if( SG_CONTEXT_IN_TBL_EN(job->sg_ctx ))
+    {
+        SEC_JD_SET_SG_IN(descriptor);
+        phys_addr = SG_CONTEXT_GET_TBL_IN_PHY(job->sg_ctx);
+        offset = 0;
+        length = SG_CONTEXT_GET_LEN_IN(job->sg_ctx);
+    }
+    else
+#endif // (SEC_ENABLE_SCATTER_GATHER == ON)
+    {
+        phys_addr = job->in_packet->address;
+        offset = job->in_packet->offset;
+        length = job->in_packet->length;
+    }
+
+    SEC_JD_SET_IN_PTR(descriptor,
+                       phys_addr,
+                       offset,
+                       length);
+
+    if( job->sec_context->dpovrd_en == TRUE)
+    {
+        descriptor->dpovrd = CMD_DPOVRD_EN | job->dpovrd_value;
+    }
+
+    SEC_DUMP_DESC(descriptor);
+
+    SEC_INFO("Update job descriptor descriptor return code = %d", ret);
+
+    return ret;
+}
 sec_return_code_t sec_process_packet(sec_context_handle_t sec_ctx_handle,
                                      const sec_packet_t *in_packet,
                                      const sec_packet_t *out_packet,
@@ -1230,19 +1395,18 @@ sec_return_code_t sec_process_packet_hfn_ov(sec_context_handle_t sec_ctx_handle,
 
     job->sec_context = sec_context;
     job->ua_handle = ua_ctx_handle;
-    job->hfn_ov_value = hfn_ov_val;
+    job->dpovrd_value = hfn_ov_val;
 
     // update descriptor with pointers to input/output data and pointers to crypto information
     ASSERT(job->descr != NULL);
 
     /* Update SEC Job Descriptor for this packet with the relevant pointers
      * (i.e. Shared Descriptor pointer (per context), in packet address,
-     * out packet address)
+     * out packet address, etc.)
      */
-    ret = sec_pdcp_context_update_descriptor(sec_context, job, job->descr, 0 /* Not used */);
-
+    ret = sec_update_job_descriptor(sec_context, job, job->descr);
     SEC_ASSERT(ret == SEC_SUCCESS, ret,
-               "sec_pdcp_context_update_descriptor returned error code %d", ret);
+               "sec_update_job_descriptor returned error code %d", ret);
 
     // keep count of submitted packets for this sec context
     CONTEXT_ADD_PACKET(sec_context);

@@ -102,8 +102,8 @@ struct sec_job_t
     const sec_packet_t *in_packet;      /*< Input packet */
     const sec_packet_t *out_packet;     /*< Output packet */
     ua_context_handle_t ua_handle;      /*< UA handle for the context this packet belongs to */
-    uint32_t hfn_ov_value;              /*< HFN override value to be used for this job.
-                                            CAUTION: The value must be right aligned and of proper length (27 bits). */
+    uint32_t dpovrd_value;              /*< Value to be loaded in the DPOVRD register, if DPOVRD mechanism
+                                         * is enabled. */
 }__CACHELINE_ALIGNED;
 
 struct sec_outring_entry {

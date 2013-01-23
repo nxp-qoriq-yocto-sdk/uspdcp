@@ -341,7 +341,7 @@ int main(int argc, char *argv[])
     /* Because I need cacheline aligned mem in init_context_pools, I use memalign, instead of plain malloc
      *
      */
-    global_dma_mem_free = memalign(CACHE_LINE_SIZE, sizeof(sec_crypto_pdb_t)* MAX_SEC_CONTEXTS_PER_POOL * (MAX_SEC_JOB_RINGS + 1));
+    global_dma_mem_free = memalign(CACHE_LINE_SIZE, sizeof(sec_pdcp_pdb_t)* MAX_SEC_CONTEXTS_PER_POOL * (MAX_SEC_JOB_RINGS + 1));
     
     g_sec_vtop = test_vtop;
 #endif

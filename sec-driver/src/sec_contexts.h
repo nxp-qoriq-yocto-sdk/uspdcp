@@ -154,16 +154,18 @@ struct sec_context_t
     sec_context_usage_t state;
     /** Consumer index for packets processed on this context */
     uint32_t ci;
-    /** Crypto info received from UA.
-     * TODO: replace with union when other protocols besides PDCP will be supported!*/
-    const sec_pdcp_context_info_t *pdcp_crypto_info;
+    /** Crypto info received from UA. */
+    union {
+        const sec_pdcp_context_info_t *pdcp_crypto_info;
+        const sec_rlc_context_info_t *rlc_crypto_info;
+    }crypto_info;
     /** Shared descriptor used for this context */
-    struct sec_pdcp_sd_t    *sh_desc;
+    struct sec_sd_t    *sh_desc;
     /** Physical address of shared descriptor. Calculated when allocating the descriptor
      * in order to minimize the overhead of calling vtop. */
     dma_addr_t              sh_desc_phys;
-     /** Enable the HFN override by user for this context */
-     uint32_t               hfn_ov_en;
+     /** Enable DPOVRD mechanism for this context */
+     uint32_t               dpovrd_en;
     /** Validation pattern at end of structure. */
     uint32_t end_pattern;
 }__CACHELINE_ALIGNED;
