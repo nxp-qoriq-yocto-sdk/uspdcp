@@ -1,7 +1,7 @@
 ----------------------------------------------------------------------------------------------------
 ABOUT THIS FILE
 ----------------------------------------------------------------------------------------------------
-Date:    14 January 2013
+Date:    05 February 2013
 
 This Readme file contains details on SEC user space driver package contents as well as instructions
 showing how to compile and install SEC user space driver related binaries:
@@ -58,6 +58,15 @@ The package contains:
                          This is a two-thread application that performs loopback encapsulation/decapsulation of PDCP
                          data plane and control plane, using Scatter-Gather tables.
                          See <test-scenario-b2b>/readme.txt for more details
+
+                    ---> <test-scenario-poll-irq-napi-wcdma>
+                         This is a two-thread test application that allows testing RLC which tests all available 
+                         combinations of protocol direction (Uplink/Downlink), protocol direction (Encapsulate/
+                         Decapsulate), with an option of selecting a random subset
+                         of these. Both acknowledged and unacknowledged modes are tested. 
+                         All the obtained results are checked againsted pre-made reference test vectors.
+                         Exercises all the available options for retrieving processed packets: poll, IRQ, NAPI.
+                         See <test-scenario-poll-irq-napi-wcdma>/readme.txt for more details.
 
 ----------------------------------------------------------------------------------------------------
 HOW TO INSTALL SEC USER SPACE DRIVER
@@ -165,6 +174,7 @@ HOW TO RUN TESTS FOR SEC USER SPACE DRIVER
 
 * Run system tests:
     [psc9131rdb]~ ./test_sec_driver
+    [psc9131rdb]~ ./test_sec_driver_wcdma
 
 * Run benchmarking tests:
     [psc9131rdb]~ ./test_sec_driver_benchmark_sg

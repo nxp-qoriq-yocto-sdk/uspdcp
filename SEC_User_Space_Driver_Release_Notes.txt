@@ -1,8 +1,8 @@
 ----------------------------------------------------------------------------------------------------
 ABOUT THIS FILE
 ----------------------------------------------------------------------------------------------------
-Date:    14 January 2013
-SEC User Space Driver version:    2.7
+Date:    05 February 2013
+SEC User Space Driver version:    2.8
 
 This file contains SEC User Space Driver-related information about versioning, hardware, software,
 and tools dependencies, as well as known issues and a history of changes.
@@ -34,6 +34,11 @@ SEC USER SPACE DRIVER - ERRATA
 ----------------------------------------------------------------------------------------------------
 SEC USER SPACE DRIVER - CHANGELOG
 ----------------------------------------------------------------------------------------------------
+Version 2.8
+    - Added support for RLC processing
+    - Supported algorithms: NULL, Kasumi (f8) and Snow (f8)
+    - Both acknowledged and unacknowledged mode are supported
+    - Basic testing performed
 Version 2.7
     - Fully tested support for AES CTR encryption + SNOW f9 integrity
     - SNOW f8 encryption and AES CMAC integrity full support (encapsulation & decapsulation
