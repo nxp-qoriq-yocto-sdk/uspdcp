@@ -43,11 +43,6 @@
 /*==============================================================================
                               DEFINES AND MACROS
 ==============================================================================*/
-#ifdef SEC_HW_VERSION_3_3
-/** Length in bytes for PDCP control plane MAC-I */
-#define PDCP_MAC_I_LENGTH  4
-#endif
-
 /** Macro for initializing the common part of a SD performing PDCP control
  * plane encap or decap. It is useful only for combinations supported by the 
  * PROTOCOL operation in SEC.
