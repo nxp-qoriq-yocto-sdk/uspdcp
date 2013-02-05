@@ -188,8 +188,8 @@ static int create_c_plane_hw_acc_desc(sec_context_t *ctx)
     pdcp_sd = (struct sec_pdcp_sd_t*)ctx->sh_desc;
 
     SEC_INFO("Creating C-PLANE HW Acc. descriptor w/alg %s & auth alg %s",
-              ctx->pdcp_crypto_info->cipher_algorithm == SEC_ALG_AES ? "AES" : "SNOW",
-              ctx->pdcp_crypto_info->cipher_algorithm == SEC_ALG_AES ? "AES" : "SNOW");
+              pdcp_crypto_info->cipher_algorithm == SEC_ALG_AES ? "AES" : "SNOW",
+              pdcp_crypto_info->cipher_algorithm == SEC_ALG_AES ? "AES" : "SNOW");
 
     SEC_PDCP_INIT_CPLANE_SD(pdcp_sd);
 
@@ -955,7 +955,7 @@ static int create_c_plane_cipher_only_desc(sec_context_t *ctx)
 
             break;
         default:
-            SEC_INFO(" Unknown ciphering algorithm requested: %d", ctx->pdcp_crypto_info->cipher_algorithm);
+            SEC_INFO(" Unknown ciphering algorithm requested: %d", pdcp_crypto_info->cipher_algorithm);
             ASSERT(0);
             break;
     }
@@ -1050,6 +1050,8 @@ int sec_pdcp_context_set_crypto_info(sec_context_t *ctx,
                                      const sec_pdcp_context_info_t *crypto_info)
 {
     int ret = SEC_SUCCESS;
+
+    ASSERT(crypto_info != NULL);
 
     // store PDCP crypto info in context
     ctx->crypto_info.pdcp_crypto_info = crypto_info;

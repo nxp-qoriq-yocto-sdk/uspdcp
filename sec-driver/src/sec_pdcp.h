@@ -37,6 +37,7 @@
                                 INCLUDE FILES
 ==============================================================================*/
 #include "fsl_sec.h"
+#include "sec_contexts.h"
 #include "sec_hw_specific.h"
 
 /*==============================================================================
@@ -171,11 +172,11 @@
                          STRUCTURES AND OTHER TYPEDEFS
 ==============================================================================*/
 /** Forward structure declaration */
-typedef struct sec_job_t sec_job_t;
+//typedef struct sec_job_t sec_job_t;
 /** Forward structure declaration */
-typedef struct sec_descriptor_t sec_descriptor_t;
+//typedef struct sec_descriptor_t sec_descriptor_t;
 /** Forward structure declaration */
-typedef struct sec_context_t sec_context_t;
+//typedef struct sec_context_t sec_context_t;
 
 /** Structure describing the PDB (Protocol Data Block)
  * needed by protocol acceleration descriptors for

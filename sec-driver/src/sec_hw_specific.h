@@ -123,6 +123,11 @@
 #define CMD_PROTO_SNOW_ALG                      0x01
 #define CMD_PROTO_AES_ALG                       0x02
 
+/* RLC specific defines */
+#define CMD_PROTO_RLC_NULL_ALG                  0x00
+#define CMD_PROTO_RLC_KASUMI_ALG                0x01
+#define CMD_PROTO_RLC_SNOW_ALG                  0x02
+
 #define CMD_PROTO_DECAP                         0x06
 #define CMD_PROTO_ENCAP                         0x07
 

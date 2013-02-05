@@ -49,7 +49,8 @@ extern "C"{
 #include "fsl_sec.h"
 #include "sec_atomic.h"
 #include "sec_utils.h"
-#include "sec_pdcp.h"
+//#include "sec_pdcp.h"
+//#include "sec_rlc.h"
 #include "sec_hw_specific.h"
 
 /*==================================================================================================
@@ -78,8 +79,6 @@ extern "C"{
 /*==================================================================================================
                                  STRUCTURES AND OTHER TYPEDEFS
 ==================================================================================================*/
-
-
 /** Status of a SEC context. */
 typedef enum sec_context_usage_e
 {
@@ -87,6 +86,9 @@ typedef enum sec_context_usage_e
     SEC_CONTEXT_USED,        /*< SEC context is used and is located in the in-use list. */
     SEC_CONTEXT_RETIRING,    /*< SEC context is unused and is located in the retire list. */
 }sec_context_usage_t;
+
+/** Forward structure declaration */
+typedef struct sec_context_t sec_context_t;
 
 /** The declaration of a context pool. */
 typedef struct sec_contexts_pool_s

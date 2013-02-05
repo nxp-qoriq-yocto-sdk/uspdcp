@@ -45,6 +45,7 @@ extern "C" {
 #include "sec_job_ring.h"
 #include "sec_atomic.h"
 #include "sec_pdcp.h"
+#include "sec_rlc.h"
 #include "sec_hw_specific.h"
 #if (SEC_ENABLE_SCATTER_GATHER == ON)
 #include "sec_sg_utils.h"
@@ -113,6 +114,11 @@ typedef enum sec_driver_state_e
     SEC_DRIVER_STATE_RELEASE,   /*< Driver release is in progress */
 }sec_driver_state_t;
 
+/** Forward structure declaration */
+typedef struct sec_job_t sec_job_t;
+
+/** Forward structure declaration */
+typedef struct sec_descriptor_t sec_descriptor_t;
 /*==================================================================================================
                                       LOCAL CONSTANTS
 ==================================================================================================*/
@@ -881,13 +887,13 @@ static inline sec_return_code_t create_context(sec_context_t **ctx,
     return SEC_SUCCESS;
 }
 
-#if 0
+
 sec_return_code_t sec_create_rlc_context(sec_job_ring_handle_t job_ring_handle,
                                          const sec_rlc_context_info_t *rlc_ctx_nfo,
                                          sec_context_handle_t *sec_ctx_handle)
 {
     int ret = SEC_SUCCESS;
-    sec_context_t *ctx = NULL
+    sec_context_t *ctx = NULL;
     
     // Validate input arguments
     SEC_ASSERT(rlc_ctx_nfo != NULL, SEC_INVALID_INPUT_PARAM, "rlc_ctx_nfo is NULL");
@@ -903,7 +909,7 @@ sec_return_code_t sec_create_rlc_context(sec_job_ring_handle_t job_ring_handle,
     SEC_ASSERT((dma_addr_t)rlc_ctx_nfo->cipher_key % CACHE_LINE_SIZE == 0,
                SEC_INVALID_INPUT_PARAM,
                "Configured crypto key is not cacheline aligned");
-
+#ifdef SEC_RRC_PROCESSING
     if(rlc_ctx_nfo->integrity_key != NULL)
     {
         // Authentication keys must come from DMA memory area and must be cacheline aligned
@@ -911,7 +917,7 @@ sec_return_code_t sec_create_rlc_context(sec_job_ring_handle_t job_ring_handle,
                    SEC_INVALID_INPUT_PARAM,
                    "Configured integrity key is not cacheline aligned");
     }
-
+#endif // SEC_RRC_PROCESSING
     ret = create_context(&ctx, job_ring_handle);
     if(ret != SEC_SUCCESS)
     {
@@ -920,7 +926,7 @@ sec_return_code_t sec_create_rlc_context(sec_job_ring_handle_t job_ring_handle,
     }
     
     // Set the crypto info
-    ret = sec_pdcp_context_set_crypto_info(ctx, rlc_ctx_nfo);
+    ret = sec_rlc_context_set_crypto_info(ctx, rlc_ctx_nfo);
     if(ret != SEC_SUCCESS)
     {
         SEC_ERROR("rlc_ctx_nfo contains invalid data");
@@ -932,7 +938,7 @@ sec_return_code_t sec_create_rlc_context(sec_job_ring_handle_t job_ring_handle,
     {
         ctx->dpovrd_en = TRUE;
         SEC_DEBUG("Jr[%p].Context %p configured for HFN override",
-                  job_ring, ctx);
+                  job_ring_handle, ctx);
     }
 
     // set the notification callback per context
@@ -943,7 +949,7 @@ sec_return_code_t sec_create_rlc_context(sec_job_ring_handle_t job_ring_handle,
 
     return SEC_SUCCESS;
 }
-#endif
+
 sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle,
                                            const sec_pdcp_context_info_t *pdcp_ctx_info,
                                            sec_context_handle_t *sec_ctx_handle)
@@ -994,7 +1000,7 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
     {
         ctx->dpovrd_en = TRUE;
         SEC_DEBUG("Jr[%p].Context %p configured for HFN override",
-                  job_ring, ctx);
+                  job_ring_handle, ctx);
     }
 
     // set the notification callback per context
@@ -1004,6 +1010,11 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
     *sec_ctx_handle = (sec_context_handle_t)ctx;
 
     return SEC_SUCCESS;
+}
+
+sec_return_code_t sec_delete_rlc_context(sec_context_handle_t sec_ctx_handle)
+{
+    return sec_delete_pdcp_context (sec_ctx_handle);
 }
 
 sec_return_code_t sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle)

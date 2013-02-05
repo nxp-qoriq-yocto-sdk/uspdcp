@@ -38,6 +38,7 @@ extern "C" {
                                         INCLUDE FILES
 ==================================================================================================*/
 #include "sec_contexts.h"
+#include "sec_pdcp.h"
 #include "cgreen.h"
 
 #include <stdio.h>

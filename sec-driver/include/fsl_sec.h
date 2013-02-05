@@ -71,6 +71,27 @@ extern "C"{
 #define PDCP_ENCAPSULATION  0
 /** Indicates a PDCP context that will decapsulate (decrypt) packets */
 #define PDCP_DECAPSULATION  1
+
+/** Indicates a RLC acknowledged mode context.
+ * Value assigned to mode member from ::sec_rlc_context_info_t */
+#define RLC_ACKED_MODE      1
+
+/** Indicates a RLC unacknowledged mode context.
+ * Value assigned to mode member from ::sec_rlc_context_info_t */
+#define RLC_UNACKED_MODE    0
+
+/** Indicates an uplink RLC context.
+ * Value assigned to packet_direction from ::sec_rlc_context_info_t */
+#define RLC_UPLINK         0
+/** Indicates a downlink RLC context.
+ * Value assigned to packet_direction from ::sec_rlc_context_info_t */
+#define RLC_DOWNLINK       1
+
+/** Indicates a RLC context that will encapsulate (encrypt) packets */
+#define RLC_ENCAPSULATION  0
+/** Indicates a RLC context that will decapsulate (decrypt) packets */
+#define RLC_DECAPSULATION  1
+
 /*==================================================================================================
                                              ENUMS
 ==================================================================================================*/
@@ -161,6 +182,22 @@ typedef enum sec_crypto_alg_e
 
 }sec_crypto_alg_t;
 
+typedef enum sec_rlc_crypto_alg_e
+{
+    SEC_ALG_RLC_CRYPTO_NULL = 0,       /**< */
+    SEC_ALG_RLC_CRYPTO_KASUMI = 1,       /**<  */
+    SEC_ALG_RLC_CRYPTO_SNOW = 2,        /**<  */
+
+}sec_rlc_crypto_alg_t;
+
+#ifdef SEC_RRC_PROCESSING
+typedef enum sec_rlc_int_alg_e
+{
+    SEC_ALG_RLC_INT_KASUMI = 0,       /**< */
+    SEC_ALG_RLC_INT_SNOW = 1,        /**<  */
+
+}sec_rlc_int_alg_t;
+#endif // SEC_RRC_PROCESSING
 /*==================================================================================================
                                  STRUCTURES AND OTHER TYPEDEFS
 ==================================================================================================*/
@@ -329,6 +366,38 @@ typedef struct sec_pdcp_context_info_s
     sec_out_cbk notify_packet;          /**< Callback function to be called for all packets processed on this context. */
 } sec_pdcp_context_info_t;
 
+/** RLC context structure provided by User Application when a RLC context is created.
+ *  User Application fills this structure with data that is used by SEC user space driver
+ *  to create a SEC descriptor. This descriptor is used by SEC to process all packets
+ *  belonging to this RLC context. */
+typedef struct sec_rlc_context_info_s
+{
+    uint8_t     bearer:5;               /**< Radio bearer id. */
+    uint8_t     mode:1;                 /**< Acknowleged or Unacknowledged mode indication.
+                                             Possible values: #RLC_ACKED_MODE, #RLC_UNACKED_MODE. */
+    uint8_t     packet_direction:1;     /**< Direction can be uplink(#RLC_UPLINK) or downlink(#RLC_DOWNLINK). */
+    uint8_t     protocol_direction:1;   /**< Can be encapsulation(#RLC_ENCAPSULATION) or decapsulation(#RLC_DECAPSULATION)*/
+    uint8_t     cipher_algorithm;       /**< Cryptographic algorithm used: NULL/KASUMI(F8)/SNOW(F8).
+                                             Can have values from ::sec_rlc_crypto_alg_t enum. */
+#ifdef SEC_RRC_PROCESSING
+    uint8_t     integrity_algorithm;    /**< Integrity algorithm used: KASUMI(F9)/SNOW(F9).
+                                             Can have values from ::sec_rlc_int_alg_t enum. */
+#endif // SEC_RRC_PROCESSING
+    uint32_t    hfn;                    /**< HFN for this radio bearer. Represents the most significant bits from sequence number. */
+    uint32_t    hfn_threshold;          /**< HFN threshold for this radio bearer. If HFN matches or exceeds threshold,
+                                             sec_out_cbk will  be called with status ::SEC_STATUS_HFN_THRESHOLD_REACHED. */
+    uint8_t    *cipher_key;             /**< Ciphering key. Must be provided by User Application as DMA-capable memory,
+                                             just as it's done for packets.*/
+    uint8_t    cipher_key_len;          /**< Ciphering key length. */
+#ifdef SEC_RRC_PROCESSING
+    uint8_t    *integrity_key;          /**< Integrity key. Must be provided by User Application as DMA-capable memory,
+                                             just as it's done for packets.*/
+    uint8_t    integrity_key_len;       /**< Integrity key length. */
+#endif // SEC_RRC_PROCESSING
+    uint32_t   hfn_ov_en;               /**< Enables HFN override by user for this context */
+    void        *custom;                /**< User Application custom data for this RLC context. Usage to be defined. */
+    sec_out_cbk notify_packet;          /**< Callback function to be called for all packets processed on this context. */
+} sec_rlc_context_info_t;
 
 /** Configuration data structure that must be provided by UA when SEC user space driver is initialized */
 typedef struct sec_config_s
@@ -476,6 +545,40 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
                                            const sec_pdcp_context_info_t *sec_ctx_info,
                                            sec_context_handle_t *sec_ctx_handle);
 
+/** @brief Initializes a SEC RLC context with the data provided.
+ *
+ * Creates a SEC descriptor that will be used by SEC to process packets
+ * submitted for this RLC context. Context also registers a callback handler
+ * that is activated when packets are received from SEC.
+ *
+ * Returns back to the caller a SEC RLC context handle.
+ * This handle is passed back by the caller for sec_process_packet() calls.
+ * Call once for each RLC context.
+ *
+ * RLC context is affined to a Job Ring. This means that every packet submitted on this
+ * context will be processed by the same Job Ring. Hence, packet ordering is ensured at a
+ * RLC context level. If the caller does not specify a certain Job Ring for this context,
+ * the SEC userspace driver will choose one from the available Job Rings, in a round robin fashion.
+ *
+ * @note SEC user space driver does not check if a RLC context was already created with the same data!
+ *
+ * @param [in]  job_ring_handle    The Job Ring this RLC context will be affined to.
+ *                                 If set to NULL, the SEC user space driver will affine RLC context
+ *                                 to one from the available Job Rings, in a round robin fashion.
+ * @param [in]  sec_ctx_info       RLC context info filled by the caller. User application will not touch
+ *                                 this data until the SEC context is deleted with sec_delete_pdcp_context().
+ * @param [out] sec_ctx_handle     RLC context handle returned by SEC user space driver.
+ *
+ * @retval ::SEC_SUCCESS for successful execution
+ * @retval ::SEC_INVALID_INPUT_PARAM         when at least one invalid parameter was provided
+ * @retval ::SEC_DRIVER_NO_FREE_CONTEXTS     when there are no more free contexts
+ * @retval ::SEC_DRIVER_RELEASE_IN_PROGRESS  is returned if SEC driver release is in progress
+ * @retval ::SEC_DRIVER_NOT_INITIALIZED      is returned if SEC driver is not yet initialized.
+ */
+sec_return_code_t sec_create_rlc_context (sec_job_ring_handle_t job_ring_handle,
+                                          const sec_rlc_context_info_t *sec_ctx_info,
+                                          sec_context_handle_t *sec_ctx_handle);
+
 /** @brief Deletes a SEC PDCP context previously created.
  *
  * Deletes a PDCP context identified with the handle provided by the function caller.
@@ -500,7 +603,29 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
  */
 sec_return_code_t sec_delete_pdcp_context (sec_context_handle_t sec_ctx_handle);
 
-
+/** @brief Deletes a SEC RLC context previously created.
+ *
+ * Deletes a RLC context identified with the handle provided by the function caller.
+ * The handle was obtained by the caller using sec_create_pdcp_context() function.
+ * Call once for each RLC context.
+ * If called when there are still some packets awaiting to be processed by SEC for this context,
+ * the API will return #SEC_PACKETS_IN_FLIGHT. All per-context packets processed by SEC after
+ * this API is invoked will be raised to the User Application having status field set to ::SEC_STATUS_OVERDUE.
+ * The last overdue packet will have status set to ::SEC_STATUS_LAST_OVERDUE.
+ * Only after the last overdue packet is notified, the User Application can be sure the RLC context
+ * was removed from SEC user space driver.
+ *
+ * @param [in] sec_ctx_handle     RLC context handle.
+ *
+ * @retval ::SEC_SUCCESS                     for successful execution
+ * @retval ::SEC_PACKETS_IN_FLIGHT           in case there are some already submitted packets
+ *                                           for this context awaiting to be processed by SEC.
+ * @retval ::SEC_LAST_PACKET_IN_FLIGHT       in case there is only one already submitted packet.
+ * @retval ::SEC_DRIVER_RELEASE_IN_PROGRESS  is returned if SEC driver release is in progress.
+ * @retval ::SEC_INVALID_INPUT_PARAM         is returned in case the SEC context handle is invalid.
+ * @retval ::SEC_DRIVER_NOT_INITIALIZED      is returned if SEC driver is not yet initialized.
+ */
+sec_return_code_t sec_delete_rlc_context (sec_context_handle_t sec_ctx_handle);
 /**
     @}
  */
