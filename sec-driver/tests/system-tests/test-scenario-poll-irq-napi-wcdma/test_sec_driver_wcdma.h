@@ -81,10 +81,10 @@
 //////////////////////////////////////////////////////////////////////////////
 
 // Disable test application logging
-//#define test_printf(format, ...)
+#define test_printf(format, ...)
 
 // Enable test application logging
-#define test_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__)
+//#define test_printf(format, ...) printf("%s(): " format "\n", __FUNCTION__,  ##__VA_ARGS__)
 
 /******************************************************************************/
 // END OF CONFIGURATION SECTION
