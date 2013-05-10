@@ -8,7 +8,7 @@ AM_CFLAGS += -I$(TOP_LEVEL)/utils/test-frameworks/cgreen
 AM_CFLAGS += -I$(KERNEL_DIR)/drivers/misc
 AM_CFLAGS += -I$(IPC_DIR)/ipc/include
 AM_CFLAGS += -I$(IPC_DIR)/fsl_shm/include
-AM_CFLAGS += -DDEBUG
+AM_CFLAGS += -g -O0 -DDEBUG
 
 mixed_descs_tests_LDFLAGS := -L$(IPC_LIB_DIR) -lmem
 
