@@ -186,7 +186,7 @@ struct cplane_pdb_s{
     unsigned int res3:26;
     unsigned int threshold:27;
     unsigned int res4:5;
-}PACKED;
+}__packed;
 
 /** Structure describing the PDB (Protocol Data Block)
  * needed by protocol acceleration descriptors for
@@ -200,13 +200,13 @@ struct uplane_pdb_s{
         struct{
             unsigned int hfn:20;
             unsigned int res:12;
-        }PACKED hfn_l;
+        }__packed hfn_l;
         struct{
             unsigned int hfn:25;
             unsigned int res:7;
-        }PACKED hfn_s;
+        }__packed hfn_s;
         unsigned int word;
-    } PACKED hfn;
+    } __packed hfn;
     unsigned int bearer:5;
     unsigned int dir:1;
     unsigned int res3:26;
@@ -214,13 +214,13 @@ struct uplane_pdb_s{
         struct{
             unsigned int threshold:20;
             unsigned int res:12;
-        }PACKED threshold_l;
+        }__packed threshold_l;
         struct{
             unsigned int threshold:25;
             unsigned int res:7;
-        }PACKED threshold_s;
-    } PACKED threshold;
-}PACKED;
+        }__packed threshold_s;
+    } __packed threshold;
+}__packed;
 
 /** Structure for aggregating the two types of
  * PDBs existing in PDCP Driver.
@@ -231,8 +231,8 @@ typedef struct sec_pdcp_pdb_s
         uint32_t    content[4];
         struct cplane_pdb_s cplane_pdb;
         struct uplane_pdb_s uplane_pdb;
-    }PACKED pdb_content;
-}PACKED sec_pdcp_pdb_t;
+    }__packed pdb_content;
+}__packed sec_pdcp_pdb_t;
 
 /** Structure encompassing a shared descriptor,
  * containing all the information needed by a
@@ -253,7 +253,7 @@ struct sec_pdcp_sd_t{
     dma_addr_t                  key1_ptr;
     uint32_t                    hfn_ov_desc[9];
     struct protocol_operation_command_s protocol;
-} PACKED;
+} __packed;
 /*==============================================================================
                                  CONSTANTS
 ==============================================================================*/

@@ -36,7 +36,7 @@
 /*==============================================================================
                                 INCLUDE FILES
 ==============================================================================*/
-
+#include <compat.h>
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -159,11 +159,6 @@
 
 #endif
 
-/** Shortcut for __attribute__ ((packed)) */
-#define PACKED              __attribute__ ((packed))
-/** Shortcut for aligned to #CACHE_LINE_SIZE attribute */
-#define __CACHELINE_ALIGNED   __attribute__((aligned(CACHE_LINE_SIZE)))
-
 /** compute offset for structure member B in structure A */
 #ifndef offsetof
 #ifdef __GNUC__
@@ -173,10 +168,12 @@
 #endif
 #endif
 
+#ifndef container_of
 /** Get a pointer to beginning of structure which contains <member> */
 #define container_of(ptr, type, member) ({            \
  const typeof( ((type *)0)->member ) *__mptr = (ptr);    \
   (type *)( (char *)__mptr - offsetof(type,member) );})
+#endif
 
 /** counts the number of elements in an array */
 #ifndef countof
@@ -199,9 +196,6 @@
 #define likely(x)       __builtin_expect(!!(x), 1)
 #define unlikely(x)     __builtin_expect(!!(x), 0)
 #define __always_unused __attribute__((unused))
-
-/** Size in bytes of a cacheline. */
-#define CACHE_LINE_SIZE  32
 
 /** Set indicated bits in register */
 #define setbits32(_addr, _v) out_be32((_addr), in_be32(_addr) |  (_v))
@@ -257,19 +251,9 @@
                          GLOBAL VARIABLE DECLARATIONS
 ==============================================================================*/
 
-
 /*==============================================================================
                             FUNCTION PROTOTYPES
 ==============================================================================*/
-/** Write 32bit values */
-static inline void out_be32(volatile uint32_t *addr, uint32_t val) {
-	*addr = val;
-}
-
-/** Read 32bit values */
-static inline uint32_t in_be32(const volatile uint32_t *addr) {
-	return *addr;
-}
 
 /*============================================================================*/
 

@@ -70,9 +70,6 @@ extern "C" {
 // Maximum number of IRQs to be generated in a test
 #define MAX_IRQ     50
 
-/** Size in bytes of a cacheline. */
-#define CACHE_LINE_SIZE  32
-
 // For keeping the code relatively the same between HW versions
 #define dma_mem_memalign  test_memalign
 #define dma_mem_free      test_free
@@ -144,7 +141,7 @@ static void test_setup(void)
     assert_not_equal_with_message(g_usmmgr, NULL, "ERROR on fsl_usmmgr_init");
 
     // Fill SEC driver configuration data
-    sec_config_data.memory_area = dma_mem_memalign(CACHE_LINE_SIZE,SEC_DMA_MEMORY_SIZE);
+    sec_config_data.memory_area = dma_mem_memalign(L1_CACHE_BYTES,SEC_DMA_MEMORY_SIZE);
     sec_config_data.sec_drv_vtop = test_vtop;
 
     sec_config_data.work_mode = SEC_STARTUP_POLLING_MODE;

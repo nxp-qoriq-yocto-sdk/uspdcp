@@ -78,7 +78,7 @@ struct fifo_t
     volatile uint32_t cidx;                 /*< Consumer index for fifo */
     void* items[FIFO_CAPACITY];             /*< Array of items */
     volatile uint32_t pidx;                 /*< Producer index for fifo */
-}__CACHELINE_ALIGNED;
+}____cacheline_aligned;
 
 /*==================================================================================================
                                            CONSTANTS

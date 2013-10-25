@@ -84,8 +84,6 @@ extern "C" {
 // Offset in input and output packet, where PDCP header starts
 #define PACKET_OFFSET   3
 
-#define CACHE_LINE_SIZE  32
-
 // For keeping the code relatively the same between HW versions
 #define dma_mem_memalign    test_memalign
 #define dma_mem_free        test_free
@@ -1321,7 +1319,7 @@ static int setup_sec_environment(void)
     //////////////////////////////////////////////////////////////////////////////
     // 1. Initialize SEC user space driver requesting #JOB_RING_NUMBER Job Rings
     //////////////////////////////////////////////////////////////////////////////
-    sec_config_data.memory_area = dma_mem_memalign(CACHE_LINE_SIZE,SEC_DMA_MEMORY_SIZE);
+    sec_config_data.memory_area = dma_mem_memalign(L1_CACHE_BYTES,SEC_DMA_MEMORY_SIZE);
     sec_config_data.sec_drv_vtop = test_vtop;
 
     assert(sec_config_data.memory_area != NULL);

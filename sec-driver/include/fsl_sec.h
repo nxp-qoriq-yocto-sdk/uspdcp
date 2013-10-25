@@ -47,9 +47,9 @@ extern "C"{
 /*==================================================================================================
                                          INCLUDE FILES
 ==================================================================================================*/
-#include "fsl_sec_config.h"
 #include <stdint.h>
-
+#include <compat.h>
+#include "fsl_sec_config.h"
 /*==================================================================================================
                                        DEFINES AND MACROS
 ==================================================================================================*/
@@ -201,15 +201,6 @@ typedef enum sec_rlc_int_alg_e
 /*==================================================================================================
                                  STRUCTURES AND OTHER TYPEDEFS
 ==================================================================================================*/
-
-#if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
-/** Physical address on 36 bits or more. MUST be kept in synch with same define from kernel! */
-typedef uint64_t dma_addr_t;
-#else
-/** Physical address on 32 bits. MUST be kept in synch with same define from kernel!*/
-typedef uint32_t dma_addr_t;
-#endif
-
 /** Data type used for specifying address for packets submitted
  *  by User Application. Assume physical addressing. */
 typedef dma_addr_t  packet_addr_t;
@@ -263,7 +254,7 @@ typedef struct sec_packet_s
     uint32_t        total_length;   /**< Total Data Length in all fragments including the parent buffer. */
     uint32_t        num_fragments;  /**< Is set only in the first fragment from a s/g packet.
                                          It excludes the parent buffer. */
-    uint32_t        pad[2];         /**< Padding to multiple of CACHE_LINE_SIZE. */
+    uint32_t        pad[2];         /**< Padding to multiple of L1_CACHE_BYTES. */
 
 }sec_packet_t;
 

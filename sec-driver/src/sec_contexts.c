@@ -37,10 +37,10 @@ extern "C" {
 /*=================================================================================================
                                         INCLUDE FILES
 ==================================================================================================*/
+#include <stdlib.h>
 #include "list.h"
 #include "sec_contexts.h"
 #include "sec_utils.h"
-#include <stdlib.h>
 
 /*==================================================================================================
                                      LOCAL CONSTANTS
@@ -133,7 +133,7 @@ static void run_contexts_garbage_colector(sec_contexts_pool_t * pool);
  * @param [in] node         A list node.
  *
  * */
-static void node_modify_after_delete(list_node_t *node);
+static void node_modify_after_delete(struct list_head *node);
 
 /** @brief This function matches the retiring contexts with
  * no packets in flight and which can be reused (moved to free list).
@@ -143,14 +143,14 @@ static void node_modify_after_delete(list_node_t *node);
  * @param [in] node         A list node.
  *
  * */
-static uint8_t node_match(list_node_t *node);
+static uint8_t node_match(struct list_head *node);
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
 static void destroy_pool_list(list_t * list)
 {
     sec_context_t *ctx = NULL;
-    list_node_t * node = NULL;
+    struct list_head *node = NULL;
 
     ASSERT(list != NULL);
 
@@ -199,7 +199,7 @@ static void free_in_use_context(sec_contexts_pool_t * pool, sec_context_t * ctx)
     pool->free_list.add_tail(&pool->free_list, &ctx->node);
 }
 
-static uint8_t node_match(list_node_t *node)
+static uint8_t node_match(struct list_head *node)
 {
     sec_context_t * ctx = NULL;
 
@@ -217,7 +217,7 @@ static uint8_t node_match(list_node_t *node)
     return 0;
 }
 
-static void node_modify_after_delete(list_node_t *node)
+static void node_modify_after_delete(struct list_head *node)
 {
     sec_context_t * ctx = NULL;
 
@@ -314,7 +314,7 @@ sec_return_code_t init_contexts_pool(sec_contexts_pool_t * pool,
         ctx->ci = 0;
         ctx->pool = pool;
 
-        SEC_ASSERT ((dma_addr_t)*dma_mem % CACHE_LINE_SIZE == 0,
+        SEC_ASSERT ((dma_addr_t)*dma_mem % L1_CACHE_BYTES == 0,
                       SEC_INVALID_INPUT_PARAM,
                       "Current memory position is not cacheline aligned."
                       "Context= %p", ctx);
@@ -372,7 +372,7 @@ void destroy_contexts_pool(sec_contexts_pool_t * pool)
 sec_context_t* get_free_context(sec_contexts_pool_t * pool)
 {
     sec_context_t * ctx = NULL;
-    list_node_t * node = NULL;
+    struct list_head *node = NULL;
     uint8_t run_gc = 0;
 
     ASSERT(pool != NULL);

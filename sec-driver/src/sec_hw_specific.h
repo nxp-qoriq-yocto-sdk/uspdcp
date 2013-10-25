@@ -391,11 +391,11 @@ union hw_error_code{
         struct{
             uint32_t    ssrc:4;
             uint32_t    ssed_val:28;
-        }PACKED value;
+        }__packed value;
         struct {
             uint32_t    ssrc:4;
             uint32_t     res:28;
-        }PACKED no_status_src;
+        }__packed no_status_src;
         struct {
             uint32_t    ssrc:4;
             uint32_t    jmp:1;
@@ -403,36 +403,36 @@ union hw_error_code{
             uint32_t    desc_idx:8;
             uint32_t    cha_id:4;
             uint32_t    err_id:4;
-        }PACKED ccb_status_src;
+        }__packed ccb_status_src;
         struct {
             uint32_t    ssrc:4;
             uint32_t    jmp:1;
             uint32_t    res:11;
             uint32_t    desc_idx:8;
             uint32_t    offset:8;
-        }PACKED jmp_halt_user_src;
+        }__packed jmp_halt_user_src;
         struct {
             uint32_t    ssrc:4;
             uint32_t    jmp:1;
             uint32_t    res:11;
             uint32_t    desc_idx:8;
             uint32_t    desc_err:8;
-        }PACKED deco_src;
+        }__packed deco_src;
         struct {
             uint32_t    ssrc:4;
             uint32_t    res:17;
             uint32_t    naddr:3;
             uint32_t    desc_err:8;
-        }PACKED jr_src;
+        }__packed jr_src;
         struct {
             uint32_t    ssrc:4;
             uint32_t    jmp:1;
             uint32_t    res:11;
             uint32_t    desc_idx:8;
             uint32_t    cond:8;
-        }PACKED jmp_halt_cond_src;
-    }PACKED error_desc;
-}PACKED;
+        }__packed jmp_halt_cond_src;
+    }__packed error_desc;
+}__packed;
 
 /** Union describing a descriptor header.
  */
@@ -472,8 +472,8 @@ struct descriptor_header_s {
             /* 24 */ unsigned int res4:1;
             /* 25 */ unsigned int desclen:7;
         } jd;
-    } PACKED command;
-} PACKED;
+    } __packed command;
+} __packed;
 
 /** Union describing a KEY command in a descriptor.
  */
@@ -492,9 +492,9 @@ struct key_command_s {
             unsigned int tk:1;
             unsigned int rsvd1:5;
             unsigned int length:10;
-        } PACKED field;
-    } PACKED command;
-} PACKED;
+        } __packed field;
+    } __packed command;
+} __packed;
 
 /** Union describing a PROTOCOL command
  * in a descriptor.
@@ -507,9 +507,9 @@ struct protocol_operation_command_s {
             unsigned int optype:3;
             unsigned char protid;
             unsigned short protinfo;
-        } PACKED field;
-    } PACKED command;
-} PACKED;
+        } __packed field;
+    } __packed command;
+} __packed;
 
 /** Union describing a SEQIN command in a
  * descriptor.
@@ -529,8 +529,8 @@ struct seq_in_command_s {
             unsigned int res2:4;
             unsigned int length:16;
         } field;
-    } PACKED command;
-}PACKED;
+    } __packed command;
+}__packed;
 
 /** Union describing a SEQOUT command in a
  * descriptor.
@@ -548,8 +548,8 @@ struct seq_out_command_s{
             unsigned int res2:5;
             unsigned int length:16;
         } field;
-    } PACKED command;
-} PACKED;
+    } __packed command;
+} __packed;
 
 struct load_command_s{
     union {
@@ -563,8 +563,8 @@ struct load_command_s{
             unsigned char offset;
             unsigned char length;
         } fields;
-    } PACKED command;
-} PACKED;
+    } __packed command;
+} __packed;
 
 /** Structure encompassing a general shared descriptor of maximum
  * size (64 WORDs). Usually, other specific shared descriptor structures 
@@ -573,7 +573,7 @@ struct load_command_s{
  */
 struct sec_sd_t {
     uint32_t rsvd[MAX_DESC_SIZE_WORDS];
-} __CACHELINE_ALIGNED PACKED;
+} ____cacheline_aligned __packed;
 
 /** Structure encompassing a job descriptor which processes
  * a single packet from a context. The job descriptor references
@@ -594,7 +594,7 @@ struct sec_descriptor_t {
     uint32_t      dpovrd;
     struct sec_job_t *job_ptr;
     uint32_t      pad[5];
-} __CACHELINE_ALIGNED PACKED;
+} ____cacheline_aligned __packed;
 /*==============================================================================
                                  CONSTANTS
 ==============================================================================*/

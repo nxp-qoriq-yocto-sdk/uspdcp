@@ -123,7 +123,7 @@ struct rlc_pdb_s{
     uint32_t hfn_res;
     uint32_t bearer_dir_res;
     uint32_t hfn_thr_res;
-} PACKED;
+} __packed;
 
 /** Structure for aggregating the two types of
  * PDBs existing in PDCP Driver.
@@ -133,8 +133,8 @@ typedef struct sec_rlc_pdb_s
     union {
         uint32_t    content[4];
         struct rlc_pdb_s rlc_pdb;
-    }PACKED pdb_content;
-}PACKED sec_rlc_pdb_t;
+    }__packed pdb_content;
+}__packed sec_rlc_pdb_t;
 
 /** Structure for a RLC shared descriptor */
 struct sec_rlc_sd_t{
@@ -145,7 +145,7 @@ struct sec_rlc_sd_t{
     dma_addr_t                  key1_ptr;
     uint32_t                    hfn_ov_desc[9];
     struct protocol_operation_command_s protocol;
-} PACKED;
+} __packed;
 /*==============================================================================
                                  CONSTANTS
 ==============================================================================*/

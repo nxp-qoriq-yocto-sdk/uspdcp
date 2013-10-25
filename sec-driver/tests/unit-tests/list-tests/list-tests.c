@@ -52,7 +52,7 @@ extern "C" {
 ==================================================================================================*/
 typedef struct data_for_test_s
 {
-	list_node_t node;
+	struct list_head node;
 	int packets_no;
 	int val_to_modify;
 }data_for_test_t;
@@ -95,8 +95,8 @@ static void test_list_order_of_nodes_addition(void)
 {
 	list_t list;
 #define LIST_NODES 10
-	list_node_t nodes[LIST_NODES];
-	list_node_t *node = NULL;
+	struct list_head nodes[LIST_NODES];
+	struct list_head *node = NULL;
 	int i = 0;
 
 	memset(nodes, 0, sizeof(nodes));
@@ -135,7 +135,7 @@ static void test_list_delete_nodes(void)
 {
 	list_t list;
 #define LIST_NODES 10
-	list_node_t nodes[LIST_NODES];
+	struct list_head nodes[LIST_NODES];
 	int i = 0;
 
 	memset(nodes, 0, sizeof(nodes));
@@ -166,8 +166,8 @@ static void test_list_mixed_adds_and_deletes(void)
 {
 	list_t list;
 #define LIST_NODES 10
-	list_node_t nodes[LIST_NODES];
-	list_node_t *node = NULL;
+	struct list_head nodes[LIST_NODES];
+	struct list_head *node = NULL;
 	int i = 0;
 
 	memset(nodes, 0, sizeof(nodes));
@@ -235,8 +235,8 @@ static void test_list_attach_list_to_tail(void)
 	list_t list_a;
 	list_t list_b;
 #define LIST_NODES 10
-	list_node_t nodes[LIST_NODES];
-	list_node_t *node;
+	struct list_head nodes[LIST_NODES];
+	struct list_head *node;
 	int i = 0;
 
 	memset(nodes, 0, sizeof(nodes));
@@ -288,7 +288,7 @@ static void test_list_attach_list_to_tail(void)
 	list_destroy(&list_b);
 }
 
-static uint8_t node_match_1(list_node_t *node)
+static uint8_t node_match_1(struct list_head *node)
 {
 	data_for_test_t * data = NULL;
 
@@ -304,7 +304,7 @@ static uint8_t node_match_1(list_node_t *node)
 #define OLD_TEST_VALUE 5
 #define NEW_TEST_VALUE 7
 
-static void node_modify_after_delete_1(list_node_t *node)
+static void node_modify_after_delete_1(struct list_head *node)
 {
 	data_for_test_t * data = NULL;
 
@@ -321,7 +321,7 @@ static void test_list_delete_matching_nodes(void)
 	list_t list_of_del_nodes;
 #define LIST_NODES 10
 	data_for_test_t nodes[LIST_NODES];
-	list_node_t * node;
+	struct list_head * node;
 	data_for_test_t * data;
 
 	int i = 0;
@@ -402,7 +402,7 @@ static void test_list_delete_matching_nodes(void)
 	list_destroy(&list);
 }
 
-static uint8_t node_match_2(list_node_t *node)
+static uint8_t node_match_2(struct list_head *node)
 {
 	assert(node != NULL);
 
@@ -410,7 +410,7 @@ static uint8_t node_match_2(list_node_t *node)
 	return 1;
 }
 
-static void node_modify_after_delete_2(list_node_t *node)
+static void node_modify_after_delete_2(struct list_head *node)
 {
 	data_for_test_t * data = NULL;
 
@@ -427,7 +427,7 @@ static void test_list_delete_matching_nodes_all(void)
 	list_t list_of_del_nodes;
 #define LIST_NODES 10
 	data_for_test_t nodes[LIST_NODES];
-	list_node_t * node;
+	struct list_head * node;
 	data_for_test_t * data;
 
 	int i = 0;

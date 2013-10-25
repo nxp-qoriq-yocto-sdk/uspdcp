@@ -118,9 +118,6 @@ extern "C" {
 // Must be at least 8, for statistics reasons
 #define TEST_OFFSET 8
 
-/** Size in bytes of a cacheline. */
-#define CACHE_LINE_SIZE  32
-
 /** Length of the MAC_I */
 #define ICV_LEN 4
 
@@ -1310,7 +1307,7 @@ static int setup_sec_environment(void)
     //////////////////////////////////////////////////////////////////////////////
     // 1. Initialize SEC user space driver requesting #JOB_RING_NUMBER Job Rings
     //////////////////////////////////////////////////////////////////////////////
-    sec_config_data.memory_area = dma_mem_memalign(CACHE_LINE_SIZE,SEC_DMA_MEMORY_SIZE);
+    sec_config_data.memory_area = dma_mem_memalign(L1_CACHE_BYTES,SEC_DMA_MEMORY_SIZE);
     assert(sec_config_data.memory_area != NULL);
 
     sec_config_data.sec_drv_vtop = test_vtop;

@@ -43,6 +43,7 @@ extern "C"{
 /*==================================================================================================
                                          INCLUDE FILES
 ==================================================================================================*/
+#include <compat.h>
 #include <stdint.h>
 #include <pthread.h>
 /*==================================================================================================
@@ -57,20 +58,6 @@ extern "C"{
 /*==================================================================================================
                                  STRUCTURES AND OTHER TYPEDEFS
 ==================================================================================================*/
-/** A list node.
- *
- *  The list_node_t must be declared inside the data structure
- *  that will be included in a list.
- *
- *  */
-typedef struct list_node_s
-{
-	/** Pointer to the next node in the list. */
-	struct list_node_s *next;
-	/** Pointer to the previous node in the list. */
-	struct list_node_s *prev;
-}list_node_t;
-
 struct list_s;
 
 /** @brief Check if list is empty.
@@ -87,7 +74,7 @@ typedef uint8_t (*is_empty_func)(struct list_s * list);
  * @param [in] list              Pointer to the list.
  * @param [in] node              Pointer to the node that must be added to the list.
  * */
-typedef void (*add_tail_func)(struct list_s *list, list_node_t* node);
+typedef void (*add_tail_func)(struct list_s *list, struct list_head *node);
 
 /** @brief Remove the node from the head of the list.
  *
@@ -99,7 +86,7 @@ typedef void (*add_tail_func)(struct list_s *list, list_node_t* node);
  *
  * @return      The node removed from the head of the list.
  * */
-typedef list_node_t* (*remove_first_func)(struct list_s *list);
+typedef struct list_head* (*remove_first_func)(struct list_s *list);
 
 /** @brief Remove a specified node from the list (the node can be
  * located anywhere in the list).
@@ -111,7 +98,7 @@ typedef list_node_t* (*remove_first_func)(struct list_s *list);
  * @param [in] list              Pointer to the list.
  * @param [in] node              Pointer to the node that must be deleted from the list.
  * */
-typedef void (*delete_node_func)(struct list_s * list, list_node_t *node);
+typedef void (*delete_node_func)(struct list_s * list, struct list_head *node);
 
 /** @brief Add the nodes from one list to the tail of another list.
  *
@@ -134,7 +121,7 @@ typedef void (*attach_list_to_tail_func)(struct list_s *list, struct list_s *new
  * @return 1 if node matches
  * @return 0 if node does not match
  * */
-typedef uint8_t (*node_match_func)(list_node_t *node);
+typedef uint8_t (*node_match_func)(struct list_head *node);
 
 /** @brief Function that modifies a node after being deleted from a list.
  *
@@ -144,7 +131,7 @@ typedef uint8_t (*node_match_func)(list_node_t *node);
  * @param [in] node              Pointer to the node that is checked if it matches the user criteria.
  *
  * */
-typedef void (*node_modify_after_delete_func)(list_node_t *node);
+typedef void (*node_modify_after_delete_func)(struct list_head *node);
 
 /** @brief Function that deletes all the nodes that match a user criteria.
  * After deleting the nodes, they are modified according to user's desires and placed
@@ -233,7 +220,7 @@ typedef struct list_s
 	/** Dummy node of the list. Can be considered as both
 	 * the head and the tail of the list, because this is a
 	 * circular list. */
-	list_node_t head;
+	struct list_head head;
 
 	/** Access to list can be synchronized, if requested so.
 	 * The synchronization is done using a mutex. */

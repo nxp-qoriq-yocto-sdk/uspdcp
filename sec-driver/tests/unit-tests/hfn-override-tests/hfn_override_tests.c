@@ -96,9 +96,6 @@ extern "C" {
 // Max length in bytes for a confidentiality /integrity key.
 #define MAX_KEY_LENGTH    32
 
-/** Size in bytes of a cacheline. */
-#define CACHE_LINE_SIZE  32
-
 // For keeping the code relatively the same between HW versions
 #define dma_mem_memalign    test_memalign
 #define dma_mem_free        test_free
@@ -329,7 +326,7 @@ static void test_free(void *ptr, size_t size)
 static void test_setup(void)
 {
     // Fill SEC driver configuration data
-    sec_config_data.memory_area = dma_mem_memalign(CACHE_LINE_SIZE, SEC_DMA_MEMORY_SIZE);
+    sec_config_data.memory_area = dma_mem_memalign(L1_CACHE_BYTES, SEC_DMA_MEMORY_SIZE);
     sec_config_data.sec_drv_vtop = test_vtop;
 
     sec_config_data.work_mode = SEC_STARTUP_POLLING_MODE;

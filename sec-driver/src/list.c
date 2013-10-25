@@ -39,7 +39,6 @@ extern "C" {
 ==================================================================================================*/
 #include "list.h"
 #include "sec_utils.h"
-
 /*==================================================================================================
                                      LOCAL CONSTANTS
 ==================================================================================================*/
@@ -71,7 +70,7 @@ extern "C" {
  *
  * @see Description of type ::is_empty_func
  * */
-static uint8_t list_empty(list_t * list);
+static uint8_t list_empty_no_lock(list_t * list);
 /** Synchronized implementation of a function of type ::is_empty_func .
  *
  * @see Description of type ::is_empty_func
@@ -82,40 +81,41 @@ static uint8_t list_empty_with_lock(list_t * list);
  *
  * @see Description of type ::remove_first_func
  * */
-static list_node_t* list_remove_first(list_t *list);
+static struct list_head* list_remove_first_no_lock(list_t *list);
 /** Synchronized implementation of a function of type ::remove_first_func .
  *
  * @see Description of type ::remove_first_func
  * */
-static list_node_t* list_remove_first_with_lock(list_t *list);
+static struct list_head* list_remove_first_with_lock(list_t *list);
 
 /** Unsynchronized implementation of a function of type ::add_tail_func .
  *
  * @see Description of type ::add_tail_func
  * */
-static void list_add_tail(list_t *list, list_node_t* node);
+static void list_add_tail_no_lock(list_t *list, struct list_head *node);
+
 /** Synchronized implementation of a function of type ::add_tail_func .
  *
  * @see Description of type ::add_tail_func
  * */
-static void list_add_tail_with_lock(list_t *list, list_node_t* node);
+static void list_add_tail_with_lock(list_t *list, struct list_head* node);
 
 /** Unsynchronized implementation of a function of type ::delete_node_func .
  *
  * @see Description of type ::delete_node_func
  * */
-static void list_delete_node(list_t * list, list_node_t *node);
+static void list_delete_node_no_lock(list_t * list, struct list_head *node);
 /** Synchronized implementation of a function of type ::delete_node_func .
  *
  * @see Description of type ::delete_node_func
  * */
-static void list_delete_node_with_lock(list_t * list, list_node_t *node);
+static void list_delete_node_with_lock(list_t * list, struct list_head *node);
 
 /** Unsynchronized implementation of a function of type ::attach_list_to_tail_func .
  *
  * @see Description of type ::attach_list_to_tail_func
  * */
-static void list_attach_list_to_tail(list_t *list, list_t *new_list);
+static void list_attach_list_to_tail_no_lock(list_t *list, list_t *new_list);
 /** Synchronized implementation of a function of type ::attach_list_to_tail_func .
  *
  * @see Description of type ::attach_list_to_tail_func
@@ -126,7 +126,7 @@ static void list_attach_list_to_tail_with_lock(list_t *list, list_t *new_list);
  *
  * @see Description of type ::delete_matching_nodes_func
  * */
-static void list_delete_matching_nodes(list_t *list,
+static void list_delete_matching_nodes_no_lock(list_t *list,
 		                        list_t *deleted_nodes_list,
 		                        node_match_func is_match,
                                 node_modify_after_delete_func node_modify_after_delete);
@@ -149,7 +149,7 @@ static void list_delete_matching_nodes_with_lock(list_t *list,
  *
  * @return Pointer to the first node in the list.
  * */
-static list_node_t* get_first(list_t * list);
+static struct list_head* get_first(list_t * list);
 
 /** @brief Get a pointer to the next node starting from a specific node in the list.
  *
@@ -163,7 +163,7 @@ static list_node_t* get_first(list_t * list);
  *
  * @return Pointer to the first node following the specified node.
  * */
-static list_node_t* get_next(list_node_t * node);
+static struct list_head* get_next(struct list_head * node);
 
 /** @brief Checks if a specified node is the end of the list (the dummy node)
  *
@@ -176,13 +176,13 @@ static list_node_t* get_next(list_node_t * node);
  * @return 1 if specified node is the dummy node of the list meaning that the end of the list
  *           was reached.
  * */
-static uint8_t list_end(list_t * list, list_node_t * node);
+static uint8_t list_end(list_t * list, struct list_head *node);
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
-static uint8_t list_empty(list_t * list)
+static uint8_t list_empty_no_lock(list_t *list)
 {
-	return ((list->head.next == &list->head) && (list->head.prev == &list->head));
+	return list_empty(&list->head);
 }
 
 static uint8_t list_empty_with_lock(list_t * list)
@@ -199,7 +199,7 @@ static uint8_t list_empty_with_lock(list_t * list)
     pthread_mutex_lock(&list->mutex);
     ASSERT(mutex_ret == 0);
 
-	ret = list_empty(list);
+	ret = list_empty(&list->head);
 #ifdef DEBUG
     mutex_ret =
 #endif
@@ -211,7 +211,7 @@ static uint8_t list_empty_with_lock(list_t * list)
 	return ret;
 }
 
-static uint8_t list_end(list_t * list, list_node_t * node)
+static uint8_t list_end(list_t * list, struct list_head *node)
 {
 	ASSERT(list != NULL);
 	ASSERT(node != NULL);
@@ -219,10 +219,10 @@ static uint8_t list_end(list_t * list, list_node_t * node)
 	return (node == &list->head);
 }
 
-static list_node_t* list_remove_first(list_t *list)
+static struct list_head* list_remove_first_no_lock(list_t *list)
 {
 
-	list_node_t * node = list->head.next;
+	struct list_head *node = list->head.next;
 
 	ASSERT(node != NULL);
 	ASSERT(node->next != NULL);
@@ -237,15 +237,15 @@ static list_node_t* list_remove_first(list_t *list)
 	return node;
 }
 
-static list_node_t* list_remove_first_with_lock(list_t *list)
+static struct list_head* list_remove_first_with_lock(list_t *list)
 {
-	list_node_t * node;
+	struct list_head *node;
 
 	ASSERT(list != NULL);
 	if( pthread_mutex_lock(&list->mutex) != 0 )
         return NULL;
 
-	node = list_remove_first(list);
+	node = list_remove_first_no_lock(list);
 
 	if( pthread_mutex_unlock(&list->mutex) != 0 )
         return NULL;
@@ -253,21 +253,17 @@ static list_node_t* list_remove_first_with_lock(list_t *list)
 	return node;
 }
 
-static void list_add_tail(list_t *list, list_node_t* node)
+static void list_add_tail_no_lock(list_t *list, struct list_head *node)
 {
 	ASSERT(node != NULL);
     ASSERT( list->head.prev != NULL );
     ASSERT( &list->head != NULL );
 
-	list->head.prev->next = node;
-	node->prev = list->head.prev;
-	list->head.prev = node;
-	node->next = &list->head;
-
+    list_add_tail(node, &list->head);
 
 }
 
-static void list_add_tail_with_lock(list_t *list, list_node_t* node)
+static void list_add_tail_with_lock(list_t *list, struct list_head *node)
 {
 #ifdef DEBUG
     int ret;
@@ -281,7 +277,7 @@ static void list_add_tail_with_lock(list_t *list, list_node_t* node)
 
     ASSERT(ret == 0);
 
-    list_add_tail(list, node);
+    list_add_tail(node, &list->head);
 
 #ifdef DEBUG
     ret =
@@ -291,7 +287,7 @@ static void list_add_tail_with_lock(list_t *list, list_node_t* node)
     ASSERT(ret == 0);
 }
 
-static void list_delete_node(list_t * list, list_node_t *node)
+static void list_delete_node_no_lock(list_t * list, struct list_head *node)
 {
 	ASSERT(node != NULL);
 	ASSERT(node->next != NULL);
@@ -306,7 +302,7 @@ static void list_delete_node(list_t * list, list_node_t *node)
 	node->prev = node;
 }
 
-static void list_delete_node_with_lock(list_t * list, list_node_t *node)
+static void list_delete_node_with_lock(list_t * list, struct list_head *node)
 {
 #ifdef DEBUG
     int ret;
@@ -319,7 +315,7 @@ static void list_delete_node_with_lock(list_t * list, list_node_t *node)
     pthread_mutex_lock(&list->mutex);
     
     ASSERT(ret == 0);
-	list_delete_node(list, node);
+	list_delete_node_no_lock(list, node);
 
 #ifdef DEBUG
     ret =
@@ -329,7 +325,7 @@ static void list_delete_node_with_lock(list_t * list, list_node_t *node)
     ASSERT(ret == 0);
 }
 
-static list_node_t* get_first(list_t * list)
+static struct list_head* get_first(list_t * list)
 {
 	ASSERT(list != NULL);
 	ASSERT(list->head.next != NULL);
@@ -337,7 +333,7 @@ static list_node_t* get_first(list_t * list)
 	return list->head.next;
 }
 
-static list_node_t* get_next(list_node_t * node)
+static struct list_head* get_next(struct list_head *node)
 {
 	ASSERT(node != NULL);
 	ASSERT(node->next != NULL);
@@ -345,10 +341,10 @@ static list_node_t* get_next(list_node_t * node)
 	return node->next;
 }
 
-static void list_attach_list_to_tail(list_t *list, list_t *new_list)
+static void list_attach_list_to_tail_no_lock(list_t *list, list_t *new_list)
 {
 	ASSERT(new_list != NULL);
-	ASSERT(list_empty(new_list) == 0);
+	ASSERT(list_empty_no_lock(new_list) == 0);
 
 	// connect first node from the new list with the last node from the first list
 	list->head.prev->next = new_list->head.next;
@@ -375,7 +371,7 @@ static void list_attach_list_to_tail_with_lock(list_t *list, list_t *new_list)
     
     ASSERT(ret == 0);
 
-    list_attach_list_to_tail(list, new_list);
+    list_attach_list_to_tail_no_lock(list, new_list);
 
 #ifdef DEBUG
     ret =
@@ -385,13 +381,13 @@ static void list_attach_list_to_tail_with_lock(list_t *list, list_t *new_list)
     ASSERT(ret == 0);
 }
 
-static void list_delete_matching_nodes(list_t *list,
+static void list_delete_matching_nodes_no_lock(list_t *list,
 		                        list_t *deleted_nodes_list,
 		                        node_match_func is_match,
                                 node_modify_after_delete_func node_modify_after_delete)
 {
-	list_node_t * node = NULL;
-	list_node_t * node_to_delete = NULL;
+	struct list_head *node = NULL;
+	struct list_head *node_to_delete = NULL;
 
 	ASSERT(deleted_nodes_list != NULL);
 	ASSERT(is_match != NULL);
@@ -407,13 +403,13 @@ static void list_delete_matching_nodes(list_t *list,
 			node = get_next(node);
 
 			// remove saved node from retire list
-			list_delete_node(list, node_to_delete);
+			list_delete_node_no_lock(list, node_to_delete);
 
 			// modify the deleted node
 			node_modify_after_delete(node_to_delete);
 
 			// add deleted node to list of deleted nodes
-			list_add_tail(deleted_nodes_list, node_to_delete);
+			list_add_tail(node_to_delete, &deleted_nodes_list->head);
 		}
 		else
 		{
@@ -438,7 +434,7 @@ static void list_delete_matching_nodes_with_lock(list_t *list,
     
     ASSERT(ret == 0);
 
-    list_delete_matching_nodes(list, deleted_nodes_list, is_match, node_modify_after_delete);
+    list_delete_matching_nodes_no_lock(list, deleted_nodes_list, is_match, node_modify_after_delete);
 
 #ifdef DEBUG
     ret =
@@ -476,20 +472,28 @@ void list_init(list_t * list, uint8_t thread_safe)
 	}
 	else
 	{
-		list->is_empty = &list_empty;
-		list->add_tail = &list_add_tail;
-		list->remove_first = &list_remove_first;
-		list->delete_node = &list_delete_node;
-		list->attach_list_to_tail = &list_attach_list_to_tail;
-		list->delete_matching_nodes = &list_delete_matching_nodes;
+		list->is_empty = &list_empty_no_lock;
+		list->add_tail = &list_add_tail_no_lock;
+		list->remove_first = &list_remove_first_no_lock;
+		list->delete_node = &list_delete_node_no_lock;
+		list->attach_list_to_tail = &list_attach_list_to_tail_no_lock;
+		list->delete_matching_nodes = &list_delete_matching_nodes_no_lock;
 	}
 }
 
 void list_destroy(list_t *list)
 {
+#ifdef DEBUG
+    int ret;
+#endif
 	if (list->thread_safe == THREAD_SAFE_LIST)
 	{
-		ASSERT(pthread_mutex_destroy(&list->mutex) == 0);
+#ifdef DEBUG
+        ret =
+#endif
+        pthread_mutex_destroy(&list->mutex);
+
+        ASSERT(ret == 0);
 	}
 	memset(list, 0, sizeof(list));
 }

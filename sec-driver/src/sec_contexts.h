@@ -47,7 +47,6 @@ extern "C"{
 
 #include "list.h"
 #include "fsl_sec.h"
-#include "sec_atomic.h"
 #include "sec_utils.h"
 #include "sec_hw_specific.h"
 
@@ -127,7 +126,7 @@ struct sec_context_t
      * subtraction.
      * @note: The macro #GET_CONTEXT_FROM_LIST_NODE is implemented with this optimization!!!!
      */
-    list_node_t node;
+    struct list_head node;
     /** Producer index for packets submited on this context */
     uint32_t pi;
     /** Validation pattern at start of structure.
@@ -168,7 +167,7 @@ struct sec_context_t
      uint32_t               dpovrd_en;
     /** Validation pattern at end of structure. */
     uint32_t end_pattern;
-}__CACHELINE_ALIGNED;
+}____cacheline_aligned;
 
 /*==================================================================================================
                                            CONSTANTS

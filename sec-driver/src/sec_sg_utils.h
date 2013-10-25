@@ -47,7 +47,6 @@ extern "C"{
 
 #include "list.h"
 #include "fsl_sec.h"
-#include "sec_atomic.h"
 #include "sec_utils.h"
 #include "sec_hw_specific.h"
 

@@ -43,7 +43,6 @@ extern "C" {
 #include "sec_contexts.h"
 #include "sec_config.h"
 #include "sec_job_ring.h"
-#include "sec_atomic.h"
 #include "sec_pdcp.h"
 #include "sec_rlc.h"
 #include "sec_hw_specific.h"
@@ -664,7 +663,7 @@ sec_return_code_t sec_init(const sec_config_t *sec_config_data,
                "sec_config_data->memory_area is NULL");
 
     // DMA memory area must be cacheline aligned
-    SEC_ASSERT ((dma_addr_t)sec_config_data->memory_area % CACHE_LINE_SIZE == 0,
+    SEC_ASSERT ((dma_addr_t)sec_config_data->memory_area % L1_CACHE_BYTES == 0,
                 SEC_INVALID_INPUT_PARAM,
                 "Configured memory is not cacheline aligned");
 
@@ -906,14 +905,14 @@ sec_return_code_t sec_create_rlc_context(sec_job_ring_handle_t job_ring_handle,
                "rlc_ctx_nfo->cipher_key is NULL");
 
     // Crypto keys must come from DMA memory area and must be cacheline aligned
-    SEC_ASSERT((dma_addr_t)rlc_ctx_nfo->cipher_key % CACHE_LINE_SIZE == 0,
+    SEC_ASSERT((dma_addr_t)rlc_ctx_nfo->cipher_key % L1_CACHE_BYTES == 0,
                SEC_INVALID_INPUT_PARAM,
                "Configured crypto key is not cacheline aligned");
 #ifdef SEC_RRC_PROCESSING
     if(rlc_ctx_nfo->integrity_key != NULL)
     {
         // Authentication keys must come from DMA memory area and must be cacheline aligned
-        SEC_ASSERT((dma_addr_t)rlc_ctx_nfo->integrity_key % CACHE_LINE_SIZE == 0,
+        SEC_ASSERT((dma_addr_t)rlc_ctx_nfo->integrity_key % L1_CACHE_BYTES == 0,
                    SEC_INVALID_INPUT_PARAM,
                    "Configured integrity key is not cacheline aligned");
     }
@@ -968,14 +967,14 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
                "pdcp_ctx_info->cipher_key is NULL");
 
     // Crypto keys must come from DMA memory area and must be cacheline aligned
-    SEC_ASSERT((dma_addr_t)pdcp_ctx_info->cipher_key % CACHE_LINE_SIZE == 0,
+    SEC_ASSERT((dma_addr_t)pdcp_ctx_info->cipher_key % L1_CACHE_BYTES == 0,
                SEC_INVALID_INPUT_PARAM,
                "Configured crypto key is not cacheline aligned");
 
     if(pdcp_ctx_info->integrity_key != NULL)
     {
         // Authentication keys must come from DMA memory area and must be cacheline aligned
-        SEC_ASSERT((dma_addr_t)pdcp_ctx_info->integrity_key % CACHE_LINE_SIZE == 0,
+        SEC_ASSERT((dma_addr_t)pdcp_ctx_info->integrity_key % L1_CACHE_BYTES == 0,
                    SEC_INVALID_INPUT_PARAM,
                    "Configured integrity key is not cacheline aligned");
     }

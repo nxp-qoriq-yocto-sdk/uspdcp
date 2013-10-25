@@ -95,7 +95,7 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
 
     // Memory area must start from cacheline-aligned boundary.
     // Each job entry is itself aligned to cacheline.
-    SEC_ASSERT ((dma_addr_t)*dma_mem % CACHE_LINE_SIZE == 0,
+    SEC_ASSERT ((dma_addr_t)*dma_mem % L1_CACHE_BYTES == 0,
             SEC_INVALID_INPUT_PARAM,
             "Current memory position is not cacheline aligned."
             "Job ring id = %d", job_ring->jr_id);
@@ -111,11 +111,11 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
     // Allocate memory for output ring
     ASSERT(job_ring->output_ring == NULL);
 
-    SEC_ASSERT ((dma_addr_t)*dma_mem % CACHE_LINE_SIZE == 0,
+    SEC_ASSERT ((dma_addr_t)*dma_mem % L1_CACHE_BYTES == 0,
             SEC_INVALID_INPUT_PARAM,
             "Current memory position is not cacheline aligned."
             "Job ring id = %d", job_ring->jr_id);
-    SEC_ASSERT ((dma_addr_t)*dma_mem % CACHE_LINE_SIZE == 0,
+    SEC_ASSERT ((dma_addr_t)*dma_mem % L1_CACHE_BYTES == 0,
                                 SEC_INVALID_INPUT_PARAM,
                                 "Current memory position is not cacheline aligned."
                                 "Job ring id = %d", job_ring->jr_id);
@@ -173,14 +173,14 @@ int init_job_ring(sec_job_ring_t * job_ring, void **dma_mem, int startup_work_mo
         job_ring->jobs[i].sg_ctx = &job_ring->sg_ctxs[i];
 
         // Need two SG tables, one for input packet, the other for the output
-        SEC_ASSERT ((dma_addr_t)*dma_mem % CACHE_LINE_SIZE == 0,
+        SEC_ASSERT ((dma_addr_t)*dma_mem % L1_CACHE_BYTES == 0,
                         SEC_INVALID_INPUT_PARAM,
                         "Current jobs[i]->sg_ctx [i=%d] input SG table is not cacheline aligned.", i);
         job_ring->sg_ctxs[i].in_sg_tbl = (struct sec_sg_tbl_entry*)*dma_mem;
         memset(job_ring->sg_ctxs[i].in_sg_tbl, 0, sizeof(struct sec_sg_tbl_entry) * SEC_MAX_SG_TBL_ENTRIES);
         *dma_mem += sizeof(struct sec_sg_tbl_entry) * SEC_MAX_SG_TBL_ENTRIES;
 
-        SEC_ASSERT ((dma_addr_t)*dma_mem % CACHE_LINE_SIZE == 0,
+        SEC_ASSERT ((dma_addr_t)*dma_mem % L1_CACHE_BYTES == 0,
                                 SEC_INVALID_INPUT_PARAM,
                                 "Current jobs[i]->sg_ctx [i=%d] output SG table is not cacheline aligned.", i);
         job_ring->sg_ctxs[i].out_sg_tbl = (struct sec_sg_tbl_entry*)*dma_mem;

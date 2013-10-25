@@ -104,12 +104,12 @@ struct sec_job_t
     ua_context_handle_t ua_handle;      /*< UA handle for the context this packet belongs to */
     uint32_t dpovrd_value;              /*< Value to be loaded in the DPOVRD register, if DPOVRD mechanism
                                          * is enabled. */
-}__CACHELINE_ALIGNED;
+}____cacheline_aligned;
 
 struct sec_outring_entry {
     dma_addr_t  desc;                   /*< Pointer to completed descriptor */
     uint32_t    status;                 /*< Status for completed descriptor */
-} PACKED;
+} __packed;
 
 /** Lists the possible states for a job ring. */
 typedef enum sec_job_ring_state_e
@@ -155,7 +155,7 @@ struct sec_job_ring_t
 #if (SEC_ENABLE_SCATTER_GATHER == ON)
     sec_sg_context_t sg_ctxs[SEC_JOB_RING_SIZE]; /*< Scatter Gather contexts for this jobring */
 #endif // (SEC_ENABLE_SCATTER_GATHER == ON)
-}__CACHELINE_ALIGNED;
+}____cacheline_aligned;
 /*==============================================================================
                                  CONSTANTS
 ==============================================================================*/

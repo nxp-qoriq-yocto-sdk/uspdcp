@@ -31,7 +31,9 @@
  */
 
 #include <of.h>
+#ifndef __USE_GNU
 #define __USE_GNU
+#endif
 #include <dirent.h>
 
 #define OF_DEFAULT_NA 1

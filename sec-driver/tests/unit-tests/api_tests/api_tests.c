@@ -79,9 +79,6 @@ extern "C" {
 // Max length in bytes for a confidentiality /integrity key.
 #define MAX_KEY_LENGTH    32
 
-/** Size in bytes of a cacheline. */
-#define CACHE_LINE_SIZE  32
-
 // For keeping the code relatively the same between HW versions
 #define dma_mem_memalign  test_memalign
 #define dma_mem_free      test_free
@@ -101,7 +98,7 @@ extern "C" {
 struct test_sec_context_t
 {
     uint8_t dummy[SIZEOF_SEC_CONTEXT_T_STRUCT];
-}__CACHELINE_ALIGNED;
+}____cacheline_aligned;
 
 /** Structure to define packet info */
 typedef struct buffer_s
@@ -296,7 +293,9 @@ static void test_setup(void)
     g_usmmgr = fsl_usmmgr_init();
     assert_not_equal_with_message(g_usmmgr, NULL, "ERROR on fsl_usmmgr_init");
 
-    sec_config_data.memory_area = dma_mem_memalign(CACHE_LINE_SIZE,SEC_DMA_MEMORY_SIZE);
+    sec_config_data.memory_area = dma_mem_memalign(L1_CACHE_BYTES,SEC_DMA_MEMORY_SIZE);
+    assert_not_equal_with_message(sec_config_data.memory_area, NULL, "ERROR allocating SEC memory area with dma_mem_memalign");
+
     sec_config_data.sec_drv_vtop = test_vtop;
 
     sec_config_data.work_mode = SEC_STARTUP_POLLING_MODE;
@@ -397,7 +396,7 @@ static void test_sec_init_invalid_params(void)
 
     // Init sec driver. Invalid sec_config_data.memory_area param: non-cache-line aligned
     tmp = sec_config_data.memory_area;
-    uint8_t cache_line_size = 32;
+    uint8_t cache_line_size = L1_CACHE_BYTES;
     if ((dma_addr_t)sec_config_data.memory_area % cache_line_size  == 0)
     {
         sec_config_data.memory_area += 1;
@@ -691,7 +690,7 @@ static void test_sec_delete_pdcp_context_invalid_params(void)
             SEC_SUCCESS, ret);
 
     // Make the context handle invalid, write last 32  bytes from handle
-    assert(sizeof(struct test_sec_context_t) > CACHE_LINE_SIZE);
+    assert(sizeof(struct test_sec_context_t) > 32);
 
     // Convert the opaque context handle to a local structure that
     // has the same size as sec_context_t struct from driver!
@@ -701,9 +700,9 @@ static void test_sec_delete_pdcp_context_invalid_params(void)
     // it was not altered by User App.
     // Overwrite the last 32 bytes (size of cacheline), the end pattern will be in the last
     // 32 bytes as some padding bytes may be added to ensure cache-line alignment of sec_context_t.
-    memset(ctx->dummy + sizeof(struct test_sec_context_t) - CACHE_LINE_SIZE,
+    memset(ctx->dummy + sizeof(struct test_sec_context_t) - 32,
            0x2, //some random value
-           CACHE_LINE_SIZE);
+           32);
 
     // Invalid sec_ctx_handle, overwritten end pattern from ctx handle.
     ret = sec_delete_pdcp_context(ctx_handle);
@@ -1299,7 +1298,7 @@ static void test_sec_process_packet_invalid_params(void)
     ////////////////////////////////////
 
     // Make the context handle invalid, write last 32 bytes from handle
-    assert(sizeof(struct test_sec_context_t) > CACHE_LINE_SIZE);
+    assert(sizeof(struct test_sec_context_t) > 32);
 
     // Convert the opaque context handle to a local structure that
     // has the same size as sec_context_t struct from driver!
@@ -1309,9 +1308,9 @@ static void test_sec_process_packet_invalid_params(void)
     // it was not altered by User App.
     // Overwrite the last 32 bytes (size of cacheline), the end pattern will be in the last
     // 32 bytes as some padding bytes may be added to ensure cache-line alignment of sec_context_t.
-    memset(ctx->dummy + sizeof(struct test_sec_context_t) - CACHE_LINE_SIZE,
+    memset(ctx->dummy + sizeof(struct test_sec_context_t) - 32,
            0x2, //some random value
-           CACHE_LINE_SIZE);
+           32);
 
     // Invalid context handle
     ret = sec_process_packet(ctx_handle, in_packet, out_packet, (ua_context_handle_t)&ua_data[packet_idx]);
