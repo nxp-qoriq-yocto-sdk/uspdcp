@@ -58,6 +58,7 @@
  * plane encap or decap. It is useful only for combinations supported by the 
  * PROTOCOL operation in SEC.
  */
+#if defined(__powerpc64__) || defined(CONFIG_PHYS_64BIT)
 #define SEC_RLC_INIT_SD(descriptor){ \
         /* CTYPE = shared job descriptor
          * RIF = 0
@@ -69,7 +70,7 @@
          * PD = 0, SHARE = WAIT
          * Descriptor Length = 10
          */                                                                  \
-        (descriptor)->deschdr.command.word  = 0xB8851111;                    \
+        (descriptor)->deschdr.command.word  = 0xB8851110;                    \
         /* CTYPE = Key
          * Class = 1 (encryption)
          * SGF = 0
@@ -86,7 +87,36 @@
          */                                                                  \
         (descriptor)->protocol.command.word = 0x80320000;                    \
 }
-
+#else
+#define SEC_RLC_INIT_SD(descriptor){ \
+        /* CTYPE = shared job descriptor
+         * RIF = 0
+         * DNR = 0
+         * ONE = 1
+         * Start Index = 5, in order to jump over PDB
+         * ZRO,CIF = 0
+         * SC = 1
+         * PD = 0, SHARE = WAIT
+         * Descriptor Length = 10
+         */                                                                  \
+        (descriptor)->deschdr.command.word  = 0xB885110E;                    \
+        /* CTYPE = Key
+         * Class = 1 (encryption)
+         * SGF = 0
+         * IMM = 0 (key after command)
+         * ENC, NWB, EKT, KDEST = 0
+         * TK = 0
+         * Length = 0 (to be completed at runtime)
+         */                                                                  \
+        (descriptor)->key1_cmd.command.word = 0x02000000;                    \
+        /* CTYPE = Protocol operation
+         * OpType = 0 (to be completed @ runtime)
+         * Protocol ID = 3G RLC PDU
+         * Protocol Info = 0 (to be completed @ runtime)
+         */                                                                  \
+        (descriptor)->protocol.command.word = 0x80320000;                    \
+}
+#endif // defined(__powerpc64__) || defined(CONFIG_PHYS_64BIT)
 /** Macro for setting the pointer and length of the key to be used for
  * encryption in a SD performing RLC encap/decap for control or data plane.
  */
@@ -141,9 +171,8 @@ struct sec_rlc_sd_t{
     struct descriptor_header_s  deschdr;
     sec_rlc_pdb_t               pdb;
     struct key_command_s        key1_cmd;
-#warning "Update for 36 bits addresses"
     dma_addr_t                  key1_ptr;
-    uint32_t                    hfn_ov_desc[9];
+    uint32_t                    hfn_ov_desc[7];
     struct protocol_operation_command_s protocol;
 } __packed;
 /*==============================================================================

@@ -37,6 +37,7 @@ extern "C" {
 /*=================================================================================================
                                         INCLUDE FILES
 ==================================================================================================*/
+#include <inttypes.h>
 #include "sec_hw_specific.h"
 #include "sec_job_ring.h"
 #include "sec_utils.h"
@@ -165,15 +166,15 @@ int hw_reset_job_ring(sec_job_ring_t *job_ring)
 
     // Write the JR input queue start address
     hw_set_input_ring_start_addr(job_ring, g_sec_vtop(job_ring->input_ring));
-    SEC_DEBUG(" Set input ring base address to: Virtual: 0x%x, Physical: 0x%x, Read from HW: 0x%08x",
-            (dma_addr_t)job_ring->input_ring,
+    SEC_DEBUG(" Set input ring base address to: Virtual: 0x%x, Physical: 0x%" PRIx64 ", Read from HW: 0x%" PRIx64,
+            (uintptr_t)job_ring->input_ring,
             g_sec_vtop(job_ring->input_ring),
             hw_get_inp_queue_base(job_ring));
 
     // Write the JR output queue start address
     hw_set_output_ring_start_addr(job_ring, g_sec_vtop(job_ring->output_ring));
-    SEC_DEBUG(" Set output ring base address to: Virtual: 0x%x, Physical: 0x%x, Read from HW: 0x%08x",
-            (dma_addr_t)job_ring->output_ring,
+    SEC_DEBUG(" Set output ring base address to: Virtual: 0x%x, Physical: 0x%" PRIx64 ", Read from HW: 0x%" PRIx64,
+            (uintptr_t)job_ring->output_ring,
             g_sec_vtop(job_ring->output_ring),
             hw_get_out_queue_base(job_ring));
 

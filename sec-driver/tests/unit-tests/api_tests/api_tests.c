@@ -397,7 +397,7 @@ static void test_sec_init_invalid_params(void)
     // Init sec driver. Invalid sec_config_data.memory_area param: non-cache-line aligned
     tmp = sec_config_data.memory_area;
     uint8_t cache_line_size = L1_CACHE_BYTES;
-    if ((dma_addr_t)sec_config_data.memory_area % cache_line_size  == 0)
+    if ((uintptr_t)sec_config_data.memory_area % cache_line_size  == 0)
     {
         sec_config_data.memory_area += 1;
     }

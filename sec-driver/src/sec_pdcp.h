@@ -47,6 +47,7 @@
  * plane encap or decap. It is useful only for combinations supported by the 
  * PROTOCOL operation in SEC.
  */
+#if defined(__powerpc64__) || defined(CONFIG_PHYS_64BIT)
 #define SEC_PDCP_INIT_CPLANE_SD(descriptor){ \
         /* CTYPE = shared job descriptor                        \
          * RIF = 0
@@ -84,24 +85,64 @@
          */                                                     \
         (descriptor)->protocol.command.word = 0x80430000;       \
 }
+#else
+#define SEC_PDCP_INIT_CPLANE_SD(descriptor){ \
+        /* CTYPE = shared job descriptor                        \
+         * RIF = 0
+         * DNR = 0
+         * ONE = 1
+         * Start Index = 5, in order to jump over PDB
+         * ZRO,CIF = 0
+         * SC = 1
+         * PD = 0, SHARE = WAIT
+         * Descriptor Length = 10
+         */                                                     \
+        (descriptor)->deschdr.command.word  = 0xB8851111;       \
+        /* CTYPE = Key
+         * Class = 2 (authentication)
+         * SGF = 0
+         * IMM = 0 (key ptr after command)
+         * ENC, NWB, EKT, KDEST = 0
+         * TK = 0
+         * Length = 0 (to be completed at runtime)
+         */                                                     \
+        (descriptor)->key2_cmd.command.word = 0x04000000;       \
+        /* CTYPE = Key
+         * Class = 1 (encryption)
+         * SGF = 0
+         * IMM = 0 (key ptr after command)
+         * ENC, NWB, EKT, KDEST = 0
+         * TK = 0
+         * Length = 0 (to be completed at runtime)
+         */                                                     \
+        (descriptor)->key1_cmd.command.word = 0x02000000;       \
+        /* CTYPE = Protocol operation
+         * OpType = 0 (to be completed @ runtime)
+         * Protocol ID = PDCP - C-Plane
+         * Protocol Info = 0 (to be completed @ runtime)
+         */                                                     \
+        (descriptor)->protocol.command.word = 0x80430000;       \
+}
+#endif
 
 /** Macro for initializing the common part of a SD performing PDCP data
  * plane encap or decap. It is useful only for combinations supported by the 
  * PROTOCOL operation in SEC.
  */
+#if defined(__powerpc64__) || defined(CONFIG_PHYS_64BIT)
 #define SEC_PDCP_INIT_UPLANE_SD(descriptor){ \
         /* CTYPE = shared job descriptor
          * RIF = 0
          * DNR = 0
          * ONE = 1
-         * Start Index = 7, in order to jump over PDB and
+         * Start Index = 8, in order to jump over PDB and
          *                  key2 command
          * ZRO,CIF = 0
          * SC = 1
          * PD = 0, SHARE = WAIT
          * Descriptor Length = 10
          */                                                                  \
-        (descriptor)->deschdr.command.word  = 0xB8871113;                    \
+        (descriptor)->deschdr.command.word  = 0xB8881113;                    \
         /* CTYPE = Key
          * Class = 2 (authentication)
          * SGF = 0
@@ -127,6 +168,46 @@
          */                                                                  \
         (descriptor)->protocol.command.word = 0x80420000;                    \
 }
+#else
+#define SEC_PDCP_INIT_UPLANE_SD(descriptor){ \
+        /* CTYPE = shared job descriptor
+         * RIF = 0
+         * DNR = 0
+         * ONE = 1
+         * Start Index = 7, in order to jump over PDB and
+         *                  key2 command
+         * ZRO,CIF = 0
+         * SC = 1
+         * PD = 0, SHARE = WAIT
+         * Descriptor Length = 10
+         */                                                                  \
+        (descriptor)->deschdr.command.word  = 0xB8871111;                    \
+        /* CTYPE = Key
+         * Class = 2 (authentication)
+         * SGF = 0
+         * IMM = 0 (key ptr after command)
+         * ENC, NWB, EKT, KDEST = 0
+         * TK = 0
+         * Length = 0 (to be completed at runtime)
+         */                                                                  \
+        (descriptor)->key2_cmd.command.word = 0x04000000;                    \
+        /* CTYPE = Key
+         * Class = 1 (encryption)
+         * SGF = 0
+         * IMM = 0 (key after command)
+         * ENC, NWB, EKT, KDEST = 0
+         * TK = 0
+         * Length = 0 (to be completed at runtime)
+         */                                                                  \
+        (descriptor)->key1_cmd.command.word = 0x02000000;                    \
+        /* CTYPE = Protocol operation
+         * OpType = 0 (to be completed @ runtime)
+         * Protocol ID = PDCP - C-Plane
+         * Protocol Info = 0 (to be completed @ runtime)
+         */                                                                  \
+        (descriptor)->protocol.command.word = 0x80420000;                    \
+}
+#endif // defined(__powerpc64__) || defined(CONFIG_PHYS_64BIT)
 
 /** Macro for setting the pointer and length of the key to be used for
  * encryption in a SD performing PDCP encap/decap for control or data plane.
@@ -246,12 +327,10 @@ struct sec_pdcp_sd_t{
     struct descriptor_header_s  deschdr;
     sec_pdcp_pdb_t              pdb;
     struct key_command_s        key2_cmd;
-#warning "Update for 36 bits addresses"
     dma_addr_t                  key2_ptr;
     struct key_command_s        key1_cmd;
-#warning "Update for 36 bits addresses"
     dma_addr_t                  key1_ptr;
-    uint32_t                    hfn_ov_desc[9];
+    uint32_t                    hfn_ov_desc[7];
     struct protocol_operation_command_s protocol;
 } __packed;
 /*==============================================================================

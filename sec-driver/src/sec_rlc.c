@@ -164,10 +164,9 @@ static int create_hw_acc_rlc_desc(sec_context_t *ctx)
     /* Plug-in the HFN override in descriptor from DPOVRD */
     desc->hfn_ov_desc[0] = 0xAC574F08;
     desc->hfn_ov_desc[1] = 0x80000000;
-    desc->hfn_ov_desc[2] = 0xA0000407;
-    desc->hfn_ov_desc[3] = 0xAC574008;
-    desc->hfn_ov_desc[5] = 0xAC704008;
-    
+    desc->hfn_ov_desc[2] = 0xA0000405;
+    desc->hfn_ov_desc[5] = 0xA8774004;
+
     /* I avoid to do complicated things in CAAM, thus I 'hardcode'
      * the operations to be done on the HFN as per the SN size. Doing
      * a generic descriptor that would look at the PDB and then decide
@@ -176,16 +175,14 @@ static int create_hw_acc_rlc_desc(sec_context_t *ctx)
      */
     if(rlc_ctx_info->mode == RLC_ACKED_MODE)
     {
-        desc->hfn_ov_desc[4] = 0x01FFFFFF;
-        desc->hfn_ov_desc[6] = 0x00000007;
+        desc->hfn_ov_desc[3] = 0x00000007;
     }
     else
     {
-        desc->hfn_ov_desc[4] = 0x000FFFFF;
-        desc->hfn_ov_desc[6] = 0x0000000C;
+        desc->hfn_ov_desc[4] = 0x0000000C;
     }
-    desc->hfn_ov_desc[7] = 0xA8900008;
-    desc->hfn_ov_desc[8] = 0x78430804;
+    desc->hfn_ov_desc[5] = 0xA8900008;
+    desc->hfn_ov_desc[6] = 0x78430804;
 
     SEC_RLC_SD_SET_KEY1(desc,
                         rlc_ctx_info->cipher_key,

@@ -79,12 +79,7 @@ extern "C"{
  */
 #define SG_CONTEXT_GET_TBL_OUT_PHY(sg_ctx)               ( (sg_ctx)->out_sg_tbl_phy )
 
-#warning "Update for 36 bits addresses"
-#if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
-#error "36 bit not supported"
-#else
 #define SG_TBL_SET_ADDRESS(sg_entry,address)    (*(uint64_t*)&(sg_entry) = (address))
-#endif // defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
 
 #define SG_TBL_SET_LENGTH_OFF(sg_entry,len,off) (*((uint64_t*)&(sg_entry) + 1) = (((uint64_t)(len)) << 32) | \
                                                                                    (uint64_t)(off) )
@@ -94,13 +89,13 @@ extern "C"{
 #if (SEC_DRIVER_LOGGING == ON) && (SEC_DRIVER_LOGGING_LEVEL == SEC_DRIVER_LOG_DEBUG)
 #define DUMP_SG_TBL(sg_tbl) {                                               \
     int __i = 0;                                                            \
-    SEC_DEBUG("Dumping SG table @ %p\n",(sg_tbl));                          \
+    SEC_DEBUG("Dumping SG table @ %p",(sg_tbl));                            \
     do{                                                                     \
         int __j = 0;                                                        \
         for(__j = 0;                                                        \
             __j < sizeof(struct sec_sg_tbl_entry)/sizeof(uint32_t);         \
             __j++ ){                                                        \
-            SEC_DEBUG("0x%08x %08x\n",                                      \
+            SEC_DEBUG("0x%08x %08x",                                        \
                     (uint32_t)((uint32_t*)(((&((sg_tbl)[__i])))) + __j),    \
                     *((uint32_t*)(&((sg_tbl)[__i])) + __j) );               \
         }                                                                   \
@@ -133,7 +128,7 @@ typedef enum sec_sg_context_type_e{
 struct sec_sg_tbl_entry{
     /** 28 bits reserved */
     uint32_t    res0:28;
-#if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
+#if defined(__powerpc64__) || defined(CONFIG_PHYS_64BIT)
     /** Most significant 4 bits of a 36 bit address */
     uint32_t    addr_ms:4;
 #else

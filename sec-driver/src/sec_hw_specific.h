@@ -138,7 +138,11 @@
 #define CMD_DPOVRD_EN                           (1<<31)
 
 /** The maximum size of a SEC descriptor, in WORDs (32 bits). */
-#define MAX_DESC_SIZE_WORDS                     64
+#if defined(__powerpc64__) || defined(CONFIG_PHYS_64BIT)
+#define MAX_DESC_SIZE_WORDS                     51
+#else
+#define MAX_DESC_SIZE_WORDS                     53
+#endif
 
 /******************************************************************
  * Macros for extracting error codes for the job ring
@@ -154,12 +158,12 @@
  *****************************************************************/
 
 /** Read pointer to job ring input ring start address */
-#if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
-#define hw_get_inp_queue_base(jr)   ( (dma_addr_t)(GET_JR_REG(IRBA,(jr)) << 32) | \
+#if defined(__powerpc64__) || defined(CONFIG_PHYS_64BIT)
+#define hw_get_inp_queue_base(jr)   ( (((dma_addr_t)GET_JR_REG(IRBA,(jr))) << 32) | \
                                        (GET_JR_REG_LO(IRBA,(jr))) )
 
 /** Read pointer to job ring output ring start address */
-#define hw_get_out_queue_base(jr)   ( (dma_addr_t)(GET_JR_REG(ORBA,(jr)) << 32) | \
+#define hw_get_out_queue_base(jr)   ( ((dma_addr_t)(GET_JR_REG(ORBA,(jr))) << 32) | \
                                        (GET_JR_REG_LO(ORBA,(jr))) )
 #else
 #define hw_get_inp_queue_base(jr)   ( (dma_addr_t)(GET_JR_REG_LO(IRBA,(jr)) ) )
@@ -178,20 +182,20 @@
 
 #define hw_set_output_ring_size(job_ring,size)  SET_JR_REG(ORSR,job_ring,(size))
 
-#if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
-#define hw_set_input_ring_start_addr(job_ring, start_addr)              \
-{                                                                       \
-    SET_JR_REG(IRBA,job_ring,start_addr,PHYS_ADDR_HI(start_addr));      \
-    SET_JR_REG_LO(IRBA,job_ring,start_addr,PHYS_ADDR_LO(start_addr));   \
+#if defined(__powerpc64__) || defined(CONFIG_PHYS_64BIT)
+#define hw_set_input_ring_start_addr(job_ring, start_addr)  \
+{                                                           \
+    SET_JR_REG(IRBA,job_ring,PHYS_ADDR_HI(start_addr));     \
+    SET_JR_REG_LO(IRBA,job_ring,PHYS_ADDR_LO(start_addr));  \
 }
 
-#define hw_set_output_ring_start_addr(job_ring, start_addr)             \
-{                                                                       \
-    SET_JR_REG(ORBA,job_ring,start_addr,PHYS_ADDR_HI(start_addr));      \
-    SET_JR_REG_LO(ORBA,job_ring,start_addr,PHYS_ADDR_LO(start_addr));   \
+#define hw_set_output_ring_start_addr(job_ring, start_addr) \
+{                                                           \
+    SET_JR_REG(ORBA,job_ring,PHYS_ADDR_HI(start_addr));     \
+    SET_JR_REG_LO(ORBA,job_ring,PHYS_ADDR_LO(start_addr));  \
 }
 
-#else //#if defined(__powerpc64__) && defined(CONFIG_PHYS_64BIT)
+#else //#if defined(__powerpc64__) || defined(CONFIG_PHYS_64BIT)
 #define hw_set_input_ring_start_addr(job_ring, start_addr) \
         SET_JR_REG_LO(IRBA,job_ring,start_addr)
 
@@ -276,6 +280,52 @@
 /** Macro for setting up a JD. The structure of the JD is common across all
  * supported protocols, thus its structure is identical.
  */
+#if defined(__powerpc64__) || defined(CONFIG_PHYS_64BIT)
+#define SEC_JD_INIT(descriptor)              { \
+        /* CTYPE = job descriptor                               \
+         * RSMS, DNR = 0
+         * ONE = 1
+         * Start Index = 0
+         * ZRO,TD, MTD = 0
+         * SHR = 1 (there's a shared descriptor referenced
+         *          by this job descriptor,pointer in next word)
+         * REO = 1 (execute job descr. first, shared descriptor
+         *          after)
+         * SHARE = DEFER
+         * Descriptor Length = 0 ( to be completed @ runtime )
+         *
+         */                                                     \
+        (descriptor)->deschdr.command.word = 0xB0801C0D;        \
+        /*
+         * CTYPE = SEQ OUT command
+         * Scater Gather Flag = 0 (can be updated @ runtime)
+         * PRE = 0
+         * EXT = 1 ( data length is in next word, following the
+         *           command)
+         * RTO = 0
+         */                                                     \
+        (descriptor)->seq_out.command.word = 0xF8400000; /**/   \
+        /*
+         * CTYPE = SEQ IN command
+         * Scater Gather Flag = 0 (can be updated @ runtime)
+         * PRE = 0
+         * EXT = 1 ( data length is in next word, following the
+         *           command)
+         * RTO = 0
+         */                                                     \
+        (descriptor)->seq_in.command.word  = 0xF0400000; /**/   \
+         /* 
+          * In order to be compatible with QI scenarios, the DPOVRD value
+          * loaded must be formated like this:
+          * DPOVRD_EN (1b) | Res| DPOVRD Value (right aligned).
+          */                                                    \
+        (descriptor)->load_dpovrd.command.word = 0x16870004;    \
+        /* By default, DPOVRD mechanism is disabled, thus the value to be
+         * LOAD-ed through the above descriptor command will be 0x0000_0000. 
+         */                                                     \
+        (descriptor)->dpovrd = 0x00000000;                      \
+    }
+#else
 #define SEC_JD_INIT(descriptor)              { \
         /* CTYPE = job descriptor                               \
          * RSMS, DNR = 0
@@ -320,6 +370,7 @@
          */                                                     \
         (descriptor)->dpovrd = 0x00000000;                      \
     }
+#endif
 
 /** Macro for setting the pointer to the input buffer in the JD, according to 
  * the parameters set by the user in the ::sec_packet_t structure.
@@ -582,9 +633,7 @@ struct sec_sd_t {
 struct sec_descriptor_t {
     struct descriptor_header_s deschdr;
     dma_addr_t    sd_ptr;
-#warning "Update for 36 bits addresses"
     struct seq_out_command_s seq_out;
-#warning "Update for 36 bits addresses"
     dma_addr_t    seq_out_ptr;
     uint32_t      out_ext_length;
     struct seq_in_command_s seq_in;
@@ -593,7 +642,11 @@ struct sec_descriptor_t {
     struct load_command_s load_dpovrd;
     uint32_t      dpovrd;
     struct sec_job_t *job_ptr;
+#if defined(__powerpc64__) || defined(CONFIG_PHYS_64BIT)
+    uint32_t      pad[2];
+#else
     uint32_t      pad[5];
+#endif
 } ____cacheline_aligned __packed;
 /*==============================================================================
                                  CONSTANTS

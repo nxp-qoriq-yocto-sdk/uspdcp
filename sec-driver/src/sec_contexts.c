@@ -38,6 +38,7 @@ extern "C" {
                                         INCLUDE FILES
 ==================================================================================================*/
 #include <stdlib.h>
+#include <inttypes.h>
 #include "list.h"
 #include "sec_contexts.h"
 #include "sec_utils.h"
@@ -314,18 +315,18 @@ sec_return_code_t init_contexts_pool(sec_contexts_pool_t * pool,
         ctx->ci = 0;
         ctx->pool = pool;
 
-        SEC_ASSERT ((dma_addr_t)*dma_mem % L1_CACHE_BYTES == 0,
+        SEC_ASSERT ((uintptr_t)*dma_mem % L1_CACHE_BYTES == 0,
                       SEC_INVALID_INPUT_PARAM,
                       "Current memory position is not cacheline aligned."
                       "Context= %p", ctx);
-        ctx->sh_desc = (struct sec_sd_t*)(dma_addr_t)*dma_mem;
+        ctx->sh_desc = (struct sec_sd_t*)*dma_mem;
         memset(ctx->sh_desc, 0, SEC_CRYPTO_DESCRIPTOR_SIZE);
         *dma_mem += SEC_CRYPTO_DESCRIPTOR_SIZE;
 
         ctx->sh_desc_phys = g_sec_vtop(ctx->sh_desc);
 
-        SEC_DEBUG("Created shared descriptor @ 0x%04x (phys: 0x%x)",
-                (uint32_t)ctx->sh_desc,
+        SEC_DEBUG("Created shared descriptor @ 0x%04x (phys: 0x%" PRIx64 ")",
+                (uintptr_t)ctx->sh_desc,
                 ctx->sh_desc_phys);
 
         // initialize validation patterns

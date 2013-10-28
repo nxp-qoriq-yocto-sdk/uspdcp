@@ -254,7 +254,11 @@ typedef struct sec_packet_s
     uint32_t        total_length;   /**< Total Data Length in all fragments including the parent buffer. */
     uint32_t        num_fragments;  /**< Is set only in the first fragment from a s/g packet.
                                          It excludes the parent buffer. */
+#if defined(__powerpc64__) || defined(CONFIG_PHYS_64BIT)
+    uint32_t        pad;         /**< Padding to multiple of L1_CACHE_BYTES. */
+#else
     uint32_t        pad[2];         /**< Padding to multiple of L1_CACHE_BYTES. */
+#endif
 
 }sec_packet_t;
 

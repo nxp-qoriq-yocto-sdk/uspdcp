@@ -56,7 +56,7 @@ sec_vtop g_sec_vtop;
 
 static inline dma_addr_t test_vtop(void *v)
 {
-    return (dma_addr_t)(v);
+    return (uintptr_t)(v);
 }
 
 /*==================================================================================================

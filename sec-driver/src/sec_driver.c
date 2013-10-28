@@ -341,13 +341,11 @@ static void hw_flush_job_ring(sec_job_ring_t * job_ring,
     // This way the UA will not be able to submit new jobs until reset/flush is over.
     while(jobs_no_to_discard > discarded_packets_no)
     {
-        // get the first un-notified job from the job ring
-
-        current_desc = job_ring->output_ring[job_ring->cidx].desc;
-        
-        /* Since the memory is continous, then P2V translation is a mere addition to
+        /* Get completed descriptor */
+        /* Since the memory is contigous, then P2V translation is a mere addition to
            the base descriptor physical address */
-        current_desc = (current_desc - job_ring->jobs[0].descr_phys_addr) >> 6;
+        current_desc = (job_ring->output_ring[job_ring->cidx].desc - 
+                        job_ring->descriptors_base_addr) >> 6;
 
         job = (job_ring->descriptors + current_desc)->job_ptr;
         SEC_ASSERT_RET_VOID( job != NULL,"Job ring retrieved from descriptor is NULL");
@@ -663,7 +661,7 @@ sec_return_code_t sec_init(const sec_config_t *sec_config_data,
                "sec_config_data->memory_area is NULL");
 
     // DMA memory area must be cacheline aligned
-    SEC_ASSERT ((dma_addr_t)sec_config_data->memory_area % L1_CACHE_BYTES == 0,
+    SEC_ASSERT ((uintptr_t)sec_config_data->memory_area % L1_CACHE_BYTES == 0,
                 SEC_INVALID_INPUT_PARAM,
                 "Configured memory is not cacheline aligned");
 
@@ -775,16 +773,16 @@ sec_return_code_t sec_init(const sec_config_t *sec_config_data,
     /* Now check if I've overrun the memory 'segment' allocated by the UA
      * TODO: Add some tests for this
      */
-    if(((dma_addr_t)g_dma_mem_free - (dma_addr_t)g_dma_mem_start) < SEC_DMA_MEMORY_SIZE)
+    if((uintptr_t)g_dma_mem_free - (uintptr_t)g_dma_mem_start < SEC_DMA_MEMORY_SIZE)
     {
         SEC_INFO("Allocated %u KB for SEC driver, remaining free %u KB",
-                ((dma_addr_t)g_dma_mem_free - (dma_addr_t)g_dma_mem_start)/1024,
-                (SEC_DMA_MEMORY_SIZE - ((dma_addr_t)(dma_addr_t)g_dma_mem_free - (dma_addr_t)g_dma_mem_start))/1024);
+                ((uintptr_t)g_dma_mem_free - (uintptr_t)g_dma_mem_start)/1024,
+                (SEC_DMA_MEMORY_SIZE - ((uintptr_t)g_dma_mem_free - (uintptr_t)g_dma_mem_start))/1024);
     }
     else
     {
         SEC_ERROR("Overrun the memory allocated for SEC driver! (requested: %u KB, configured %u KB)",
-                  ((dma_addr_t)g_dma_mem_free - (dma_addr_t)g_dma_mem_start)/1024,
+                  ((uintptr_t)g_dma_mem_free - (uintptr_t)g_dma_mem_start)/1024,
                   SEC_DMA_MEMORY_SIZE/1024);
 
     }
@@ -905,14 +903,14 @@ sec_return_code_t sec_create_rlc_context(sec_job_ring_handle_t job_ring_handle,
                "rlc_ctx_nfo->cipher_key is NULL");
 
     // Crypto keys must come from DMA memory area and must be cacheline aligned
-    SEC_ASSERT((dma_addr_t)rlc_ctx_nfo->cipher_key % L1_CACHE_BYTES == 0,
+    SEC_ASSERT((uintptr_t)rlc_ctx_nfo->cipher_key % L1_CACHE_BYTES == 0,
                SEC_INVALID_INPUT_PARAM,
                "Configured crypto key is not cacheline aligned");
 #ifdef SEC_RRC_PROCESSING
     if(rlc_ctx_nfo->integrity_key != NULL)
     {
         // Authentication keys must come from DMA memory area and must be cacheline aligned
-        SEC_ASSERT((dma_addr_t)rlc_ctx_nfo->integrity_key % L1_CACHE_BYTES == 0,
+        SEC_ASSERT((uintptr_t)rlc_ctx_nfo->integrity_key % L1_CACHE_BYTES == 0,
                    SEC_INVALID_INPUT_PARAM,
                    "Configured integrity key is not cacheline aligned");
     }
@@ -967,14 +965,14 @@ sec_return_code_t sec_create_pdcp_context (sec_job_ring_handle_t job_ring_handle
                "pdcp_ctx_info->cipher_key is NULL");
 
     // Crypto keys must come from DMA memory area and must be cacheline aligned
-    SEC_ASSERT((dma_addr_t)pdcp_ctx_info->cipher_key % L1_CACHE_BYTES == 0,
+    SEC_ASSERT((uintptr_t)pdcp_ctx_info->cipher_key % L1_CACHE_BYTES == 0,
                SEC_INVALID_INPUT_PARAM,
                "Configured crypto key is not cacheline aligned");
 
     if(pdcp_ctx_info->integrity_key != NULL)
     {
         // Authentication keys must come from DMA memory area and must be cacheline aligned
-        SEC_ASSERT((dma_addr_t)pdcp_ctx_info->integrity_key % L1_CACHE_BYTES == 0,
+        SEC_ASSERT((uintptr_t)pdcp_ctx_info->integrity_key % L1_CACHE_BYTES == 0,
                    SEC_INVALID_INPUT_PARAM,
                    "Configured integrity key is not cacheline aligned");
     }
