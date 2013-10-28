@@ -48,7 +48,11 @@ extern "C"{
                                          INCLUDE FILES
 ==================================================================================================*/
 #include <stdint.h>
+#ifdef USDPAA
+#include <usdpaa/compat.h>
+#else
 #include <compat.h>
+#endif
 #include "fsl_sec_config.h"
 /*==================================================================================================
                                        DEFINES AND MACROS

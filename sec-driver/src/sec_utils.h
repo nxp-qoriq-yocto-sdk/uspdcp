@@ -36,7 +36,11 @@
 /*==============================================================================
                                 INCLUDE FILES
 ==============================================================================*/
+#ifdef USDPAA
+#include <usdpaa/compat.h>
+#else
 #include <compat.h>
+#endif
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>

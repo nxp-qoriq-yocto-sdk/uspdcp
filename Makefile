@@ -32,6 +32,7 @@
 
 include ./Makefile.config
 
+ifeq (,$(findstring USDPAA, $(EXTRA_DEFINE)))
 # All "Makefile.am"s found beneath these directories are processed;
 DIRS := sec-driver utils
 
@@ -59,7 +60,9 @@ endif
 ifeq ($(shell if [ ! -d  $(IPC_LIB_DIR) ]; then echo $(IPC_LIB_DIR); fi), $(IPC_LIB_DIR))
     $(error IPC library directory $(IPC_LIB_DIR) does not exist)
 endif
-
+else
+DIRS := sec-driver utils/test-frameworks
+endif
 # ----=[ Arch specific definitions ]=----
 ifneq (distclean,$(MAKECMDGOALS))
  ifeq (powerpc,$(ARCH))
@@ -67,8 +70,13 @@ ifneq (distclean,$(MAKECMDGOALS))
    $(ARCH)_SPEC_DEFINE	:= _FILE_OFFSET_BITS=64
    $(ARCH)_SPEC_INC_PATH:=
    $(ARCH)_SPEC_LIB_PATH:=
-   $(ARCH)_SPEC_CFLAGS	:= -g -O3 -Wall -Wshadow -Wno-unused-function -te500v2
-   $(ARCH)_SPEC_LDFLAGS	:= -g -pthread -te500v2
+   ifeq (,$(findstring USDPAA, $(EXTRA_DEFINE)))
+      $(ARCH)_SPEC_CFLAGS	:= -g -O3 -Wall -Wshadow -Wno-unused-function -te500v2
+      $(ARCH)_SPEC_LDFLAGS	:= -g -pthread -te500v2
+   else
+      $(ARCH)_SPEC_CFLAGS	:= -g -O3 -Wall -Wshadow -Wno-unused-function $(addprefix -D, _GNU_SOURCE CONFIG_PHYS_64BIT)
+      $(ARCH)_SPEC_LDFLAGS	:= -pthread -lm
+   endif
  else
    ifeq (i686, $(ARCH))
 	 CROSS_COMPILE	:=
@@ -102,9 +110,15 @@ OBJ_DIR		:= objs-$(ARCH)
 BIN_DIR		:= $(TOP_LEVEL)/bin-$(ARCH)
 LIB_DIR		:= $(TOP_LEVEL)/lib-$(ARCH)
 CFLAGS		:= -I$(TOP_LEVEL)/include $(addprefix -I,$($(ARCH)_SPEC_INC_PATH))
+ifneq (,$(findstring USDPAA, $(EXTRA_DEFINE)))
+CFLAGS		+= -I$(SDK_DIR)/usr/include
+endif
 CFLAGS		+= $(addprefix -D,$($(ARCH)_SPEC_DEFINE) $(EXTRA_DEFINE))
 CFLAGS		+= $($(ARCH)_SPEC_CFLAGS) $(EXTRA_CFLAGS)
 LDFLAGS		:= $(addprefix -L,$(LIB_DIR)) $(addprefix -L,$($(ARCH)_SPEC_LIB_PATH))
+ifneq (,$(findstring USDPAA, $(EXTRA_DEFINE)))
+LDFLAGS		+= -L$(SDK_DIR)/usr/lib
+endif
 LDFLAGS		+= $($(ARCH)_SPEC_LDFLAGS) $(EXTRA_LDFLAGS)
 ARFLAGS		:= rcs
 INSTALL_FLAGS	?= -D

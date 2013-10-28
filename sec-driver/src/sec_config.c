@@ -46,8 +46,10 @@ extern "C" {
 #include <dirent.h>
 #include <sys/mman.h>
 #include <errno.h>
+#ifndef USDPAA
 // For DTS parsing
 #include <of.h>
+#endif
 #include <fcntl.h>
 
 /*==================================================================================================
@@ -303,7 +305,75 @@ static void* uio_map_registers(int uio_device_fd, int uio_device_id, int uio_map
 /*==================================================================================================
                                      GLOBAL FUNCTIONS
 ==================================================================================================*/
+#ifdef USDPAA
+int sec_configure(int job_ring_number, struct sec_job_ring_t *job_rings)
+{
+	char uio_name[SEC_UIO_MAX_DEVICE_NAME_LENGTH];
+	char device_file[SEC_UIO_MAX_DEVICE_FILE_NAME_LENGTH];
+	int config_jr_no = 0, jr_number = -1;
+	int uio_minor_number = -1;
+	int ret;
+	DIR *uio_root_dir = NULL;
+	struct dirent *uio_dp = NULL;
 
+#if SEC_NOTIFICATION_TYPE == SEC_NOTIFICATION_TYPE_POLL
+    SEC_INFO("SEC driver configured with SEC_NOTIFICATION_TYPE_POLL enabled");
+#elif SEC_NOTIFICATION_TYPE == SEC_NOTIFICATION_TYPE_IRQ
+    SEC_INFO("SEC driver configured with SEC_NOTIFICATION_TYPE_IRQ enabled");
+#elif SEC_NOTIFICATION_TYPE == SEC_NOTIFICATION_TYPE_NAPI
+    SEC_INFO("SEC driver configured with SEC_NOTIFICATION_TYPE_NAPI enabled");
+#endif
+
+	uio_root_dir = opendir(SEC_UIO_DEVICE_SYS_ATTR_PATH);
+	SEC_ASSERT(uio_root_dir != NULL,
+		   SEC_INVALID_INPUT_PARAM,
+		   "Failed to open dir %s",
+		   SEC_UIO_DEVICE_SYS_ATTR_PATH);
+
+	/* Iterate through all subdirs */
+	while ((uio_dp = readdir(uio_root_dir)) != NULL &&
+		config_jr_no < job_ring_number) {
+
+		if(file_name_match_extract(uio_dp->d_name, "uio", &uio_minor_number))
+		{
+			/*
+			 * Open file uioX/name and read first line which contains
+			 * the name for the device. Based on the name check if this
+			 * UIO device is UIO device for job ring with id jr_id.
+			 */
+			memset(uio_name,  0, sizeof(uio_name));
+			ret = file_read_first_line(SEC_UIO_DEVICE_SYS_ATTR_PATH,
+						   uio_dp->d_name,
+						   "name",
+						   uio_name);
+			SEC_ASSERT(ret == 0, SEC_INVALID_INPUT_PARAM,
+				   "file_read_first_line() failed");
+
+			if(file_name_match_extract(uio_name,
+						   SEC_UIO_DEVICE_NAME,
+						   &jr_number)) {
+				job_rings[config_jr_no].jr_id = config_jr_no;
+				config_jr_no++;
+			}
+		}
+	}
+
+	closedir(uio_root_dir);
+
+	if(config_jr_no == 0) {
+		SEC_ERROR("Configuration ERROR! No SEC Job Rings assigned for userspace usage!");
+		return SEC_INVALID_INPUT_PARAM;
+	}
+
+	if(config_jr_no < job_ring_number) {
+		SEC_ERROR("Number of available job rings configured from DTS (%d) is less than requested number (%d)",
+			  config_jr_no, job_ring_number);
+		return SEC_INVALID_INPUT_PARAM;
+	}
+
+	return SEC_SUCCESS;
+}
+#else
 int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
 {
     const struct device_node *dpa_node = NULL;
@@ -405,7 +475,7 @@ int sec_configure(int job_ring_number, sec_job_ring_t *job_rings)
 
     return SEC_SUCCESS;
 }
-
+#endif
 sec_return_code_t sec_config_uio_job_ring(sec_job_ring_t *job_ring)
 {
     bool uio_device_found = false;

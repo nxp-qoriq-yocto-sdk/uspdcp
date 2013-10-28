@@ -49,10 +49,12 @@ extern "C" {
 #include <linux/limits.h>
 
 #include "fsl_sec.h"
-
+#ifdef USDPAA
+#include <usdpaa/dma_mem.h>
+#else
 // For shared memory allocator
 #include "fsl_usmmgr.h"
-
+#endif
 // Common methods across tests
 #include "common.h"
 
@@ -256,8 +258,10 @@ static int no_of_used_pdcp_dl_contexts = 0;
 static thread_config_t th_config[THREADS_NUMBER];
 static pthread_t threads[THREADS_NUMBER];
 
+#ifndef USDPAA
 // FSL Userspace Memory Manager structure
 fsl_usmmgr_t g_usmmgr;
+#endif
 
 /* Parameters given by the user and copied when parsing the cmd. line */
 static users_params_t user_param;
@@ -348,7 +352,19 @@ static int done_cbk (const sec_packet_t *in_packet,
                      ua_context_handle_t ua_ctx_handle,
                      uint32_t status,
                      uint32_t error_info);
+#ifdef USDPAA
+dma_addr_t test_vtop(void *v);
+#define test_vtop __dma_mem_vtop
 
+void *test_ptov(dma_addr_t p);
+#define test_ptov __dma_mem_ptov
+
+void *test_memalign(size_t align, size_t size);
+#define test_memalign __dma_mem_memalign
+
+void test_free(void *ptr, size_t size);
+#define test_free(ptr, size) __dma_mem_free(ptr)
+#else
 /* Returns the physical address corresponding to the virtual
  * address passed as a parameter.
  */
@@ -366,7 +382,7 @@ static void * test_memalign(size_t align, size_t size);
 
 /* Frees a previously allocated FSL USMMGR memory region */
 static void test_free(void *ptr, size_t size);
-
+#endif
 /*==================================================================================================
                                         LOCAL MACROS
 ==================================================================================================*/
@@ -417,6 +433,7 @@ static uint32_t test_num_iter;
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
+#ifndef USDPAA
 static void * test_memalign(size_t align, size_t size)
 {
     int ret;
@@ -440,7 +457,7 @@ static void test_free(void *ptr, size_t size)
     // fprintf(stderr,"FREE:\n0x%08x, 0x%08x, %d\n",r.vaddr, test_vtop(r.vaddr), size);
     fsl_usmmgr_free(&r,g_usmmgr);
 }
-
+#endif
 static void populate_pdcp_context(pdcp_context_t *pdcp_context,
                                   sec_out_cbk callback,
                                   uint32_t proto_dir)
@@ -1382,7 +1399,9 @@ static int cleanup_sec_environment(void)
 
     /* Release memory allocated for SEC internal structures. */
     dma_mem_free(sec_config_data.memory_area,SEC_DMA_MEMORY_SIZE);
-
+#ifdef USDPAA
+    dma_mem_destroy(dma_mem_generic);
+#else
     /* Destroy FSL USMMGR object */
     ret_code = fsl_usmmgr_exit(g_usmmgr);
     if (ret_code != 0)
@@ -1390,7 +1409,7 @@ static int cleanup_sec_environment(void)
         perror("Error free'ing USMMGR object");
         return ret_code;
     }
-
+#endif
     return 0;
 }
 /*==================================================================================================
@@ -1692,14 +1711,20 @@ int main(int argc, char ** argv)
         print_usage(argv[0]);
         return 1;
     }
-
+#ifdef USDPAA
+    dma_mem_generic = dma_mem_create(DMA_MAP_FLAG_ALLOC, NULL, DMAMEM_SIZE);
+    if (!dma_mem_generic) {
+		printf("ERROR on dma_mem_create");
+		return -1;
+    }
+#else
     /* Init FSL USMMGR */
     g_usmmgr = fsl_usmmgr_init();
     if(g_usmmgr == NULL){
         perror("ERROR on fsl_usmmgr_init :");
         return -1;
     }
-
+#endif
     /* Install CTRL-C handler */
     signal(SIGINT, abort_loop);
 

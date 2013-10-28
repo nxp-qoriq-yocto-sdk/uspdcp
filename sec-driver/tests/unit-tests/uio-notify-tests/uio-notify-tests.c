@@ -39,10 +39,12 @@ extern "C" {
 ==================================================================================================*/
 #include "fsl_sec.h"
 #include "cgreen.h"
-
+#ifdef USDPAA
+#include <usdpaa/dma_mem.h>
+#else
 // For shared memory allocator
 #include "fsl_usmmgr.h"
-
+#endif
 
 #include <stdio.h>
 #include <assert.h>
@@ -73,7 +75,10 @@ extern "C" {
 // For keeping the code relatively the same between HW versions
 #define dma_mem_memalign  test_memalign
 #define dma_mem_free      test_free
-
+#ifdef USDPAA
+/* The size of the DMA-able memory zone to be allocated through the test */
+#define DMAMEM_SIZE	0x1000000
+#endif
 /*==================================================================================================
                                       LOCAL VARIABLES
 ==================================================================================================*/
@@ -94,15 +99,29 @@ static const sec_job_ring_descriptor_t *job_ring_descriptors = NULL;
 // Job ring used for testing, in tests using a single job ring.
 static int job_ring_id;
 
+#ifndef USDPAA
 // FSL Userspace Memory Manager structure
 fsl_usmmgr_t g_usmmgr;
-
+#endif
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
 ==================================================================================================*/
 /* Returns the physical address corresponding to the virtual
  * address passed as a parameter. 
  */
+#ifdef USDPAA
+dma_addr_t test_vtop(void *v);
+#define test_vtop __dma_mem_vtop
+
+void *test_ptov(dma_addr_t p);
+#define test_ptov __dma_mem_ptov
+
+void *test_memalign(size_t align, size_t size);
+#define test_memalign __dma_mem_memalign
+
+void test_free(void *ptr, size_t size);
+#define test_free(ptr, size) __dma_mem_free(ptr)
+#else
 static inline dma_addr_t test_vtop(void *v)
 {
     return fsl_usmmgr_v2p(v,g_usmmgr);
@@ -113,9 +132,11 @@ static void * test_memalign(size_t align, size_t size);
 
 /* Frees a previously allocated FSL USMMGR memory region */
 static void test_free(void *ptr, size_t size);
+#endif
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
+#ifndef USDPAA
 static void * test_memalign(size_t align, size_t size)
 {
     int ret;
@@ -131,15 +152,15 @@ static void test_free(void *ptr, size_t size)
    range_t r = {0,ptr,size};   
    fsl_usmmgr_free(&r,g_usmmgr);
 }
-
+#endif
 static void test_setup(void)
 {
     int ret = 0;
-
+#ifndef USDPAA
     // Init FSL USMMGR
     g_usmmgr = fsl_usmmgr_init();
     assert_not_equal_with_message(g_usmmgr, NULL, "ERROR on fsl_usmmgr_init");
-
+#endif
     // Fill SEC driver configuration data
     sec_config_data.memory_area = dma_mem_memalign(L1_CACHE_BYTES,SEC_DMA_MEMORY_SIZE);
     sec_config_data.sec_drv_vtop = test_vtop;
@@ -153,18 +174,18 @@ static void test_setup(void)
 
 static void test_teardown()
 {
-    int ret = 0;
+    int __attribute__((unused)) ret = 0;
 
     // release sec driver
     ret = sec_release();
 	assert_equal_with_message(ret, SEC_SUCCESS, "ERROR on sec_release: ret = %d", ret);
 
     dma_mem_free(sec_config_data.memory_area,SEC_DMA_MEMORY_SIZE);
-    
+#ifndef USDPAA
     /* Destroy FSL USMMGR object. */
     ret = fsl_usmmgr_exit(g_usmmgr);
     assert_equal_with_message(ret,0,"Failure to destroy the FSL USMMGR: %d",ret);
-
+#endif
 }
 
 
@@ -300,6 +321,10 @@ int main(int argc, char *argv[])
     TestSuite * suite = uio_tests();
     TestReporter * reporter = create_text_reporter();
 
+#ifdef USDPAA
+    dma_mem_generic = dma_mem_create(DMA_MAP_FLAG_ALLOC, NULL, DMAMEM_SIZE);
+    assert_not_equal_with_message(dma_mem_generic, NULL, "ERROR on dma_mem_create");
+#endif
     /* Run tests */
 
     job_ring_id = 0;
@@ -313,6 +338,9 @@ int main(int argc, char *argv[])
     destroy_test_suite(suite);
     (*reporter->destroy)(reporter);
 
+#ifdef USDPAA
+    dma_mem_destroy(dma_mem_generic);
+#endif
     return 0;
 } /* main() */
 

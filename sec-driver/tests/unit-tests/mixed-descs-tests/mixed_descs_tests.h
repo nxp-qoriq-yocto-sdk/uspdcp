@@ -46,6 +46,11 @@
 #define PDCP_DATA_PLANE_HEADER_LENGTH_LONG_SN   2
 
 #define MAX_NUM_SCENARIOS     (sizeof(test_scenarios)/sizeof(test_scenarios[0]))
+
+#ifdef USDPAA
+/* The size of the DMA-able memory zone to be allocated through the test */
+#define DMAMEM_SIZE	0x1000000
+#endif
 /*==============================================================================
                                     ENUMS
 ==============================================================================*/

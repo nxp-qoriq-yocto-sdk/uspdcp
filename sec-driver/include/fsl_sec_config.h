@@ -200,7 +200,11 @@ extern "C"{
  *
  * @note  Must be kept in synch with SEC kernel driver define #SEC_UIO_DEVICE_NAME !
  */
+#ifdef USDPAA
+#define SEC_UIO_DEVICE_NAME     "fsl-jr"
+#else
 #define SEC_UIO_DEVICE_NAME     "sec-job-ring"
+#endif
 
 /** Maximum number of job rings supported by SEC hardware */
 #define MAX_SEC_JOB_RINGS         4
