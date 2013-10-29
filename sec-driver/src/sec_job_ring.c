@@ -37,11 +37,11 @@ extern "C" {
 /*=================================================================================================
                                         INCLUDE FILES
 ==================================================================================================*/
+#include <sys/mman.h>
 #include "sec_job_ring.h"
 #include "sec_utils.h"
 #include "sec_hw_specific.h"
 #include "sec_config.h"
-
 
 /*==================================================================================================
                                      LOCAL DEFINES
@@ -222,6 +222,11 @@ int shutdown_job_ring(sec_job_ring_t * job_ring)
 #if SEC_NOTIFICATION_TYPE != SEC_NOTIFICATION_TYPE_POLL
     uio_job_ring_disable_irqs(job_ring);
 #endif
+
+    /*
+     * munmap SEC's register memory
+     */
+    munmap(job_ring->register_base_addr, job_ring->map_size);
 
     /* I need to close the fd after shutdown UIO commands need to be 
      * sent using the fd 

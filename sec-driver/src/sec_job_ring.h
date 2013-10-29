@@ -150,6 +150,7 @@ struct sec_job_ring_t
                                                     for interrupts notifications */
     uint32_t jr_id;                             /*< Job ring id */
     void *register_base_addr;                   /*< Base address for SEC's register memory for this job ring. */
+    int map_size;                               /*< SEC's register memory map size. */
     sec_job_ring_state_t jr_state;              /*< The state of this job ring */
     sec_contexts_pool_t ctx_pool;               /*< Pool of SEC contexts */
 #if (SEC_ENABLE_SCATTER_GATHER == ON)

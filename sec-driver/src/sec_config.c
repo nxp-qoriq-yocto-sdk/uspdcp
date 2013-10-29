@@ -148,10 +148,12 @@ static bool uio_find_device_file(int jr_id, char *device_file, int *uio_device_i
  * @param [in] uio_device_id    UIO device id
  * @param [in] uio_map_id       UIO allows maximum 5 different mapping for each device.
  *                              Maps start with id 0.
+ * @param [out] map_size        Map size.
  * @retval  NULL if failed to map registers
  * @retval  Virtual address for mapped register address range
  */
-static void* uio_map_registers(int uio_device_fd, int uio_device_id, int uio_map_id);
+static void* uio_map_registers(int uio_device_fd, int uio_device_id,
+			       int uio_map_id, int *map_size);
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
@@ -256,7 +258,8 @@ static int file_read_first_line(char root[], char subdir[], char filename[], cha
     return 0;
 }
 
-static void* uio_map_registers(int uio_device_fd, int uio_device_id, int uio_map_id)
+static void* uio_map_registers(int uio_device_fd, int uio_device_id,
+			       int uio_map_id, int *map_size)
 {
     void *mapped_address = NULL;
     unsigned int uio_map_size = 0;
@@ -296,6 +299,11 @@ static void* uio_map_registers(int uio_device_fd, int uio_device_id, int uio_map
                   errno, uio_device_fd, uio_device_id, uio_map_id);
         return NULL;
     }
+
+    /*
+     * Save the map size to use it later on for munmap-ing.
+     */
+    *map_size = uio_map_size;
 
     SEC_INFO("UIO device id %d, mapped region from map id %d of size 0x%x",
              uio_device_id, uio_map_id, uio_map_size);
@@ -507,7 +515,8 @@ sec_return_code_t sec_config_uio_job_ring(sec_job_ring_t *job_ring)
     ASSERT(job_ring->register_base_addr == NULL);
     job_ring->register_base_addr = uio_map_registers(job_ring->uio_fd,
                                                      uio_device_id,
-                                                     SEC_UIO_MAP_ID);
+                                                     SEC_UIO_MAP_ID,
+                                                     &job_ring->map_size);
 
     SEC_ASSERT(job_ring->register_base_addr != NULL,
                SEC_INVALID_INPUT_PARAM,
