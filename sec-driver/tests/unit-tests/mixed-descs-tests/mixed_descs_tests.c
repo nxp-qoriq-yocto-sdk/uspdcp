@@ -56,6 +56,7 @@ extern "C" {
 #include "cgreen.h"
 #ifdef USDPAA
 #include <usdpaa/dma_mem.h>
+#include <flib/protoshared.h>
 #else
 // For shared memory allocator
 #include "fsl_usmmgr.h"
@@ -154,10 +155,13 @@ static uint8_t *cipher_key = NULL;
 
 // integrity key, required for every PDCP context
 static uint8_t *integrity_key = NULL;
-#ifndef USDPAA
+#ifdef USDPAA
+enum rta_sec_era rta_sec_era = RTA_SEC_ERA_3;
+#else
 // FSL Userspace Memory Manager structure
 fsl_usmmgr_t g_usmmgr;
 #endif
+
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
 ==================================================================================================*/

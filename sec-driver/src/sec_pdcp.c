@@ -37,7 +37,11 @@ extern "C" {
 /*=================================================================================================
                                         INCLUDE FILES
 ==================================================================================================*/
+#ifdef USDPAA
+#include <flib/protoshared.h>
+#else
 #include "sec_pdcp.h"
+#endif
 #include "sec_contexts.h"
 #include "sec_job_ring.h"
 #include "sec_hw_specific.h"
@@ -47,6 +51,7 @@ extern "C" {
 /*==================================================================================================
                                      LOCAL DEFINES
 ==================================================================================================*/
+#ifndef USDPAA
 /** Define for use in the array of descriptor creating functions. This is the number of
  * rows in the array
  */
@@ -56,10 +61,11 @@ extern "C" {
  * columns in the array
  */
 #define NUM_INT_ALGS sizeof(sec_crypto_alg_t)
-
+#endif
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
 ==================================================================================================*/
+#ifndef USDPAA
 /** Typedef for function pointer forcreating a shared descriptor on a context */
 typedef int (*create_desc_fp)(sec_context_t *ctx);
 
@@ -81,7 +87,7 @@ static create_desc_fp c_plane_create_desc[][NUM_INT_ALGS];
  * PDCP User Plane.
  */
 static create_desc_fp u_plane_create_desc[];
-
+#endif
 /*==================================================================================================
                                      GLOBAL CONSTANTS
 ==================================================================================================*/
@@ -94,13 +100,98 @@ extern sec_vtop g_sec_vtop;
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
 ==================================================================================================*/
+#ifndef USDPAA
 /** @brief Fill PDB with initial data for this context: HFN threshold, HFN mask, etc
  * @param [in,out] ctx          SEC context
  */
 static void sec_pdcp_create_pdb(sec_context_t *ctx);
+#endif
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
+#ifdef USDPAA
+static int sec_pdcp_context_create_descriptor(sec_context_t *ctx)
+{
+	unsigned int bufsize;
+	const sec_pdcp_context_info_t *pdcp_crypto_info;
+	struct alginfo cipher, integrity;
+	uint32_t *descbuf;
+
+	ASSERT(ctx != NULL);
+	ASSERT(ctx->crypto_info.pdcp_crypto_info != NULL);
+
+	pdcp_crypto_info = ctx->crypto_info.pdcp_crypto_info;
+	memset(&cipher, 0x00, sizeof(struct alginfo));
+	memset(&integrity, 0x00, sizeof(struct alginfo));
+
+	cipher.algtype = pdcp_crypto_info->cipher_algorithm;
+	cipher.key = g_sec_vtop(pdcp_crypto_info->cipher_key);
+	cipher.keylen = pdcp_crypto_info->cipher_key_len;
+
+	integrity.algtype = pdcp_crypto_info->integrity_algorithm;
+	integrity.key = g_sec_vtop(pdcp_crypto_info->integrity_key);
+	integrity.keylen = pdcp_crypto_info->integrity_key_len;
+
+	descbuf = (uint32_t*)ctx->sh_desc;
+	switch (pdcp_crypto_info->user_plane) {
+	case PDCP_CONTROL_PLANE:
+		if (pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION)
+			cnstr_shdsc_pdcp_c_plane_encap(descbuf,
+					&bufsize,
+					1,
+					pdcp_crypto_info->hfn,
+					pdcp_crypto_info->bearer,
+					pdcp_crypto_info->packet_direction,
+					pdcp_crypto_info->hfn_threshold,
+					&cipher,
+					&integrity,
+					0);
+		else
+			cnstr_shdsc_pdcp_c_plane_decap(descbuf,
+					&bufsize,
+					1,
+					pdcp_crypto_info->hfn,
+					pdcp_crypto_info->bearer,
+					pdcp_crypto_info->packet_direction,
+					pdcp_crypto_info->hfn_threshold,
+					&cipher,
+					&integrity,
+					0);
+		break;
+	case PDCP_DATA_PLANE:
+		if (pdcp_crypto_info->protocol_direction == PDCP_ENCAPSULATION)
+			cnstr_shdsc_pdcp_u_plane_encap(descbuf,
+					&bufsize,
+					1,
+					pdcp_crypto_info->sn_size,
+					pdcp_crypto_info->hfn,
+					pdcp_crypto_info->bearer,
+					pdcp_crypto_info->packet_direction,
+					pdcp_crypto_info->hfn_threshold,
+					&cipher,
+					0);
+		else
+			cnstr_shdsc_pdcp_u_plane_decap(descbuf,
+					&bufsize,
+					1,
+					pdcp_crypto_info->sn_size,
+					pdcp_crypto_info->hfn,
+					pdcp_crypto_info->bearer,
+					pdcp_crypto_info->packet_direction,
+					pdcp_crypto_info->hfn_threshold,
+					&cipher,
+					0);
+		break;
+	default:
+		SEC_ERROR("Context [%p] invalid user/control plane indication",
+			  ctx);
+		return SEC_INVALID_INPUT_PARAM;
+	}
+
+	SEC_DUMP_DESC(descbuf);
+	return SEC_SUCCESS;
+}
+#else
 static void sec_pdcp_create_pdb(sec_context_t *ctx)
 {
     sec_pdcp_pdb_t *sec_pdb;
@@ -1150,7 +1241,7 @@ static int create_c_plane_null_desc(sec_context_t *ctx)
 
     return SEC_SUCCESS;
 }
-
+#endif
 /*==================================================================================================
                                      GLOBAL FUNCTIONS
 ==================================================================================================*/
@@ -1168,9 +1259,10 @@ int sec_pdcp_context_set_crypto_info(sec_context_t *ctx,
     SEC_ASSERT(ret == SEC_SUCCESS, ret, "Failed to create descriptor for "
                "PDCP context with bearer = %d", ctx->crypto_info.pdcp_crypto_info->bearer);
 
-    return SEC_SUCCESS;
+    return ret;
 }
 
+#ifndef USDPAA
 /** Static array for selection of the function to be used for creating the shared descriptor on a SEC context,
  * depending on the algorithm selected by the user. This array is used for PDCP Control plane where both
  * authentication and encryption is required.
@@ -1190,7 +1282,7 @@ static create_desc_fp u_plane_create_desc[NUM_CIPHER_ALGS] ={
         /*      NULL                   SNOW                     AES */
         create_u_plane_null_desc,   create_u_plane_hw_acc_desc,   create_u_plane_hw_acc_desc
 };
-
+#endif
 /*================================================================================================*/
 
 #ifdef __cplusplus

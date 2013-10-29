@@ -52,6 +52,7 @@ extern "C" {
 #include "fsl_sec.h"
 #ifdef USDPAA
 #include <usdpaa/dma_mem.h>
+#include <flib/protoshared.h>
 #else
 // For shared memory allocator
 #include "fsl_usmmgr.h"
@@ -258,7 +259,9 @@ static int no_of_used_pdcp_dl_contexts = 0;
 /* One thread manages two JR: one for DL, one for UL */
 static thread_config_t th_config[THREADS_NUMBER];
 static pthread_t threads[THREADS_NUMBER];
-#ifndef USDPAA
+#ifdef USDPAA
+enum rta_sec_era rta_sec_era = RTA_SEC_ERA_2;
+#else
 // FSL Userspace Memory Manager structure
 fsl_usmmgr_t g_usmmgr;
 #endif

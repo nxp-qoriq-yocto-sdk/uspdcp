@@ -47,6 +47,7 @@ extern "C" {
 #include "fsl_sec.h"
 #ifdef USDPAA
 #include <usdpaa/dma_mem.h>
+#include <flib/protoshared.h>
 #else
 // For shared memory allocator
 #include "fsl_usmmgr.h"
@@ -319,7 +320,9 @@ static thread_config_t th_config[THREADS_NUMBER];
 static pthread_t threads[THREADS_NUMBER];
 static pthread_barrier_t th_barrier;
 
-#ifndef USDPAA
+#ifdef USDPAA
+enum rta_sec_era rta_sec_era = RTA_SEC_ERA_2;
+#else
 // FSL Userspace Memory Manager structure
 fsl_usmmgr_t g_usmmgr;
 #endif

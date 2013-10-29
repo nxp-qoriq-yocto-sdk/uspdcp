@@ -42,6 +42,7 @@ extern "C" {
 
 #ifdef USDPAA
 #include <usdpaa/dma_mem.h>
+#include <flib/protoshared.h>
 #else
 // For shared memory allocator
 #include "fsl_usmmgr.h"
@@ -168,10 +169,13 @@ static uint8_t test_crypto_key[] = {0x5A,0xCB,0x1D,0x64,0x4C,0x0D,0x51,0x20,
 // Authentication key
 static uint8_t test_auth_key[] = {0xC7,0x36,0xC6,0xAA,0xB2,0x2B,0xFF,0xF9,
                                   0x1E,0x26,0x98,0xD2,0xE2,0x2A,0xD5,0x7E};
-#ifndef USDPAA
+#ifdef USDPAA
+enum rta_sec_era rta_sec_era = RTA_SEC_ERA_2;
+#else
 // FSL Userspace Memory Manager structure
 fsl_usmmgr_t g_usmmgr;
 #endif
+
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
 ==================================================================================================*/

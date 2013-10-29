@@ -80,7 +80,9 @@ static inline dma_addr_t test_vtop(void *v)
 ==================================================================================================*/
 void* global_dma_mem_free = NULL;
 void* global_dma_mem_free_original = NULL;
-
+#ifdef USDPAA
+enum rta_sec_era rta_sec_era = RTA_SEC_ERA_2;
+#endif
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
 ==================================================================================================*/

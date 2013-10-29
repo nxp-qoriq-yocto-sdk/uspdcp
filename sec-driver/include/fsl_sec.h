@@ -50,6 +50,7 @@ extern "C"{
 #include <stdint.h>
 #ifdef USDPAA
 #include <usdpaa/compat.h>
+#include <flib/protoshared.h>
 #else
 #include <compat.h>
 #endif
