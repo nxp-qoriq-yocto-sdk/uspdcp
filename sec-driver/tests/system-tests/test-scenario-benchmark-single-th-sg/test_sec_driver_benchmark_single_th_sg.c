@@ -1673,7 +1673,6 @@ void abort_loop()
 {
     printf("Intercepted CTRL-C, wait for running thread to end\n");
     th_config[0].should_exit = 1;
-    th_config[1].should_exit = 1;
 }
 
 
