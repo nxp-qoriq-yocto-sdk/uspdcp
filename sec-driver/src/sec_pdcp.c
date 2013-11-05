@@ -531,7 +531,7 @@ static int create_c_plane_mixed_desc(sec_context_t *ctx)
                 // *((uint32_t*)ctx->sh_desc + i++) = 0x782A0004;
                 // *((uint32_t*)ctx->sh_desc + i++) = 0x10FA0004;
                 // *((uint32_t*)ctx->sh_desc + i++) = 0xA0A00004;
-                
+                *((uint32_t*)ctx->sh_desc + i++) = 0xA3000601;
                 *((uint32_t*)ctx->sh_desc + i++) = 0x79240004;
                 *((uint32_t*)ctx->sh_desc + i++) = 0x10fa0004;
                 *((uint32_t*)ctx->sh_desc + i++) = 0xa0a00004;
