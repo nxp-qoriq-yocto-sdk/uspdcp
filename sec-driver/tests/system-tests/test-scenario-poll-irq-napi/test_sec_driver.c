@@ -72,7 +72,7 @@ extern "C" {
 
 // The size of a PDCP input buffer.
 // Consider the size of the input and output buffers provided to SEC driver for processing identical.
-#define PDCP_BUFFER_SIZE   256
+#define PDCP_BUFFER_SIZE   512
 
 #define IRQ_COALESCING_COUNT    10
 #define IRQ_COALESCING_TIMER    100
@@ -419,7 +419,7 @@ static int get_free_pdcp_context(pdcp_context_t * pdcp_contexts,
     // Configure this PDCP context with a random number of buffers to process for test
     // The random number will range between MIN_PACKET_NUMBER_PER_CTX and MAX_PACKET_NUMBER_PER_CTX
     pdcp_contexts[i].no_of_buffers_to_process =
-            MIN_PACKET_NUMBER_PER_CTX + rand() % (MAX_PACKET_NUMBER_PER_CTX - MIN_PACKET_NUMBER_PER_CTX + 1);
+            MIN_PACKET_NUMBER_PER_CTX + rand() % (MAX_PACKET_NUMBER_PER_CTX - MIN_PACKET_NUMBER_PER_CTX - 1);
 #ifdef RANDOM_TESTING
     // Configure this PDCP context to use a random test scenario
     pdcp_contexts[i].test_scenario = rand() % MAX_NUM_SCENARIOS;
@@ -429,7 +429,7 @@ static int get_free_pdcp_context(pdcp_context_t * pdcp_contexts,
 #endif
 
     assert(pdcp_contexts[i].no_of_buffers_to_process >= MIN_PACKET_NUMBER_PER_CTX &&
-           pdcp_contexts[i].no_of_buffers_to_process <= MAX_PACKET_NUMBER_PER_CTX);
+           pdcp_contexts[i].no_of_buffers_to_process < MAX_PACKET_NUMBER_PER_CTX);
 
     // return the context chosen
     *pdcp_context = &(pdcp_contexts[i]);
@@ -471,6 +471,8 @@ static int release_pdcp_buffers(pdcp_context_t * pdcp_context,
                                 sec_packet_t *out_packet,
                                 sec_status_t status)
 {
+    int i;
+
     assert(pdcp_context != NULL);
     assert(in_packet != NULL);
     assert(out_packet != NULL);
@@ -490,17 +492,33 @@ static int release_pdcp_buffers(pdcp_context_t * pdcp_context,
 //                    out_packet->offset);
 //    assert(PDCP_BUFFER_SIZE == out_packet->length);
 
-    // mark the input buffer free
-    assert(pdcp_context->input_buffers[pdcp_context->no_of_buffers_processed].usage == PDCP_BUFFER_USED);
-    pdcp_context->input_buffers[pdcp_context->no_of_buffers_processed].usage = PDCP_BUFFER_FREE;
-    pdcp_context->input_buffers[pdcp_context->no_of_buffers_processed].offset = 0;
-    memset(pdcp_context->input_buffers[pdcp_context->no_of_buffers_processed].buffer, 0, PDCP_BUFFER_SIZE);
+    /*
+     * Because packets complete out of order (in case of platforms with
+     * multiple SEC execution units (DECOs), first the packet must be
+     * searched
+     */
+    for (i = 0; i < pdcp_context->no_of_used_buffers; i++)
+    {
+        if(in_packet == &pdcp_context->input_buffers[i].pdcp_packet) {
+            if(out_packet != &pdcp_context->output_buffers[i].pdcp_packet)
+                return 1;
 
-    // mark the output buffer free
-    assert(pdcp_context->output_buffers[pdcp_context->no_of_buffers_processed].usage == PDCP_BUFFER_USED);
-    pdcp_context->output_buffers[pdcp_context->no_of_buffers_processed].usage = PDCP_BUFFER_FREE;
-    pdcp_context->output_buffers[pdcp_context->no_of_buffers_processed].offset = 0;
-    memset(pdcp_context->output_buffers[pdcp_context->no_of_buffers_processed].buffer, 0, PDCP_BUFFER_SIZE);
+            // mark the input buffer free
+            assert(pdcp_context->input_buffers[i].usage == PDCP_BUFFER_USED);
+            pdcp_context->input_buffers[i].usage = PDCP_BUFFER_FREE;
+            pdcp_context->input_buffers[i].offset = 0;
+            memset(pdcp_context->input_buffers[i].buffer, 0, PDCP_BUFFER_SIZE);
+
+            // mark the output buffer free
+            assert(pdcp_context->output_buffers[i].usage == PDCP_BUFFER_USED);
+            pdcp_context->output_buffers[i].usage = PDCP_BUFFER_FREE;
+            pdcp_context->output_buffers[i].offset = 0;
+            memset(pdcp_context->output_buffers[i].buffer, 0, PDCP_BUFFER_SIZE);
+            break;
+        }
+    }
+    if(i == pdcp_context->no_of_used_buffers)
+        return 2;
 
     //increment the number of buffers processed counter (which acts as a consumer index for the array of buffers)
     pdcp_context->no_of_buffers_processed++;
@@ -604,11 +622,11 @@ static int get_free_pdcp_buffer(pdcp_context_t * pdcp_context,
 
     (*in_packet)->length = data_in_len + hdr_len; // + (*in_packet)->offset;
 
-    assert((*in_packet)->length <= PDCP_BUFFER_SIZE);
+    assert((*in_packet)->length + (*in_packet)->offset < PDCP_BUFFER_SIZE);
 
     (*out_packet)->length = data_out_len + hdr_len; //+ (*out_packet)->offset;
 
-    assert((*out_packet)->length <= PDCP_BUFFER_SIZE);
+    assert((*out_packet)->length + (*out_packet)->offset < PDCP_BUFFER_SIZE);
 
     pdcp_context->no_of_used_buffers++;
 
@@ -671,14 +689,14 @@ static int pdcp_ready_packet_handler (const sec_packet_t *in_packet,
         test_printf("\nthread #%d:consumer: out packet INCORRECT!."
                 " out pkt= ",
                 (pdcp_context->thread_id + 1)%2);
-        for(i = 0; i <  out_packet->length+out_packet->offset; i++)
+        for(i = out_packet->offset; i <  out_packet->length+out_packet->offset + 8; i++)
         {
             test_printf("%02x ", ((uint8_t*)test_ptov(out_packet->address))[i]);
         }
         test_printf("\n");
 
         test_printf("\nin pkt= ");
-        for(i = 0; i <   in_packet->length+in_packet->offset; i++)
+        for(i = in_packet->offset; i <   in_packet->length+in_packet->offset; i++)
         {
             test_printf("%02x ", ((uint8_t*)test_ptov(in_packet->address))[i]);
         }
