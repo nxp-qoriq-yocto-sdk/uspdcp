@@ -42,7 +42,7 @@
 ==============================================================================*/
 #ifdef USDPAA
 /* The size of the DMA-able memory zone to be allocated through the test */
-#define DMAMEM_SIZE	0x1000000
+#define DMAMEM_SIZE	0x4000000
 #endif
 /******************************************************************************/
 // START OF CONFIGURATION SECTION
