@@ -666,21 +666,21 @@ static int rlc_ready_packet_handler (const sec_packet_t *in_packet,
 
     if(test_failed)
     {
-        test_printf("\nthread #%d:consumer: out packet INCORRECT!."
+        printf("\nthread #%d:consumer: out packet INCORRECT!."
                 " out pkt= ",
                 (rlc_context->thread_id + 1)%2);
         for(i = 0; i <  out_packet->length+out_packet->offset; i++)
         {
-            test_printf("%02x ", ((uint8_t*)test_ptov(out_packet->address))[i]);
+            printf("%02x ", ((uint8_t*)test_ptov(out_packet->address))[i]);
         }
-        test_printf("\n");
+        printf("\n");
 
-        test_printf("\nin pkt= ");
+        printf("\nin pkt= ");
         for(i = 0; i <   in_packet->length+in_packet->offset; i++)
         {
-            test_printf("%02x ", ((uint8_t*)test_ptov(in_packet->address))[i]);
+            printf("%02x ", ((uint8_t*)test_ptov(in_packet->address))[i]);
         }
-        test_printf("\n");
+        printf("\n");
 
         assert(0);
     }

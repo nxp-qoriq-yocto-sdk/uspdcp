@@ -79,11 +79,11 @@ extern "C"{
 
 /** Indicates a RLC acknowledged mode context.
  * Value assigned to mode member from ::sec_rlc_context_info_t */
-#define RLC_ACKED_MODE      1
+#define RLC_ACKED_MODE      12
 
 /** Indicates a RLC unacknowledged mode context.
  * Value assigned to mode member from ::sec_rlc_context_info_t */
-#define RLC_UNACKED_MODE    0
+#define RLC_UNACKED_MODE    7
 
 /** Indicates an uplink RLC context.
  * Value assigned to packet_direction from ::sec_rlc_context_info_t */
@@ -373,7 +373,7 @@ typedef struct sec_pdcp_context_info_s
 typedef struct sec_rlc_context_info_s
 {
     uint8_t     bearer:5;               /**< Radio bearer id. */
-    uint8_t     mode:1;                 /**< Acknowleged or Unacknowledged mode indication.
+    uint8_t     mode;                   /**< Acknowleged or Unacknowledged mode indication.
                                              Possible values: #RLC_ACKED_MODE, #RLC_UNACKED_MODE. */
     uint8_t     packet_direction:1;     /**< Direction can be uplink(#RLC_UPLINK) or downlink(#RLC_DOWNLINK). */
     uint8_t     protocol_direction:1;   /**< Can be encapsulation(#RLC_ENCAPSULATION) or decapsulation(#RLC_DECAPSULATION)*/

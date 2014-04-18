@@ -36,7 +36,11 @@ extern "C" {
 /*=================================================================================================
                                         INCLUDE FILES
 ==================================================================================================*/
+#ifdef USDPAA
+#include <flib/protoshared.h>
+#else
 #include "sec_rlc.h"
+#endif
 #include "sec_contexts.h"
 #include "sec_job_ring.h"
 #include "sec_hw_specific.h"
@@ -46,6 +50,7 @@ extern "C" {
 /*==================================================================================================
                                      LOCAL DEFINES
 ==================================================================================================*/
+#ifndef USDPAA
 /** Define for use in the array of descriptor creating functions. This is the number of
  * rows in the array
  */
@@ -57,9 +62,11 @@ extern "C" {
  */
 #define NUM_RLC_INT_ALGS sizeof(sec_rlc_int_alg_t)
 #endif // SEC_RRC_PROCESSING
+#endif // USDPAA
 /*==================================================================================================
                           LOCAL TYPEDEFS (STRUCTURES, UNIONS, ENUMS)
 ==================================================================================================*/
+#ifndef USDPAA
 /** Typedef for function pointer forcreating a shared descriptor on a context */
 typedef int (*create_desc_fp)(sec_context_t *ctx);
 
@@ -83,6 +90,7 @@ static create_desc_fp rrc_create_desc[][NUM_RLC_INT_ALGS];
   * for RLC.
   */
 static create_desc_fp rlc_create_desc[NUM_RLC_CIPHER_ALGS];
+#endif // USDPAA
 /*==================================================================================================
                                      GLOBAL CONSTANTS
 ==================================================================================================*/
@@ -95,15 +103,71 @@ extern sec_vtop g_sec_vtop;
 /*==================================================================================================
                                  LOCAL FUNCTION PROTOTYPES
 ==================================================================================================*/
+#ifndef USDPAA
 /** @brief Fill PDB with initial data for this context: HFN threshold, HFN mask, etc
  * @param [in,out] ctx          SEC context
  */
 static void sec_rlc_create_pdb(sec_context_t *ctx);
-
+#endif // USDPAA
 
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
+#ifdef USDPAA
+static int sec_rlc_context_create_descriptor(sec_context_t *ctx)
+{
+	unsigned int bufsize;
+	const sec_rlc_context_info_t *rlc_crypto_info;
+	struct alginfo cipher, integrity;
+	uint32_t *descbuf;
+
+	ASSERT(ctx != NULL);
+	ASSERT(ctx->crypto_info.rlc_crypto_info != NULL);
+
+	rlc_crypto_info = ctx->crypto_info.rlc_crypto_info;
+	memset(&cipher, 0x00, sizeof(struct alginfo));
+	memset(&integrity, 0x00, sizeof(struct alginfo));
+
+	cipher.algtype = rlc_crypto_info->cipher_algorithm;
+	cipher.key = g_sec_vtop(rlc_crypto_info->cipher_key);
+	cipher.keylen = rlc_crypto_info->cipher_key_len;
+
+	descbuf = (uint32_t*)ctx->sh_desc;
+
+	switch (rlc_crypto_info->protocol_direction) {
+	case RLC_ENCAPSULATION:
+		cnstr_shdsc_rlc_encap(descbuf,
+				      &bufsize,
+				      1,
+				      rlc_crypto_info->mode,
+				      rlc_crypto_info->hfn,
+				      rlc_crypto_info->bearer,
+				      rlc_crypto_info->packet_direction,
+				      rlc_crypto_info->hfn_threshold,
+				      &cipher);
+		break;
+
+	case RLC_DECAPSULATION:
+		cnstr_shdsc_rlc_decap(descbuf,
+				      &bufsize,
+				      1,
+				      rlc_crypto_info->mode,
+				      rlc_crypto_info->hfn,
+				      rlc_crypto_info->bearer,
+				      rlc_crypto_info->packet_direction,
+				      rlc_crypto_info->hfn_threshold,
+				      &cipher);
+		break;
+
+	default:
+		SEC_ERROR("Context [%p] invalid direction", ctx);
+		return SEC_INVALID_INPUT_PARAM;
+	}
+
+	SEC_DUMP_DESC(descbuf);
+	return SEC_SUCCESS;
+}
+#else
 static void sec_rlc_create_pdb(sec_context_t *ctx)
 {
     sec_rlc_pdb_t *sec_pdb;
@@ -165,7 +229,7 @@ static int create_hw_acc_rlc_desc(sec_context_t *ctx)
     desc->hfn_ov_desc[0] = 0xAC574F08;
     desc->hfn_ov_desc[1] = 0x80000000;
     desc->hfn_ov_desc[2] = 0xA0000405;
-    desc->hfn_ov_desc[5] = 0xA8774004;
+    desc->hfn_ov_desc[3] = 0xA8774004;
 
     /* I avoid to do complicated things in CAAM, thus I 'hardcode'
      * the operations to be done on the HFN as per the SN size. Doing
@@ -175,7 +239,7 @@ static int create_hw_acc_rlc_desc(sec_context_t *ctx)
      */
     if(rlc_ctx_info->mode == RLC_ACKED_MODE)
     {
-        desc->hfn_ov_desc[3] = 0x00000007;
+        desc->hfn_ov_desc[4] = 0x00000007;
     }
     else
     {
@@ -202,7 +266,29 @@ static int create_rlc_null_desc(sec_context_t *ctx)
 {
     int i = 0;
     SEC_INFO("Creating RLC descriptor with NULL alg.");
-
+#ifdef USDPAA
+    *((uint32_t*)ctx->sh_desc + i++) = 0xB8850315;
+    *((uint32_t*)ctx->sh_desc + i++) = 0x00000002;
+    *((uint32_t*)ctx->sh_desc + i++) = 0x07D2AB80;
+    *((uint32_t*)ctx->sh_desc + i++) = 0x18000000;
+    *((uint32_t*)ctx->sh_desc + i++) = 0x07D2AC00;
+    *((uint32_t*)ctx->sh_desc + i++) = 0xAC574F08;
+    *((uint32_t*)ctx->sh_desc + i++) = 0x80000000;
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA0000405;
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA8774004;
+    *((uint32_t*)ctx->sh_desc + i++) = 0x00000007;
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA8900008;
+    *((uint32_t*)ctx->sh_desc + i++) = 0x78430804;
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA808FA04;
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA808FB04;
+    *((uint32_t*)ctx->sh_desc + i++) = 0xAC284F04;
+    *((uint32_t*)ctx->sh_desc + i++) = 0x00002FFF;
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA0C108F1;
+    *((uint32_t*)ctx->sh_desc + i++) = 0xA80AF004;
+    *((uint32_t*)ctx->sh_desc + i++) = 0x2B130000;
+    *((uint32_t*)ctx->sh_desc + i++) = 0x72A20000;
+    *((uint32_t*)ctx->sh_desc + i++) = 0x69300000;
+#else
     *((uint32_t*)ctx->sh_desc + i++) = 0xBA800308;    // shared descriptor header -- desc len is 8; no sharing
     *((uint32_t*)ctx->sh_desc + i++) = 0xA80AFB04;    // Put SEQ-IN-Length into VSOL
     *((uint32_t*)ctx->sh_desc + i++) = 0x69300000;    // SEQ FIFO STORE
@@ -211,13 +297,14 @@ static int create_rlc_null_desc(sec_context_t *ctx)
     *((uint32_t*)ctx->sh_desc + i++) = 0xA0C108F1;    // HALT with status if the length of the input frame (as in VSIL) is bigger than the length in the immediate value
     *((uint32_t*)ctx->sh_desc + i++) = 0xA80AF004;    // MATH ADD VSIL + 0 -> MATH 0 (to put the length of the input frame into MATH 0)
     *((uint32_t*)ctx->sh_desc + i++) = 0x70820000;    // Move Length from Deco Alignment block to Output FIFO using length from MATH 0
+#endif
 
     SEC_DUMP_DESC(ctx->sh_desc);
 
     return SEC_SUCCESS;
 }
 
-static int sec_pdcp_context_create_descriptor(sec_context_t *ctx)
+static int sec_rlc_context_create_descriptor(sec_context_t *ctx)
 {
     ASSERT(ctx != NULL);
     ASSERT(ctx->crypto_info.rlc_crypto_info != NULL);
@@ -241,6 +328,7 @@ static int sec_pdcp_context_create_descriptor(sec_context_t *ctx)
             return SEC_INVALID_INPUT_PARAM;
     }
 }
+#endif
 /*==================================================================================================
                                      GLOBAL FUNCTIONS
 ==================================================================================================*/
@@ -250,16 +338,16 @@ int sec_rlc_context_set_crypto_info(sec_context_t *ctx,
 {
     int ret = SEC_SUCCESS;
 
-    // store PDCP crypto info in context
+    // store RLC crypto info in context
     ctx->crypto_info.rlc_crypto_info = crypto_info;
 
-    ret = sec_pdcp_context_create_descriptor(ctx);
+    ret = sec_rlc_context_create_descriptor(ctx);
     SEC_ASSERT(ret == SEC_SUCCESS, ret, "Failed to create descriptor for "
-               "PDCP context with bearer = %d", crypto_info->bearer);
+               "RLC context with bearer = %d", crypto_info->bearer);
 
-    return SEC_SUCCESS;
+    return ret;
 }
-
+#ifndef USDPAA
 #ifdef SEC_RRC_PROCESSING
 /** Static array for selection of the function to be used for creating the shared descriptor on a SEC context,
  * depending on the algorithm selected by the user. This array is used for the following combinations:
@@ -282,7 +370,7 @@ static create_desc_fp rrc_create_desc[NUM_RLC_CIPHER_ALGS][NUM_RLC_INT_ALGS] = {
 static create_desc_fp rlc_create_desc[NUM_RLC_CIPHER_ALGS] =
     /*          NULL                    Kasumi                      Snow */
     {   create_rlc_null_desc,   create_hw_acc_rlc_desc,     create_hw_acc_rlc_desc    };
-
+#endif // USDPAA
 /*================================================================================================*/
 
 #ifdef __cplusplus
