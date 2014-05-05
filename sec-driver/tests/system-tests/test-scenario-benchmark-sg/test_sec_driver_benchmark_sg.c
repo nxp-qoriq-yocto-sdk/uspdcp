@@ -433,6 +433,7 @@ static uint32_t test_num_frags = -1;
 
 static uint32_t test_num_iter;
 
+pthread_barrier_t barr;
 /*==================================================================================================
                                      LOCAL FUNCTIONS
 ==================================================================================================*/
@@ -859,8 +860,6 @@ static int done_cbk(const sec_packet_t *in_packet,
                     uint32_t status,
                     uint32_t error_info)
 {
-    put_test_packet((test_packet_t*)ua_ctx_handle);
-
     return SEC_RETURN_SUCCESS;
 }
 
@@ -897,11 +896,13 @@ static int start_sec_worker_threads(void)
     assert (JOB_RING_NUMBER == 2);
     assert (THREADS_NUMBER == 2);
 
+    pthread_barrier_init(&barr,NULL,THREADS_NUMBER);
+
     /* Configure PDCP UL thread */
     th_config[0].tid = 0;
     /* PDCP UL thread is consumer on JR ID 0 and producer on JR ID 1 */
     th_config[0].consumer_job_ring_id = 0;
-    th_config[0].producer_job_ring_id = 0;
+    th_config[0].producer_job_ring_id = 1;
     th_config[0].pdcp_contexts = &pdcp_ul_contexts[0];
     th_config[0].no_of_used_pdcp_contexts = &no_of_used_pdcp_ul_contexts;
     th_config[0].no_of_pdcp_contexts_to_test = PDCP_CONTEXT_NUMBER;
@@ -910,7 +911,7 @@ static int start_sec_worker_threads(void)
     th_config[0].process_cycles = 0;
     th_config[0].poll_cycles = 0;
     th_config[0].tx_packets_per_ctx = PACKET_NUMBER_PER_CTX_UL;
-    th_config[0].rx_packets_per_ctx = PACKET_NUMBER_PER_CTX_UL;
+    th_config[0].rx_packets_per_ctx = PACKET_NUMBER_PER_CTX_DL;
     ret_code = pthread_create(&threads[0], NULL, &pdcp_thread_routine, (void*)&th_config[0]);
     assert(ret_code == 0);
 
@@ -918,7 +919,7 @@ static int start_sec_worker_threads(void)
     th_config[1].tid = 1;
     /* PDCP DL thread is consumer on JR ID 1 and producer on JR ID 0 */
     th_config[1].consumer_job_ring_id = 1;
-    th_config[1].producer_job_ring_id = 1;
+    th_config[1].producer_job_ring_id = 0;
     th_config[1].pdcp_contexts = &pdcp_dl_contexts[0];
     th_config[1].no_of_used_pdcp_contexts = &no_of_used_pdcp_dl_contexts;
     th_config[1].no_of_pdcp_contexts_to_test = PDCP_CONTEXT_NUMBER;
@@ -927,7 +928,7 @@ static int start_sec_worker_threads(void)
     th_config[1].process_cycles = 0;
     th_config[1].poll_cycles = 0;
     th_config[1].tx_packets_per_ctx = PACKET_NUMBER_PER_CTX_DL;
-    th_config[1].rx_packets_per_ctx = PACKET_NUMBER_PER_CTX_DL;
+    th_config[1].rx_packets_per_ctx = PACKET_NUMBER_PER_CTX_UL;
     ret_code = pthread_create(&threads[1], NULL, &pdcp_thread_routine, (void*)&th_config[1]);
     assert(ret_code == 0);
 
@@ -984,6 +985,7 @@ static void* pdcp_thread_routine(void* config)
     uint32_t diff_cycles = 0;
     uint32_t send_bps, receive_bps, send_pps, receive_pps;
     uint32_t time_us;
+    int rc;
     
     th_config_local = (thread_config_t*)config;
     assert(th_config_local != NULL);
@@ -1167,6 +1169,22 @@ static void* pdcp_thread_routine(void* config)
         /* Check if the user requested to end test */
         if(th_config_local->should_exit)
             break;
+
+        for (i = 0; i < PDCP_CONTEXT_NUMBER; i++)
+        {
+            int j;
+            pdcp_context = &th_config_local->pdcp_contexts[i];
+
+            for (j = 0 ; j < pdcp_context->no_of_buffers_to_process; j++)
+                put_test_packet(&pdcp_context->test_packets[j]);
+        }
+
+        rc = pthread_barrier_wait(&barr);
+        if(rc != 0 && rc != PTHREAD_BARRIER_SERIAL_THREAD)
+        {
+            printf("Could not wait on barrier\n");
+            break;
+        }
     }
 
     /* Cleanup */
