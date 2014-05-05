@@ -471,7 +471,7 @@ static void populate_pdcp_context(pdcp_context_t *pdcp_context,
     uint32_t fragment_length;
     dma_addr_t address;
     uint32_t rem_len;
-    int pkt_idx;
+    int pkt_idx, frag_idx;
 
     assert(pdcp_context != NULL);
     assert(callback != NULL);
@@ -541,10 +541,8 @@ static void populate_pdcp_context(pdcp_context_t *pdcp_context,
                    test_data_encap,
                    test_payload_size_encap);
 
-            // fragment_length = test_payload_size_encap / (test_num_frags - (test_payload_size_encap % test_num_frags ? 1 : 0));
-            fragment_length = test_payload_size_encap / test_num_frags +
-                              (test_payload_size_encap % test_num_frags ? 1 : 0);
-            
+            fragment_length = test_payload_size_encap / test_num_frags;
+
             /* First fragment is special */
             in_packet->address = test_vtop(pdcp_context->input_buffers[pkt_idx].buffer);
             in_packet->length = fragment_length;
@@ -555,28 +553,24 @@ static void populate_pdcp_context(pdcp_context_t *pdcp_context,
             address = in_packet->address + in_packet->length;
             rem_len = in_packet->total_length - in_packet->length;
             
-            while(rem_len != 0)
-            {
+            frag_idx = 1;
+
+            for (; frag_idx < test_num_frags; frag_idx++) {
                 /* Next packet */
                 in_packet++;
 
                 /* Set address to last address + last length */
                 in_packet->address = address;
+                in_packet->length = frag_idx == test_num_frags -1 ?
+                                        rem_len : fragment_length;
                 in_packet->offset = 0;
-
-                if (rem_len >= fragment_length)
-                {
-                    in_packet->length = fragment_length;
-                }
-                else
-                {
-                    in_packet->length = rem_len;
-                }
 
                 address += in_packet->length;
                 rem_len -= in_packet->length;
             }
-            
+
+            assert(rem_len == 0);
+
             /* Set offset for first fragment */
             /* Revert to the beginning of the array */
             in_packet = pkt->in_packet;
@@ -600,9 +594,7 @@ static void populate_pdcp_context(pdcp_context_t *pdcp_context,
             
             out_packet->total_length = test_payload_size_encap;
 
-            // fragment_length = test_payload_size_encap / (test_num_frags - (test_payload_size_encap % test_num_frags ? 1 : 0));
-            fragment_length = test_payload_size_encap / test_num_frags +
-                              (test_payload_size_encap % test_num_frags ? 1 : 0);
+            fragment_length = test_payload_size_encap / test_num_frags;
 
             /* First fragment is special */
             out_packet->address = test_vtop(pdcp_context->output_buffers[pkt_idx].buffer);
@@ -613,28 +605,24 @@ static void populate_pdcp_context(pdcp_context_t *pdcp_context,
             address = out_packet->address + out_packet->length;
             rem_len = out_packet->total_length - out_packet->length;
             
-            while(rem_len != 0)
-            {
+            frag_idx = 1;
+
+            for (; frag_idx < test_num_frags; frag_idx++) {
                 /* Next packet */
                 out_packet++;
 
                 /* Set address to last address + last length */
                 out_packet->address = address;
+                out_packet->length = frag_idx == test_num_frags -1 ?
+                                                      rem_len : fragment_length;
                 out_packet->offset = 0;
-
-                if (rem_len >= fragment_length)
-                {
-                    out_packet->length = fragment_length;
-                }
-                else
-                {
-                    out_packet->length = rem_len;
-                }
 
                 address += out_packet->length;
                 rem_len -= out_packet->length;
             }
-            
+
+            assert(rem_len == 0);
+
             /* Set offset for first fragment */
             /* Revert to the beginning of the array */
             out_packet = pkt->out_packet;
@@ -1545,8 +1533,10 @@ int validate_params()
             return -1;
         }
     }
-    
-    if( user_param.max_frags > SEC_MAX_SG_TBL_ENTRIES )
+
+    test_num_frags = user_param.max_frags + 1;
+
+    if( test_num_frags > SEC_MAX_SG_TBL_ENTRIES )
     {
         fprintf(stderr,"Invalid number of fragments %d "
                         "(must be less than %d)\n",
@@ -1554,9 +1544,14 @@ int validate_params()
                         SEC_MAX_SG_TBL_ENTRIES);
         return -1;
     }
-    
-    test_num_frags = user_param.max_frags;
-    
+
+    if (!(user_param.payload_size / test_num_frags)) {
+        fprintf(stderr, "Invalid combination of number of fragments (%d) "
+                        "and payload size (%d)\n",
+                        user_param.max_frags,
+                        user_param.payload_size);
+    }
+
     /* Make sure that the user param fits in the allocated buffers */
     if (user_param.payload_size >= PDCP_BUFFER_SIZE - test_pdcp_hdr_len - 
             (test_user_plane == PDCP_CONTROL_PLANE ? ICV_LEN : 0 ) )
