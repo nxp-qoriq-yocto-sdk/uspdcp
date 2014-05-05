@@ -73,7 +73,7 @@ extern "C" {
 #define TEST_PACKET_LENGTH  200
 
 // Alignment in bytes for input/output packets allocated from DMA-memory zone
-#define BUFFER_ALIGNEMENT 32
+#define BUFFER_ALIGNEMENT L1_CACHE_BYTES
 
 // Size in bytes for the buffer used by a packet.
 // A packet can use less but not more than this number of bytes.
@@ -88,7 +88,11 @@ extern "C" {
 
 // Sizeof sec_context_t struct as defined in driver.
 // @note this has to be defined to have exactly the value of sizeof(struct sec_context_t)!
-#define SIZEOF_SEC_CONTEXT_T_STRUCT 64
+#ifdef __powerpc64__
+#define SIZEOF_SEC_CONTEXT_T_STRUCT (2 * L1_CACHE_BYTES)
+#else
+#define SIZEOF_SEC_CONTEXT_T_STRUCT (L1_CACHE_BYTES)
+#endif
 
 // Number of SEC contexts in each pool. Define taken from SEC user-space driver.
 #define MAX_SEC_CONTEXTS_PER_POOL   (SEC_MAX_PDCP_CONTEXTS / (JOB_RING_NUMBER))
@@ -616,10 +620,15 @@ static void test_sec_create_pdcp_context_invalid_params(void)
     for (i = 0; i < MAX_SEC_CONTEXTS_PER_POOL * 3; i++)
     {
         ret = sec_create_pdcp_context(NULL, &ctx_info, &ctx_handles[i]);
-        assert_equal_with_message(ret, SEC_SUCCESS,
-                "ERROR on sec_create_pdcp_context: expected ret[%d]. actual ret[%d]",
-                SEC_SUCCESS, ret);
+
+        /* Workaround for cgreen message limitation on 64 bit platforms */
+        if (ret != SEC_SUCCESS)
+            break;
     }
+
+    assert_equal_with_message(ret, SEC_SUCCESS,
+            "ERROR on sec_create_pdcp_context: expected ret[%d]. actual ret[%d]",
+            SEC_SUCCESS, ret);
 
     ret = sec_create_pdcp_context(NULL, &ctx_info, &ctx_handle);
     assert_equal_with_message(ret, SEC_DRIVER_NO_FREE_CONTEXTS,
@@ -726,9 +735,19 @@ static void test_sec_delete_pdcp_context_invalid_params(void)
     // it was not altered by User App.
     // Overwrite the last 32 bytes (size of cacheline), the end pattern will be in the last
     // 32 bytes as some padding bytes may be added to ensure cache-line alignment of sec_context_t.
-    memset(ctx->dummy + sizeof(struct test_sec_context_t) - 32,
+    memset(ctx->dummy + sizeof(struct test_sec_context_t) -
+#ifdef __powerpc64__
+           L1_CACHE_BYTES,
+#else
+           32,
+#endif
            0x2, //some random value
-           32);
+#ifdef __powerpc64__
+           L1_CACHE_BYTES
+#else
+           32
+#endif
+           );
 
     // Invalid sec_ctx_handle, overwritten end pattern from ctx handle.
     ret = sec_delete_pdcp_context(ctx_handle);
@@ -1334,9 +1353,19 @@ static void test_sec_process_packet_invalid_params(void)
     // it was not altered by User App.
     // Overwrite the last 32 bytes (size of cacheline), the end pattern will be in the last
     // 32 bytes as some padding bytes may be added to ensure cache-line alignment of sec_context_t.
-    memset(ctx->dummy + sizeof(struct test_sec_context_t) - 32,
+    memset(ctx->dummy + sizeof(struct test_sec_context_t) -
+#ifdef __powerpc64__
+           L1_CACHE_BYTES,
+#else
+           32,
+#endif
            0x2, //some random value
-           32);
+#ifdef __powerpc64__
+           L1_CACHE_BYTES
+#else
+           32
+#endif
+           );
 
     // Invalid context handle
     ret = sec_process_packet(ctx_handle, in_packet, out_packet, (ua_context_handle_t)&ua_data[packet_idx]);

@@ -642,11 +642,11 @@ struct sec_descriptor_t {
     struct load_command_s load_dpovrd;
     uint32_t      dpovrd;
     struct sec_job_t *job_ptr;
-#if defined(__powerpc64__) || defined(CONFIG_PHYS_64BIT)
-    uint32_t      pad[2];
-#else
-    uint32_t      pad[5];
-#endif
+//#if defined(__powerpc64__) || defined(CONFIG_PHYS_64BIT)
+//    uint32_t      pad[2];
+//#else
+//    uint32_t      pad[5];
+//#endif
 } ____cacheline_aligned __packed;
 /*==============================================================================
                                  CONSTANTS

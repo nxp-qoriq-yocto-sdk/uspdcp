@@ -81,7 +81,7 @@ extern "C" {
 #define JOB_RING_POLL_LIMIT      10
 
 // Alignment in bytes for input/output packets allocated from DMA-memory zone
-#define BUFFER_ALIGNEMENT 32
+#define BUFFER_ALIGNEMENT L1_CACHE_BYTES
 // Max length in bytes for a confidentiality /integrity key.
 #define MAX_KEY_LENGTH    32
 

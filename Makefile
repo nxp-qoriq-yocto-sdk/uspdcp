@@ -76,18 +76,29 @@ ifneq (distclean,$(MAKECMDGOALS))
    else
       $(ARCH)_SPEC_CFLAGS	:= -g -O3 -Wall -Wshadow -Wno-unused-function $(addprefix -D, _GNU_SOURCE CONFIG_PHYS_64BIT)
       $(ARCH)_SPEC_LDFLAGS	:= -pthread -lm
+      LIBDIR                    ?= lib
    endif
  else
+  ifeq (powerpc64,$(ARCH))
+    CROSS_COMPILE        ?= powerpc-linux-gnu-
+    $(ARCH)_SPEC_DEFINE  :=
+    $(ARCH)_SPEC_INC_PATH:=
+    $(ARCH)_SPEC_LIB_PATH:=
+    $(ARCH)_SPEC_CFLAGS  := -mcpu=e500mc64 -m64
+    $(ARCH)_SPEC_LDFLAGS := -pthread -lm
+    LIBDIR               ?= lib64
+  else
    ifeq (i686, $(ARCH))
-	 CROSS_COMPILE	:=
-	 $(ARCH)_SPEC_DEFINE	:=
-	 $(ARCH)_SPEC_INC_PATH:=
-	 $(ARCH)_SPEC_LIB_PATH:=
-	 $(ARCH)_SPEC_CFLAGS	:= -pthread -O2 -Wall -Wshadow
-	 $(ARCH)_SPEC_LDFLAGS	:= -pthread
+    CROSS_COMPILE	:=
+    $(ARCH)_SPEC_DEFINE	:=
+    $(ARCH)_SPEC_INC_PATH:=
+    $(ARCH)_SPEC_LIB_PATH:=
+    $(ARCH)_SPEC_CFLAGS	:= -pthread -O2 -Wall -Wshadow
+    $(ARCH)_SPEC_LDFLAGS	:= -pthread
    else
-	 $(error "ARCH not defined.")
+    $(error "ARCH not defined.")
    endif
+  endif
  endif
 endif
 
@@ -104,7 +115,7 @@ DESTDIR		?= $(TOP_LEVEL)/test-install
 PREFIX		?= usr
 INSTALL_BIN	?= $(PREFIX)/bin
 INSTALL_SBIN	?= $(PREFIX)/sbin
-INSTALL_LIB	?= $(PREFIX)/lib
+INSTALL_LIB	?= $(PREFIX)/$(LIBDIR)
 INSTALL_OTHER	?= $(PREFIX)/etc
 OBJ_DIR		:= objs-$(ARCH)
 BIN_DIR		:= $(TOP_LEVEL)/bin-$(ARCH)
@@ -116,9 +127,6 @@ endif
 CFLAGS		+= $(addprefix -D,$($(ARCH)_SPEC_DEFINE) $(EXTRA_DEFINE))
 CFLAGS		+= $($(ARCH)_SPEC_CFLAGS) $(EXTRA_CFLAGS)
 LDFLAGS		:= $(addprefix -L,$(LIB_DIR)) $(addprefix -L,$($(ARCH)_SPEC_LIB_PATH))
-ifneq (,$(findstring USDPAA, $(EXTRA_DEFINE)))
-LDFLAGS		+= -L$(SDK_DIR)/usr/lib
-endif
 LDFLAGS		+= $($(ARCH)_SPEC_LDFLAGS) $(EXTRA_LDFLAGS)
 ARFLAGS		:= rcs
 INSTALL_FLAGS	?= -D

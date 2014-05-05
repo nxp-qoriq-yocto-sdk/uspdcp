@@ -115,7 +115,7 @@ extern "C" {
 #define JOB_RING_POLL_LIMIT      5
 
 // Alignment in bytes for input/output packets allocated from DMA-memory zone
-#define BUFFER_ALIGNEMENT 32
+#define BUFFER_ALIGNEMENT L1_CACHE_BYTES
 
 /* Maximium length, in bytes, for a confidentiality /integrity key */
 #define MAX_KEY_LENGTH    16
@@ -468,7 +468,7 @@ static void populate_pdcp_context(pdcp_context_t *pdcp_context,
     sec_packet_t *in_packet;
     sec_packet_t *out_packet;
     uint32_t fragment_length;
-    uint32_t address;
+    dma_addr_t address;
     uint32_t rem_len;
     int pkt_idx;
 

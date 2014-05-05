@@ -91,7 +91,7 @@ extern "C" {
 #define TEST_PACKET_LENGTH  50
 
 // Alignment in bytes for input/output packets allocated from DMA-memory zone
-#define BUFFER_ALIGNEMENT 32
+#define BUFFER_ALIGNEMENT L1_CACHE_BYTES
 
 // Size in bytes for the buffer used by a packet.
 // A packet can use less but not more than this number of bytes.
